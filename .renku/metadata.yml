@@ -1,0 +1,31 @@
+'@id': https://limited.renku.ch/projects/chdonner/Gaussian%20Toolbox
+'@type':
+- http://schema.org/Project
+- http://www.w3.org/ns/prov#Location
+http://schema.org/agent: 0.14.2.dev8
+http://schema.org/creator:
+  '@id': mailto:chdonner@ethz.ch
+  '@type':
+  - http://schema.org/Person
+  - http://www.w3.org/ns/prov#Person
+  http://schema.org/affiliation: null
+  http://schema.org/alternateName: null
+  http://schema.org/email: chdonner@ethz.ch
+  http://schema.org/name: Christian Donner
+  http://www.w3.org/2000/01/rdf-schema#label: Christian Donner
+http://schema.org/dateCreated: '2021-04-26T06:10:03.410032+00:00'
+http://schema.org/name: Gaussian Toolbox
+http://schema.org/schemaVersion: '8'
+https://swissdatasciencecenter.github.io/renku-ontology#automatedTemplateUpdate: false
+https://swissdatasciencecenter.github.io/renku-ontology#immutableTemplateFiles: []
+https://swissdatasciencecenter.github.io/renku-ontology#templateId: python-minimal
+https://swissdatasciencecenter.github.io/renku-ontology#templateMetadata: '{"__template_source__":
+  "https://github.com/SwissDataScienceCenter/renku-project-template", "__template_ref__":
+  "0.1.19", "__template_id__": "python-minimal", "__namespace__": "chdonner", "__automated_update__":
+  true, "__repository__": "https://limited.renku.ch/gitlab", "__sanitized_project_name__":
+  "gaussian-toolbox", "__project_slug__": "chdonner/gaussian-toolbox", "description":
+  "This library''s aim is to quickly manipulate Gaussians and solve integrals with
+  respect to Gaussian measures.", "name": "Gaussian Toolbox"}'
+https://swissdatasciencecenter.github.io/renku-ontology#templateReference: 0.1.19
+https://swissdatasciencecenter.github.io/renku-ontology#templateSource: https://github.com/SwissDataScienceCenter/renku-project-template
+https://swissdatasciencecenter.github.io/renku-ontology#templateVersion: 817b03c0f434a79eb54473688c1f897a66228b3d
