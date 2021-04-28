@@ -34,13 +34,18 @@ class SquaredExponential:
         self.lnZ = None
         self.mu = None
         
+    def _prepare_integration(self):
+        if self.lnZ is None:
+            self.compute_lnZ()
+        if self.mu is None:
+            self.compute_mu()
         
     def compute_lnZ(self):
         """ Computes the log partition function.
         """
-        if self.ln_det_Sigma is None:
-            self.invert_lambda()
-        nu_Lambda_nu = numpy.einsum('rd,rd->r', numpy.einsum('rdd,rd->rd', self.Sigma, self.nu), self.nu)
+        #if self.ln_det_Sigma is None:
+        self.invert_lambda()
+        nu_Lambda_nu = numpy.einsum('ab,ab->a', self.nu, numpy.einsum('abc,ac->ab', self.Sigma, self.nu))
         self.lnZ = .5 * (nu_Lambda_nu + self.D * numpy.log(2. * numpy.pi) + self.ln_det_Sigma)
             
         
@@ -115,12 +120,116 @@ class SquaredExponential:
         product = SquaredExponential(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         return product
     
+    def multiply_squared_exponential_term(self, Lambda: numpy.ndarray, nu: numpy.ndarray=None, ln_beta: numpy.ndarray=None, r: list=[]):
+        """ Multiplies an exponential factor with another one.
+        
+        u(x) * beta * exp(-.5 * x'Lambda x + x'nu) 
+        
+        :param Lambda: numpy.ndarray [R2, D, D]
+            Matrix of the second order term.
+        :param nu: numpy.ndarray [R2, D] or None
+            Vector of the linear order term. If None, zero vector is assumed. (Default=None)
+        :param ln_beta: numpy.ndarray [R2] or None
+            Log constant. If None, zero is assumed. (Default=None)
+        :param r: list
+            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
+        
+        :return: SquaredExponential
+            The resulting object.
+        """
+        if len(r) == 0:
+            r = range(self.R)
+        R1, R2 = len(r), Lambda.shape[0]
+        Lambda_new = (self.Lambda[r,None] + Lambda[None]).reshape((R1 * R2, self.D, self.D))
+        if nu is None:
+            nu_new = numpy.tile(self.nu[r,None], (1,R2,1)).reshape((R1 * R2, self.D))
+        else:
+            nu_new = (self.nu[r,None] + nu[None]).reshape((R1 * R2, self.D))
+        if ln_beta is None:
+            ln_beta_new = numpy.tile(self.ln_beta[r,None], (1, R2)).reshape((R1 * R2))
+        else:
+            ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
+        product = SquaredExponential(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        return product
+    
+    def multiply_linear_exponential_term(self, nu: numpy.ndarray, ln_beta: numpy.ndarray=None, r: list=[]):
+        """ Multiplies an exponential factor with another one.
+        
+        u(x) * beta * exp(x'nu) 
+        
+        :param nu: numpy.ndarray [R2, D] or None
+            Vector of the linear order term. If None, zero vector is assumed. (Default=None)
+        :param ln_beta: numpy.ndarray [R2] or None
+            Log constant. If None, zero is assumed. (Default=None)
+        :param r: list
+            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
+        
+        :return: SquaredExponential
+            The resulting object.
+        """
+        
+        ### Remark: Discrepancy to sampling becomes big, if nu shifts the mean strongly. Check if that is only a numerical issue.
+        if len(r) == 0:
+            r = range(self.R)
+        R1, R2 = len(r), nu.shape[0]
+        Lambda_new = numpy.tile(self.Lambda[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
+        nu_new = (self.nu[r,None] + nu[None]).reshape((R1 * R2, self.D))
+        if ln_beta is None:
+            ln_beta_new = numpy.tile(self.ln_beta[r,None], (1, R2)).reshape((R1 * R2))
+        else:
+            ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
+        product = SquaredExponential(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        product.invert_lambda()
+        if self.Sigma is not None:
+            product.Sigma = numpy.tile(self.Sigma[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
+        if self.ln_det_Sigma is not None:
+            product.ln_det_Sigma = numpy.tile(self.ln_det_Sigma[r,None], (1, R2)).reshape((R1 * R2))
+            product.ln_det_Lambda = -product.ln_det_Sigma
+        elif self.ln_det_Lambda is not None:
+            product.ln_det_Lambda = numpy.tile(self.ln_det_Lambda[r,None], (1, R2)).reshape((R1 * R2))
+            product.ln_det_Sigma = -product.ln_det_Lambda
+            
+        return product
+    
+    def multiply_constant_term(self, ln_beta: numpy.ndarray, r: list=[]):
+        """ Multiplies an exponential factor with another one.
+        
+        u(x) * beta
+        
+        :param nu: numpy.ndarray [R2, D] or None
+            Vector of the linear order term. If None, zero vector is assumed. (Default=None)
+        :param ln_beta: numpy.ndarray [R2] or None
+            Log constant. If None, zero is assumed. (Default=None)
+        :param r: list
+            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
+        
+        :return: SquaredExponential
+            The resulting object.
+        """
+        if len(r) == 0:
+            r = range(self.R)
+        R1, R2 = len(r), ln_beta.shape[0]
+        Lambda_new = numpy.tile(self.Lambda[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
+        nu_new = numpy.tile(self.nu[r,None], (1,R2,1)).reshape((R1 * R2, self.D))
+        ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
+        product = SquaredExponential(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        if self.Sigma is not None:
+            product.Sigma = numpy.tile(self.Sigma[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
+        if self.ln_det_Sigma is not None:
+            product.ln_det_Sigma = numpy.tile(self.ln_det_Sigma[r,None], (1, R2)).reshape((R1 * R2))
+            product.ln_det_Lambda = -product.ln_det_Sigma
+        elif self.ln_det_Lambda is not None:
+            product.ln_det_Lambda = numpy.tile(self.ln_det_Lambda[r,None], (1, R2)).reshape((R1 * R2))
+            product.ln_det_Sigma = -product.ln_det_Lambda
+        return product
+    
     def multiply_rank_one(self, U: numpy.ndarray, G: numpy.ndarray, nu: numpy.ndarray=None, ln_beta: numpy.ndarray=None, r: list=[]):
         """ Multiplies the exponential term with another exponential term, where the Lambda is rank 1, i.e.
         
         Lambda = U G U'
             
-        Where G is an [1 x 1] diagonal matrix and U and [D x 1] with a vector. If already computed, the covariance matrix Sigma and its log-determinant are efficiently updated.
+        Where G is an [1 x 1] diagonal matrix and U and [D x 1] with a vector. 
+        If already computed, the covariance matrix Sigma and its log-determinant are efficiently updated.
         
         :param U: numpy.ndarray [R1, D]
             Vector of low rank matrix with orthogonal vectors.
@@ -140,14 +249,14 @@ class SquaredExponential:
             r = range(self.R)
         R = len(r)
         R1 = G.shape[0]
-        UGU = numpy.einsum('rd,rs->rds', U, G[:,None] * U)
+        UGU = numpy.einsum('ab,ac->abc', U, G[:,None] * U)
         Lambda_new = (self.Lambda[r,None] + UGU[None]).reshape((R * R1, self.D, self.D))
         if nu is None:
-            nu_new = numpy.tile(self.nu, (R1, 1))
+            nu_new = numpy.tile(self.nu[r,None], (1, R1, 1)).reshape((R * R1, self.D))
         else:
             nu_new = (self.nu[r,None] + nu[None]).reshape((R * R1, self.D))
         if ln_beta is None:
-            ln_beta_new = numpy.tile(self.ln_beta, (R1))
+            ln_beta_new = numpy.tile(self.ln_beta[:,None], (1,R1)).reshape((R * R1))
         else:
             ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R * R1))
         product = SquaredExponential(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
@@ -155,11 +264,10 @@ class SquaredExponential:
         # if the Sigma of the object is known the Sherman-morrison formula and the matrix determinant lemma are used for efficient update of the inverses and the log determinants.
         if self.Sigma is not None and self.ln_det_Sigma is not None:
             # Sherman morrison inversion
-            G_inv = 1. / G
-            Sigma_U = numpy.einsum('rsdd,rsd->rsd', self.Sigma[r,None], U[None])
-            U_Sigma_U = numpy.einsum('rsd,rsd->rs', Sigma_U, U[None])
+            Sigma_U = numpy.einsum('abc,dc->adb', self.Sigma[r], U)
+            U_Sigma_U = numpy.einsum('abc,bc->ab', Sigma_U, U)
             denominator = 1. + G[None] * U_Sigma_U
-            nominator = G[None] * numpy.einsum('rsd,rsk->rsdk', Sigma_U, Sigma_U)
+            nominator = G[None,:,None,None] * numpy.einsum('abc,abd->abcd', Sigma_U, Sigma_U)
             Sigma_new = self.Sigma[r, None] - nominator / denominator[:,:,None,None]
             product.Sigma = Sigma_new.reshape((R*R1, self.D, self.D))
             # Matrix determinant lemma
@@ -176,7 +284,7 @@ class SquaredExponential:
         :return: numpy.ndarray [R]
             Log integral
         """
-        self._prepare_inegration()
+        self._prepare_integration()
         return self.lnZ + self.ln_beta
     
     def integral(self):
@@ -194,7 +302,8 @@ class SquaredExponential:
         
         int u(x) dx = 1.
         """
-        self.ln_beta = -self.log_integral()
+        self.compute_lnZ()
+        self.ln_beta = -self.lnZ
         
     def is_normalized(self):
         return numpy.equal(self.lnZ, -self.ln_beta)
@@ -215,14 +324,18 @@ class SquaredExponential:
         :return: GaussianDensity
             Corresponding density object.
         """
-        self._prepare_inegration()
-        return GaussianDensity(Sigma=self.Sigma, mu=mu, Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
-    
-    def _prepare_inegration(self):
-        if self.lnZ is None:
-            self.compute_lnZ()
-        if self.mu is None:
-            self.compute_mu()
+        self._prepare_integration()
+        return GaussianDensity(Sigma=self.Sigma, mu=self.mu, Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
+            
+    @staticmethod
+    def _get_default(mat, vec):
+        """ Small method to get default matrix and vector.
+        """
+        if mat is None:
+            mat = numpy.eye(self.D)
+        if vec is None:
+            vec = numpy.zeros(mat.shape[0])
+        return mat, vec
             
     ##### Linear intergals
             
@@ -282,17 +395,6 @@ class SquaredExponential:
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         constant = self.integral()
         return constant[:,None] * self._expectation_general_linear(A_mat, a_vec)
-        
-        
-    @staticmethod
-    def _get_default(mat, vec):
-        """ Small method to get default matrix and vector.
-        """
-        if mat is None:
-            mat = numpy.eye(self.D)
-        if vec is None:
-            vec = numpy.zeros(mat.shape[0])
-        return mat, vec
         
     
     ##### Quadratic integrals
@@ -474,8 +576,9 @@ class SquaredExponential:
         return xAxm + xAmx + mAxx
     
     
-    def _expectation_general_cubic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
-                                           C_mat: numpy.ndarray, c_vec: numpy.ndarray):
+    def _expectation_general_cubic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
+                                         B_mat: numpy.ndarray, b_vec: numpy.ndarray,
+                                         C_mat: numpy.ndarray, c_vec: numpy.ndarray):
         """ Computes the quartic expectation.
         
             int (Ax+a)(Bx+b)'(Cx+c) dphi(x),
@@ -511,7 +614,8 @@ class SquaredExponential:
         return first_term + second_term
     
     
-    def integrate_general_cubic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
+    def integrate_general_cubic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
+                                      B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
                                       C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None):
         """ Computes the quadratic expectation.
         
@@ -540,8 +644,9 @@ class SquaredExponential:
         constant = self.integral()
         return constant[:,None] * self._expectation_general_cubic_inner(A_mat, a_vec, B_mat, b_vec, C_mat, c_vec)
     
-    def _expectation_general_cubic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray,  B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
-                                           C_mat: numpy.ndarray, c_vec: numpy.ndarray):
+    def _expectation_general_cubic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray,  
+                                         B_mat: numpy.ndarray, b_vec: numpy.ndarray,
+                                         C_mat: numpy.ndarray, c_vec: numpy.ndarray):
         """ Computes the cubic expectation.
         
             int (Ax+a)'(Bx+b)(Cx+c)' dphi(x),
@@ -581,8 +686,9 @@ class SquaredExponential:
         fourth_term = self.get_trace(ASigmaB)[:,None] * Cmu_c
         return first_term + second_term + third_term + fourth_term
     
-    def integrate_general_cubic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, B_mat: numpy.ndarray=None, 
-                                      b_vec: numpy.ndarray=None, C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None):
+    def integrate_general_cubic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
+                                      B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
+                                      C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None):
         """ Computes the quadratic expectation.
         
            int (Bx+b)'(Cx+c)(Dx+d)' du(x),
@@ -721,8 +827,10 @@ class SquaredExponential:
         fourth_term = self.get_trace(BSigmaC)[:,None,None] * (ASigmaD + AmuaDmud)
         return first_term + second_term + third_term + fourth_term
         
-    def integral_general_quartic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
-                                       C_mat: numpy.ndarray, c_vec: numpy.ndarray, D_mat: numpy.ndarray, d_vec: numpy.ndarray):
+    def integrate_general_quartic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
+                                       B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
+                                       C_mat: numpy.ndarray, c_vec: numpy.ndarray, 
+                                       D_mat: numpy.ndarray, d_vec: numpy.ndarray):
         """ Computes the quartic integral.
         
             int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
@@ -754,8 +862,10 @@ class SquaredExponential:
         constant = self.integral()
         return constant[:,None,None] * self._expectation_general_quartic_outer(A_mat,a_vec,B_mat,b_vec,C_mat,c_vec,D_mat,d_vec)
     
-    def _expectation_general_quartic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
-                                           C_mat: numpy.ndarray, c_vec: numpy.ndarray, D_mat: numpy.ndarray, d_vec: numpy.ndarray):
+    def _expectation_general_quartic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
+                                           B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
+                                           C_mat: numpy.ndarray, c_vec: numpy.ndarray, 
+                                           D_mat: numpy.ndarray, d_vec: numpy.ndarray):
         """ Computes the quartic expectation.
         
             int (Ax+a)'(Bx+b)(Cx+c)'(Dx+d) dphi(x),
@@ -804,8 +914,10 @@ class SquaredExponential:
         third_term = (self.get_trace(ASigmaB) + AmuaBmub) * (self.get_trace(CSigmaD) + CmucDmud)
         return first_term + second_term + third_term
         
-    def integral_general_quartic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
-                                       C_mat: numpy.ndarray, c_vec: numpy.ndarray, D_mat: numpy.ndarray, d_vec: numpy.ndarray):
+    def integrate_general_quartic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
+                                       B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
+                                       C_mat: numpy.ndarray, c_vec: numpy.ndarray, 
+                                       D_mat: numpy.ndarray, d_vec: numpy.ndarray):
         """ Computes the quartic integral.
         
             int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
@@ -869,6 +981,7 @@ class GaussianDensity(SquaredExponential):
         self.Sigma = Sigma
         self.ln_det_Sigma = ln_det_Sigma
         self.ln_det_Lambda = -ln_det_Sigma
+        self._prepare_integration()
         self.normalize()
         
     def sample(self, num_samples: int):
