@@ -563,6 +563,8 @@ class SquaredExponential:
             
         :return: numpy.ndarray [R, K, M]
             The solved intergal.
+            
+        # REMARK: Does the same thing as inner transposed.
         """
         Amu_a = numpy.einsum('ab,cb-> ca', A_mat, self.mu) + a_vec[None]
         Bmu_b = numpy.einsum('ab,cb-> ca', B_mat, self.mu) + b_vec[None]
@@ -745,6 +747,10 @@ class SquaredExponential:
         :return: numpy.ndarray [R, K, M]
             The solved intergal.
         """
+        A_mat, a_vec = self._get_default(A_mat, a_vec)
+        B_mat, b_vec = self._get_default(B_mat, b_vec)
+        C_mat, c_vec = self._get_default(C_mat, c_vec)
+        D_mat, d_vec = self._get_default(D_mat, d_vec)
         constant = self.integral()
         return constant[:,None,None] * self._expectation_general_quartic_outer(A_mat,a_vec,B_mat,b_vec,C_mat,c_vec,D_mat,d_vec)
     
@@ -798,8 +804,8 @@ class SquaredExponential:
         third_term = (self.get_trace(ASigmaB) + AmuaBmub) * (self.get_trace(CSigmaD) + CmucDmud)
         return first_term + second_term + third_term
         
-    def integral_general_quartic_inner(self, A: numpy.ndarray, a_vec: numpy.ndarray, B: numpy.ndarray, b_vec: numpy.ndarray, 
-                                       C: numpy.ndarray, c_vec: numpy.ndarray, D: numpy.ndarray, d_vec: numpy.ndarray):
+    def integral_general_quartic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
+                                       C_mat: numpy.ndarray, c_vec: numpy.ndarray, D_mat: numpy.ndarray, d_vec: numpy.ndarray):
         """ Computes the quartic integral.
         
             int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
@@ -824,6 +830,11 @@ class SquaredExponential:
         :return: numpy.ndarray [R]
             The solved intergal.
         """
+        
+        A_mat, a_vec = self._get_default(A_mat, a_vec)
+        B_mat, b_vec = self._get_default(B_mat, b_vec)
+        C_mat, c_vec = self._get_default(C_mat, c_vec)
+        D_mat, d_vec = self._get_default(D_mat, d_vec)
         constant = self.integral()
         return constant * self._expectation_general_quartic_inner(A_mat,a_vec,B_mat,b_vec,C_mat,c_vec,D_mat,d_vec)
 
