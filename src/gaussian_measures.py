@@ -393,7 +393,8 @@ class SquaredExponential:
         aBx_b = numpy.einsum('a, bc->bac', a_vec, self._expectation_general_linear(B_mat, b_vec))
         return AxxB + Axb + aBx_b
     
-    def integrate_general_quadratic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None):
+    def integrate_general_quadratic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
+                                          B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None):
         """ Computes the quadratic expectation.
         
             int (Ax+a)(Bx+b)' dphi(x),
@@ -472,9 +473,10 @@ class SquaredExponential:
         mAxx = numpy.einsum('ab,a->ab', mA, Exx)
         return xAxm + xAmx + mAxx
     
-    def _expectation_general_cubic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray,
-                                         C_mat: numpy.ndarray, c_vec: numpy.ndarray):
-        """ Computes the cubic expectation.
+    
+    def _expectation_general_cubic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
+                                           C_mat: numpy.ndarray, c_vec: numpy.ndarray):
+        """ Computes the quartic expectation.
         
             int (Ax+a)(Bx+b)'(Cx+c) dphi(x),
             
@@ -496,18 +498,18 @@ class SquaredExponential:
         :return: numpy.ndarray [R]
             The solved intergal.
         """
-        Exx = self._expectation_xxT()
-        BC = numpy.dot(B_mat.T, C_mat)
-        bC = numpy.dot(b_vec.T, C_mat)
-        Bc = numpy.dot(B_mat.T, c_vec)
-        bc = numpy.inner(b_vec,c_vec)
-        xBCxx = self._expectation_xAxx(BC)
-        AxBCxx = numpy.einsum('ab,cb->ca', A_mat, xBCxx)
-        AxbCx = numpy.einsum('ab,cb->ca', A_mat, numpy.einsum('abc,c->ab', Exx, bC))
-        AxxBc = numpy.einsum('ab,cb->ca', A_mat, numpy.einsum('abc,c->ab', Exx, Bc))
-        Axbc = numpy.einsum('ab,cb->ca', A_mat, self.mu * bc)
-        aBm_b_Cm_c = numpy.einsum('a, b->ba', a_vec, self._expectation_general_quadratic_inner(B_mat, b_vec, C_mat, c_vec))
-        return AxBCxx + AxbCx + AxxBc + aBm_b_Cm_c
+        Amu_a = numpy.einsum('ab,cb-> ca', A_mat, self.mu) + a_vec[None]
+        Bmu_b = numpy.einsum('ab,cb-> ca', B_mat, self.mu) + b_vec[None]
+        Cmu_c = numpy.einsum('ab,cb-> ca', C_mat, self.mu) + c_vec[None]
+        BSigmaC = numpy.einsum('ab,cbd->cad', B_mat, numpy.einsum('abc,cd->abd', self.Sigma, C_mat.T))
+        BmubCmuc = numpy.einsum('ab,ab->a', Bmu_b, Cmu_c)
+        
+        BCm_c = numpy.einsum('ab,ca->cb', B_mat, Cmu_c)
+        CBm_b = numpy.einsum('ab,ca->cb', C_mat, Bmu_b)
+        first_term = numpy.einsum('abc,ac->ab', numpy.einsum('ab,cbd->cad', A_mat, self.Sigma), BCm_c + CBm_b)
+        second_term = Amu_a * (self.get_trace(BSigmaC) + BmubCmuc)[:,None]
+        return first_term + second_term
+    
     
     def integrate_general_cubic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
                                       C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None):
@@ -538,7 +540,71 @@ class SquaredExponential:
         constant = self.integral()
         return constant[:,None] * self._expectation_general_cubic_inner(A_mat, a_vec, B_mat, b_vec, C_mat, c_vec)
     
+    def _expectation_general_cubic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray,  B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
+                                           C_mat: numpy.ndarray, c_vec: numpy.ndarray):
+        """ Computes the cubic expectation.
+        
+            int (Ax+a)'(Bx+b)(Cx+c)' dphi(x),
+            
+            with phi(x) = u(x) / int du(x).
+            
+        :param A_mat: numpy.ndarray [L,D]
+            Real valued matrix.
+        :param a_vec: numpy.ndarray [L]
+            Real valued vector.
+        :param B_mat: numpy.ndarray [L,D]
+            Real valued matrix.
+        :param b_vec: numpy.ndarray [L]
+            Real valued vector.
+        :param C_mat: numpy.ndarray [M,D]
+            Real valued matrix.
+        :param c_vec: numpy.ndarray [M]
+            Real valued vector.
+            
+        :return: numpy.ndarray [R, K, M]
+            The solved intergal.
+        """
+        Amu_a = numpy.einsum('ab,cb-> ca', A_mat, self.mu) + a_vec[None]
+        Bmu_b = numpy.einsum('ab,cb-> ca', B_mat, self.mu) + b_vec[None]
+        Cmu_c = numpy.einsum('ab,cb-> ca', C_mat, self.mu) + c_vec[None]
+        BSigmaC = numpy.einsum('ab,cbd->cad', B_mat, numpy.einsum('abc,cd->abd', self.Sigma, C_mat.T))
+        ASigmaC = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,cd->abd', self.Sigma, C_mat.T))
+        ASigmaB = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,cd->abd', self.Sigma, B_mat.T))
+        BmubCmuc = numpy.einsum('ab,ac->abc', Bmu_b, Cmu_c)
+        AmuaCmuc = numpy.einsum('ab,ac->abc', Amu_a, Cmu_c)
+        AmuaBmub = numpy.einsum('ab,ab->a', Amu_a, Bmu_b)
+        first_term = numpy.einsum('ab,abc->ac', Amu_a, BSigmaC + BmubCmuc)
+        second_term = numpy.einsum('ab,abc->ac', Bmu_b, ASigmaC + AmuaCmuc)
+        third_term = - AmuaBmub[:,None] * Cmu_c
+        fourth_term = self.get_trace(ASigmaB)[:,None] * Cmu_c
+        return first_term + second_term + third_term + fourth_term
     
+    def integrate_general_cubic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, B_mat: numpy.ndarray=None, 
+                                      b_vec: numpy.ndarray=None, C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None):
+        """ Computes the quadratic expectation.
+        
+           int (Bx+b)'(Cx+c)(Dx+d)' du(x),
+            
+        :param A_mat: numpy.ndarray [K,D] or None
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param a_vec: numpy.ndarray [K] or None
+            Real valued vector. If None, it is assumed identity. (Default=None)
+        :param B_mat: numpy.ndarray [L,D] or None
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param b_vec: numpy.ndarray [L] or None
+            Real valued vector. If None, it is assumed identity. (Default=None)
+        :param C_mat: numpy.ndarray [L,D] or None
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param c_vec: numpy.ndarray [L] or None
+            Real valued vector. If None, it is assumed identity. (Default=None)            
+        :return: numpy.ndarray [R, K]
+            The solved intergal.
+        """
+        A_mat, a_vec = self._get_default(A_mat, a_vec)
+        B_mat, b_vec = self._get_default(B_mat, b_vec)
+        C_mat, c_vec = self._get_default(C_mat, c_vec)
+        constant = self.integral()
+        return constant[:,None] * self._expectation_general_cubic_outer(A_mat, a_vec, B_mat, b_vec, C_mat, c_vec)
     
     ##### Quartic integrals
     
