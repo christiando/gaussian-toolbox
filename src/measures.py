@@ -1,7 +1,7 @@
 import numpy
-from scipy.linalg import solve_triangular
-
-class SquaredExponential:
+import factors
+    
+class GaussianMeasure(factors.ConjugateFactor):
     
     def __init__(self, Lambda: numpy.ndarray, nu: numpy.ndarray=None, ln_beta: numpy.ndarray=None):
         """ A general term, which can be added to a Gaussian.
@@ -15,24 +15,36 @@ class SquaredExponential:
         :param nu: numpy.ndarray [R, D]
             Information vector of a Gaussian distribution. If None all zeros. (Default=None)
         :param ln_beta: numpy.ndarray [R]
-            The log constant factor of the squared exponential. If None all zeros. (Default=None)
+            The log constant factor of the factor. If None all zeros. (Default=None)
         """
         
-        self.Lambda = Lambda
-        self.R, self.D = self.Lambda.shape[0], self.Lambda.shape[1]
-        if nu is None:
-            self.nu = numpy.zeros((self.R, self.D))
-        else:
-            self.nu = nu
-        if ln_beta is None:
-            self.ln_beta = numpy.zeros((self.R))
-        else:
-            self.ln_beta = ln_beta
+        super().__init__(Lambda, nu, ln_beta)
         self.Sigma = None
         self.ln_det_Lambda = None
         self.ln_det_Sigma = None
         self.lnZ = None
         self.mu = None
+        self.integration_dict = {'1': self.integral,
+                                 'x': self.integrate_x,
+                                 'Ax_a': self.integrate_general_linear,
+                                 'xx': self.integrate_xxT,
+                                 'Ax_aBx_b_inner': self.integrate_general_quadratic_inner,
+                                 'Ax_aBx_b_outer': self.integrate_general_quadratic_outer,
+                                 'Ax_aBx_bCx_c_inner': self.integrate_general_cubic_inner,
+                                 'Ax_aBx_bCx_c_outer': self.integrate_general_cubic_outer,
+                                 'Ax_aBx_bCx_cDx_d_inner': self.integrate_general_quartic_inner,
+                                 'Ax_aBx_bCx_cDx_d_outer': self.integrate_general_quartic_outer}
+        
+    def slice(self, indices: list):
+        Lambda_new = self.Lambda[indices]
+        nu_new = self.nu[indices]
+        ln_beta_new = self.ln_beta[indices]
+        new_measure = GaussianMeasure(Lambda_new, nu_new, ln_beta_new)
+        if self.Sigma is not None:
+            new_measure.Sigma = self.Sigma[indices]
+            new_measure.ln_det_Sigma = self.ln_det_Sigma[indices]
+            new_measure.ln_det_Lambda = self.ln_det_Lambda[indices]
+        return new_measure
         
     def _prepare_integration(self):
         if self.lnZ is None:
@@ -43,83 +55,44 @@ class SquaredExponential:
     def compute_lnZ(self):
         """ Computes the log partition function.
         """
-        #if self.ln_det_Sigma is None:
-        self.invert_lambda()
+        if self.Sigma is None:
+            self.invert_lambda()
         nu_Lambda_nu = numpy.einsum('ab,ab->a', self.nu, numpy.einsum('abc,ac->ab', self.Sigma, self.nu))
         self.lnZ = .5 * (nu_Lambda_nu + self.D * numpy.log(2. * numpy.pi) + self.ln_det_Sigma)
-            
-        
-    def evaluate_ln(self, x: numpy.ndarray, r: list=[]):
-        """ Evaluates the log-exponential term at x.
-        
-        :param x: numpy.ndarray [N, D]
-            Points where the squared exponential should be evaluated.
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
-            
-        :return: numpy.ndarray [N, R] or [N, len(r)]
-            Log exponential term.
-        """
-        if len(r) == 0:
-            r = range(self.R)
-        x_Lambda_x = numpy.einsum('adc,dc->ad', numpy.einsum('abc,dc->adb', self.Lambda[r], x), x)
-        x_nu = numpy.dot(x, self.nu[r].T).T
-        return - .5 * x_Lambda_x + x_nu + self.ln_beta[r,None]
-    
-    def evaluate(self, x: numpy.ndarray, r: list=[]):
-        """ Evaluates the exponential term at x.
-        
-        :param x: numpy.ndarray [N, D]
-            Points where the squared exponential should be evaluated.
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
-            
-        :return: numpy.ndarray [N, R] or [N, len(r)]
-            Exponential term.
-        """
-        return numpy.exp(self.evaluate_ln(x, r))
     
     def invert_lambda(self):
         self.Sigma, self.ln_det_Lambda = self.invert_matrix(self.Lambda)
         self.ln_det_Sigma = -self.ln_det_Lambda
-                    
-    @staticmethod
-    def invert_matrix(A):
-        L = numpy.linalg.cholesky(A)
-        # TODO: Check whether we can make it mor efficienty with solve_triangular.
-        #L_inv = solve_triangular(L, numpy.eye(L.shape[0]), lower=True,
-        #                         check_finite=False)
-        L_inv = numpy.linalg.solve(L, numpy.eye(L.shape[1])[None])
-        A_inv = numpy.einsum('acb,acd->abd', L_inv, L_inv)
-        ln_det_A = 2. * numpy.sum(numpy.log(L.diagonal(axis1=1, axis2=2)), axis=1)
-        return A_inv, ln_det_A
-    
-    @staticmethod
-    def get_trace(A):
-        return numpy.sum(A.diagonal(axis1=1,axis2=2), axis=1)
-    
-    def multiply_squared_exponential(self, factor: 'SquaredExponential', r: list=[]):
-        """ Multiplies an exponential factor with another one.
         
-        u_1(x) * u_2(x)
+    def multiply(self, factor: factors.ConjugateFactor, update_full: bool=False) -> 'GaussianMeasure':
+        """ Computes the product between the measure u and a conjugate factor f
         
-        :param factor: SquaredExponential
-            Factor the object is multiplied with. The number of Gaussians in the resulting object are R * factor.R
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
-        
-        :return: SquaredExponential
-            The resulting object.
+            f(x) * u(x)
+            
+            and returns the resulting Gaussian measure.
+            
+        :param factor: ConjugateFactor
+            The conjugate factor the measure is multiplied with.
+        :param update_full: bool
+            Whether also the covariance and the log determinants of the new Gaussian measure should be computed. (Default=True)
+            
+        :return: GaussianMeasure
+            Returns the resulting GaussianMeasure.
         """
-        if len(r) == 0:
-            r = range(self.R)
-        R = len(r)
-        Lambda = (self.Lambda[r,None] + factor.Lambda[None]).reshape((R * factor.R, self.D, self.D))
-        nu = (self.nu[r,None] + factor.nu[None]).reshape((R * factor.R, self.D))
-        ln_beta = (self.ln_beta[r,None] + factor.ln_beta[None]).reshape((R * factor.R))
-        product = SquaredExponential(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
-        return product
+        return factor.multiply_with_measure(self, update_full=update_full)
     
+    def integrate(self, expr:str='1', **kwargs):
+        """ Integrates the indicated expression with respect to the Gaussian measure.
+        
+        :param expr: str
+            Indicates the expression that should be integrated. Check measure's integration dict. Default='1'.
+        :kwargs:
+            All parameters, that are required to evaluate the expression.
+        """
+        return self.integration_dict[expr](**kwargs)
+    
+    
+    ### This needs to be unified with the functionality of conjugate factors.
     def multiply_squared_exponential_term(self, Lambda: numpy.ndarray, nu: numpy.ndarray=None, ln_beta: numpy.ndarray=None, r: list=[]):
         """ Multiplies an exponential factor with another one.
         
@@ -149,7 +122,7 @@ class SquaredExponential:
             ln_beta_new = numpy.tile(self.ln_beta[r,None], (1, R2)).reshape((R1 * R2))
         else:
             ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
-        product = SquaredExponential(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        product = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         return product
     
     def multiply_linear_exponential_term(self, nu: numpy.ndarray, ln_beta: numpy.ndarray=None, r: list=[]):
@@ -178,7 +151,7 @@ class SquaredExponential:
             ln_beta_new = numpy.tile(self.ln_beta[r,None], (1, R2)).reshape((R1 * R2))
         else:
             ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
-        product = SquaredExponential(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        product = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         product.invert_lambda()
         if self.Sigma is not None:
             product.Sigma = numpy.tile(self.Sigma[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
@@ -212,7 +185,7 @@ class SquaredExponential:
         Lambda_new = numpy.tile(self.Lambda[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
         nu_new = numpy.tile(self.nu[r,None], (1,R2,1)).reshape((R1 * R2, self.D))
         ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
-        product = SquaredExponential(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        product = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             product.Sigma = numpy.tile(self.Sigma[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
         if self.ln_det_Sigma is not None:
@@ -259,7 +232,7 @@ class SquaredExponential:
             ln_beta_new = numpy.tile(self.ln_beta[:,None], (1,R1)).reshape((R * R1))
         else:
             ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R * R1))
-        product = SquaredExponential(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        product = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         
         # if the Sigma of the object is known the Sherman-morrison formula and the matrix determinant lemma are used for efficient update of the inverses and the log determinants.
         if self.Sigma is not None and self.ln_det_Sigma is not None:
@@ -324,11 +297,12 @@ class SquaredExponential:
         :return: GaussianDensity
             Corresponding density object.
         """
+        import densities
         self._prepare_integration()
-        return GaussianDensity(Sigma=self.Sigma, mu=self.mu, Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
+        return densities.GaussianDensity(Sigma=self.Sigma, mu=self.mu, Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
             
-    @staticmethod
-    def _get_default(mat, vec):
+        
+    def _get_default(self, mat, vec):
         """ Small method to get default matrix and vector.
         """
         if mat is None:
@@ -337,7 +311,7 @@ class SquaredExponential:
             vec = numpy.zeros(mat.shape[0])
         return mat, vec
             
-    ##### Linear intergals
+    ##### Linear integals
             
     def _expectation_x(self):
         """ Computes the expectation.
@@ -349,7 +323,7 @@ class SquaredExponential:
         """
         return self.mu 
             
-    def intergrate_x(self):
+    def integrate_x(self):
         """ Computes the integral.
         
             int x du(x)
@@ -409,7 +383,7 @@ class SquaredExponential:
         """
         return self.Sigma + numpy.einsum('ab,ac->acb', self.mu, self.mu)
     
-    def intergrate_xxT(self):
+    def integrate_xxT(self):
         """ Computes the integral.
         
             int xx' du(x)
@@ -951,68 +925,26 @@ class SquaredExponential:
         return constant * self._expectation_general_quartic_inner(A_mat,a_vec,B_mat,b_vec,C_mat,c_vec,D_mat,d_vec)
 
     
-class DiagonalSquaredExponential(SquaredExponential):
+class GaussianDiagMeasure(GaussianMeasure):
     
     def invert_lambda(self):
-        self.Sigma = numpy.diag(self.Lambda.diagonal())
+        self.Sigma = numpy.diag(1. / self.Lambda.diagonal(axis1=1,axis2=2))
         self.ln_det_Lambda = numpy.sum(numpy.log(self.Lambda.diagonal()))
         self.ln_det_Sigma = -self.ln_det_Lambda   
-    
-class GaussianDensity(SquaredExponential):
-    
-    def __init__(self, Sigma: numpy.ndarray, mu: numpy.ndarray, Lambda: numpy.ndarray=None, ln_det_Sigma: numpy.ndarray=None):
-        """ A normalized Gaussian density, with specified mean and covariance matrix.
         
-        :param Sigma: numpy.ndarray [R, D, D]
-            Covariance matrices of the Gaussian densities.
-        :param mu: numpy.ndarray [R, D]
-            Mean of the Gaussians.
-        :param Lambda: numpy.ndarray [R, D, D] or None
-            Information (precision) matrix of the Gaussians. (Default=None)
-        :param ln_det_Sigma: numpy.ndarray [R] or None
-            Log determinant of the covariance matrix. (Default=None)
-        """
-        if Lambda is None:
-            Lambda, ln_det_Sigma = self.invert_matrix(Sigma)
-        elif ln_det_Sigma is None:
-            ln_det_Sigma = numpy.linalg.slogdet(Sigma)[1]
-        nu = numpy.einsum('abc,ab->ac', Lambda, mu)
-        super().__init__(Lambda=Lambda, nu=nu)
-        self.Sigma = Sigma
-        self.ln_det_Sigma = ln_det_Sigma
-        self.ln_det_Lambda = -ln_det_Sigma
-        self._prepare_integration()
-        self.normalize()
-        
-    def sample(self, num_samples: int):
-        L = numpy.linalg.cholesky(self.Sigma)
-        rand_nums = numpy.random.randn(num_samples, self.R, self.D)
-        x_samples = self.mu[None] + numpy.einsum('abc,dac->dab', L, rand_nums)
-        return x_samples
-                                       
-class SphericalGaussianDensity(GaussianDensity):
+    @staticmethod
+    def invert_diagonal(A: numpy.ndarray):
+        A_inv = numpy.concatenate([numpy.diag(mat)[None] for mat in  1./A.diagonal(axis1=1, axis2=2)], axis=0)
+        ln_det_A = numpy.sum(numpy.log(A.diagonal(axis1=1, axis2=2)), axis=1)
+        return A_inv, ln_det_A
     
-    def __init__(self, Sigma: numpy.ndarray, mu: numpy.ndarray, Lambda: numpy.ndarray=None, ln_det_Sigma: numpy.ndarray=None):
-        """ A normalized Gaussian density, with specified mean and covariance matrix.
-        
-        :param Sigma: numpy.ndarray [R, D, D]
-            Covariance matrices of the Gaussian densities.
-        :param mu: numpy.ndarray [R, D]
-            Mean of the Gaussians.
-        :param Lambda: numpy.ndarray [R, D, D] or None
-            Information (precision) matrix of the Gaussians. (Default=None)
-        :param ln_det_Sigma: numpy.ndarray [R] or None
-            Log determinant of the covariance matrix. (Default=None)
-        """
-        if Lambda is None:
-            Lambda = numpy.diag(Sigma.diagonal())
-            ln_det_Sigma = numpy.sum(numpy.log(Sigma.diagonal()))
-        elif ln_det_Sigma is None:
-            ln_det_Sigma = numpy.sum(numpy.log(Sigma.diagonal()))
-        nu = numpy.einsum('abc,ac->ab', Lambda, mu)
-        super().__init__(Lambda=Lambda, nu=nu)
-        self.Sigma = Sigma
-        self.ln_det_Sigma = ln_det_Sigma
-        self.ln_det_Lambda = -ln_det_Sigma
-        self.mu = mu
-        self.normalize()
+    def slice(self, indices: list):
+        Lambda_new = self.Lambda[indices]
+        nu_new = self.nu[indices]
+        ln_beta_new = self.ln_beta[indices]
+        new_measure = GaussianDiagMeasure(Lambda_new, nu_new, ln_beta_new)
+        if self.Sigma is not None:
+            new_measure.Sigma = self.Sigma[indices]
+            new_measure.ln_det_Sigma = self.ln_det_Sigma[indices]
+            new_measure.ln_det_Lambda = self.ln_det_Lambda[indices]
+        return new_measure
