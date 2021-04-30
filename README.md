@@ -7,12 +7,12 @@ This library's aim is to quickly manipulate Gaussians and solve integrals with r
 This library provides the functionality to quickly manipulate, integrate and sample from Gaussians. If 
 
 $`
-\phi(\mathbf{x}) = {\cal N}(\boldsymbol{\mu}, \Sigma),
+\phi(\mathbf{x}) = {\cal N}(\mu, \Sigma),
 `$
 
 is a Gaussian density, this library allows to quickly compute the resulting functional form
 
-$`\u(\mathbf{x}) = \beta\exp(-\frac{1}{2}\mathbf{x}^\top\Lambda \mathbf{x} + \bolsymbol{\nu}^\top \mathbf{x})\phi(\mathbf{x}).`$
+$`\u(\mathbf{x}) = \beta\exp(-\frac{1}{2}\mathbf{x}^\top\Lambda \mathbf{x} + \nu^\top \mathbf{x})\phi(\mathbf{x}).`$
 
 For the resulting measure certain integrals can then be computed quickly
 
