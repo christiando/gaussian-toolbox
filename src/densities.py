@@ -1,6 +1,47 @@
 import numpy
 import measures
 
+
+class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
+    
+    def __init__(self, components: ['GaussianDensities'], weights: numpy.ndarray=None):
+        """ Class of mixture of Gaussian measures
+        
+            u(x) = sum_i w_i * u_i(x)
+            
+            where w_i are weights and u_i the component measures.
+            
+        :param components: list
+            List of Gaussian densities.
+        :param weights: numpy.ndarray [num_components] or None
+            Weights of the components, that must be positive. If None they are assumed to be 1/num_components. (Default=None)
+        """
+        super().__init__(components, weights)
+        self.normalize()
+        
+    def normalize(self):
+        """ Normalizes the mixture (assuming, that its components are already normalized).
+        """
+        self.weights /= numpy.sum(self.weights)
+        
+    def sample(self, num_samples: int):
+        """ Generates samples from the Gaussian mixture density.
+        
+        :param num_samples: int
+            Number of samples that are generated.
+        
+        :return: numpy.ndarray [num_samples, R, D]
+            The samples.
+        """
+        cum_weights = numpy.cumsum(self.weights)
+        rand_nums = numpy.random.rand(num_samples)
+        comp_samples = numpy.searchsorted(cum_weights, rand_nums)
+        samples = numpy.empty((num_samples, self.R, self.D))
+        for icomp in range(self.num_components):
+            comp_idx = numpy.where(comp_samples==icomp)[0]
+            samples[comp_idx] = self.components[icomp].sample(len(comp_idx))
+        return samples
+
 class GaussianDensity(measures.GaussianMeasure):
     
     def __init__(self, Sigma: numpy.ndarray, mu: numpy.ndarray, Lambda: numpy.ndarray=None, ln_det_Sigma: numpy.ndarray=None):
@@ -29,12 +70,28 @@ class GaussianDensity(measures.GaussianMeasure):
         self.normalize()
         
     def sample(self, num_samples: int):
+        """ Generates samples from the Gaussian density.
+        
+        :param num_samples: int
+            Number of samples that are generated.
+        
+        :return: numpy.ndarray [num_samples, R, D]
+            The samples.
+        """
         L = numpy.linalg.cholesky(self.Sigma)
         rand_nums = numpy.random.randn(num_samples, self.R, self.D)
         x_samples = self.mu[None] + numpy.einsum('abc,dac->dab', L, rand_nums)
         return x_samples
     
     def slice(self, indices: list):
+        """ Returns an object with only the specified entries.
+        
+        :param indices: list
+            The entries that should be contained in the returned object.
+            
+        :return: GaussianDensity
+            The resulting Gaussian density.
+        """
         Lambda_new = self.Lambda[indices]
         Sigma_new = self.Sigma[indices]
         mu_new = self.mu[indices]
@@ -67,6 +124,14 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         self.normalize()
         
     def slice(self, indices: list):
+        """ Returns an object with only the specified entries.
+        
+        :param indices: list
+            The entries that should be contained in the returned object.
+            
+        :return: GaussianDiagDensity
+            The resulting Gaussian diagonal density.
+        """
         Lambda_new = self.Lambda[indices]
         Sigma_new = self.Sigma[indices]
         mu_new = self.mu[indices]

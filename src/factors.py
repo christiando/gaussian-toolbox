@@ -36,7 +36,7 @@ class ConjugateFactor:
             self.ln_beta = ln_beta
             
         
-    def evaluate_ln(self, x: numpy.ndarray, r: list=[]):
+    def evaluate_ln(self, x: numpy.ndarray):
         """ Evaluates the log-exponential term at x.
         
         :param x: numpy.ndarray [N, D]
@@ -47,26 +47,30 @@ class ConjugateFactor:
         :return: numpy.ndarray [N, R] or [N, len(r)]
             Log exponential term.
         """
-        if len(r) == 0:
-            r = range(self.R)
-        x_Lambda_x = numpy.einsum('adc,dc->ad', numpy.einsum('abc,dc->adb', self.Lambda[r], x), x)
-        x_nu = numpy.dot(x, self.nu[r].T).T
-        return - .5 * x_Lambda_x + x_nu + self.ln_beta[r,None]
+        x_Lambda_x = numpy.einsum('adc,dc->ad', numpy.einsum('abc,dc->adb', self.Lambda, x), x)
+        x_nu = numpy.dot(x, self.nu.T).T
+        return - .5 * x_Lambda_x + x_nu + self.ln_beta[:,None]
     
-    def evaluate(self, x: numpy.ndarray, r: list=[]):
+    def evaluate(self, x: numpy.ndarray):
         """ Evaluates the exponential term at x.
         
         :param x: numpy.ndarray [N, D]
             Points where the factor should be evaluated.
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
             
-        :return: numpy.ndarray [N, R] or [N, len(r)]
+        :return: numpy.ndarray [N, R]
             Exponential term.
         """
-        return numpy.exp(self.evaluate_ln(x, r))
+        return numpy.exp(self.evaluate_ln(x))
     
     def slice(self, indices: list):
+        """ Returns an object with only the specified entries.
+        
+        :param indices: list
+            The entries that should be contained in the returned object.
+            
+        :return: ConjugateFactor
+            The resulting Conjugate factor.
+        """
         Lambda_new = self.Lambda[indices]
         nu_new = self.nu[indices]
         ln_beta_new = self.ln_beta[indices]
@@ -152,6 +156,14 @@ class OneRankFactor(LowRankFactor):
         super().__init__(Lambda, nu, ln_beta)
         
     def slice(self, indices: list):
+        """ Returns an object with only the specified entries.
+        
+        :param indices: list
+            The entries that should be contained in the returned object.
+            
+        :return: OneRankFactor
+            The resulting OneRankFactor.
+        """
         v_new = self.v_new[indices]
         g_new = self.g[indices]
         nu_new = self.nu[indices]

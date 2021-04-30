@@ -1,17 +1,120 @@
 import numpy
 import factors
+from scipy.special import logsumexp
+
+class GaussianMixtureMeasure:
+    
+    def __init__(self, components: ['GaussianMeasure'], weights: numpy.ndarray=None):
+        """ Class of mixture of Gaussian measures
+        
+            u(x) = sum_i w_i * u_i(x)
+            
+            where w_i are weights and u_i the component measures.
+            
+        :param components: list
+            List of Gaussian measures.
+        :param weights: numpy.ndarray [num_components] or None
+            Weights of the components. If None they are assumed to be 1. (Default=None)
+        """
+        self.num_components = len(components)
+        if weights is None:
+            self.weights = numpy.ones(self.num_components)
+        else:
+            self.weights = weights
+        self.components = components
+        self.R, self.D = self.components[0].R, self.components[0].D
+        
+    def slice(self, indices: list):
+        """ Returns an object with only the specified entries.
+        
+        :param indices: list
+            The entries that should be contained in the returned object.
+            
+        :return: GaussianMixtureMeasure
+            The resulting Gaussian mixture measure.
+        """
+        components_new = []
+        for icomp in range(self.num_components):
+            comp_sliced = self.components[icomp].slice(indices)
+            components_new.append(comp_sliced)
+        
+        return GaussianMixtureMeasure(components_new, self.weights)
+        
+    def evaluate_ln(self, x: numpy.ndarray):
+        """ Evaluates the log-exponential term at x.
+        
+        :param x: numpy.ndarray [N, D]
+            Points where the factor should be evaluated.
+            
+        :return: numpy.ndarray [N, R]
+            Log exponential term.
+        """
+        ln_comps = numpy.empty((self.num_components, self.R, x.shape[0]))
+        
+        for icomp in range(self.num_components):
+            ln_comps[icomp] = self.components[icomp].evaluate_ln(x)
+        ln_u, signs = logsumexp(ln_comps, b=self.weights[:,None,None], axis=0, 
+                                return_sign=True)
+        return ln_u, signs
+    
+    def evaluate(self, x: numpy.ndarray):
+        """ Evaluates the exponential term at x.
+
+        :param x: numpy.ndarray [N, D]
+            Points where the factor should be evaluated.
+
+        :return: numpy.ndarray [N, R]
+            Exponential term.
+        """
+        ln_u, signs = self.evaluate_ln(x)
+        return signs * numpy.exp(ln_u)
+    
+    def multiply(self, factor: factors.ConjugateFactor, update_full: bool=False) -> 'GaussianMeasure':
+        """ Computes the product between the measure u and a conjugate factor f
+        
+            f(x) * u(x)
+            
+            and returns the resulting Gaussian measure.
+            
+        :param factor: ConjugateFactor
+            The conjugate factor the measure is multiplied with.
+        :param update_full: bool
+            Whether also the covariance and the log determinants of the new Gaussian measure should be computed. (Default=True)
+            
+        :return: GaussianMixtureMeasure
+            Returns the resulting GaussianMixtureMeasure.
+        """
+        components_new = []
+        for icomp in range(self.num_components):
+            comp_new = factor.multiply_with_measure(self.components[icomp], update_full=update_full)
+            components_new.append(comp_new)
+        return GaussianMixtureMeasure(components_new, weights=self.weights)
+    
+    def integrate(self, expr:str='1', **kwargs):
+        """ Integrates the indicated expression with respect to the Gaussian mixture measure.
+        
+        :param expr: str
+            Indicates the expression that should be integrated. Check measure's integration dict. Default='1'.
+        :kwargs:
+            All parameters, that are required to evaluate the expression.
+        """
+        integration_res = self.weights[0] * self.components[0].integration_dict[expr](**kwargs)
+        for icomp in range(1, self.num_components):
+            integration_res += self.weights[icomp] * self.components[icomp].integration_dict[expr](**kwargs)
+        return integration_res
+    
     
 class GaussianMeasure(factors.ConjugateFactor):
     
     def __init__(self, Lambda: numpy.ndarray, nu: numpy.ndarray=None, ln_beta: numpy.ndarray=None):
-        """ A general term, which can be added to a Gaussian.
+        """ A measure with a Gaussian form.
         
         u(x) = beta * exp(- 0.5 * x'Lambda x + x'nu),
     
-        D is the dimension, and R the number of Gaussians.
+        D is the dimension, and R the number of Gaussians. 
 
         :param Lambda: numpy.ndarray [R, D, D]
-            Information (precision) matrix of the Gaussian distributions.
+            Information (precision) matrix of the Gaussian distributions. Needs to be postive definite.
         :param nu: numpy.ndarray [R, D]
             Information vector of a Gaussian distribution. If None all zeros. (Default=None)
         :param ln_beta: numpy.ndarray [R]
@@ -36,6 +139,14 @@ class GaussianMeasure(factors.ConjugateFactor):
                                  'Ax_aBx_bCx_cDx_d_outer': self.integrate_general_quartic_outer}
         
     def slice(self, indices: list):
+        """ Returns an object with only the specified entries.
+        
+        :param indices: list
+            The entries that should be contained in the returned object.
+            
+        :return: GaussianMeasure
+            The resulting Gaussian measure.
+        """
         Lambda_new = self.Lambda[indices]
         nu_new = self.nu[indices]
         ln_beta_new = self.ln_beta[indices]
@@ -939,6 +1050,14 @@ class GaussianDiagMeasure(GaussianMeasure):
         return A_inv, ln_det_A
     
     def slice(self, indices: list):
+        """ Returns an object with only the specified entries.
+        
+        :param indices: list
+            The entries that should be contained in the returned object.
+            
+        :return: GaussianDiagMeasure
+            The resulting Gaussian diagonal measure.
+        """
         Lambda_new = self.Lambda[indices]
         nu_new = self.nu[indices]
         ln_beta_new = self.ln_beta[indices]
