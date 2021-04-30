@@ -19,7 +19,7 @@ For the resulting measure certain integrals can then be computed quickly
 
 $$\int f(\mathbf{x}) {\rm d}u((\mathbf{x})),$$
 
-where $$f$$ is can be up to fourth order of $$\mathbf{x}$$. Furthermore, some functionality for mixture measures and density is provided.
+where $$f$$ is can be up to fourth order of $`\mathbf{x}`$. Furthermore, some functionality for mixture measures and density is provided.
 
 ## The code structure
 
