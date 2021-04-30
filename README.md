@@ -12,12 +12,15 @@ This library provides the functionality to quickly manipulate, integrate and sam
 
 is a Gaussian density, this library allows to quickly compute the resulting functional form
 
-$`\u(\mathbf{x}) = \beta\exp(-\frac{1}{2}\mathbf{x}^\top\Lambda \mathbf{x} + \nu^\top \mathbf{x})\phi(\mathbf{x}).`$
+```math
+u(\mathbf{x}) = \beta\exp(-\frac{1}{2}\mathbf{x}^\top\Lambda \mathbf{x} + \nu^\top \mathbf{x})\phi(\mathbf{x}).
+```
 
 For the resulting measure certain integrals can then be computed quickly
 
-
-$`\int f(\mathbf{x}) {\rm d}u(\mathbf{x}),`$
+```math
+\int f(\mathbf{x}) {\rm d}u(\mathbf{x}),
+```
 
 where $`f`$ is can be up to fourth order of $`\mathbf{x}`$. Furthermore, some functionality for mixture measures and density is provided.
 
