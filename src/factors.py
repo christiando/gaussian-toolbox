@@ -1,7 +1,16 @@
+##################################################################################################
+# This file is part of the Gaussian Toolbox.                                                     #
+#                                                                                                #
+# It contains the functionality for the most general form of functions, that are conjugate to    # 
+# Gaussian densities.                                                                            #
+#                                                                                                #
+# Author: Christian Donner                                                                       #
+##################################################################################################
+__author__ = "Christian Donner"
+
 import numpy
 
 class ConjugateFactor:
-    
     
     def __init__(self, Lambda, nu: numpy.ndarray=None, ln_beta: numpy.ndarray=None):
         """ A general term, which can be multiplied with a Gaussian and the result is still a Gaussian, 
@@ -36,7 +45,7 @@ class ConjugateFactor:
             self.ln_beta = ln_beta
             
         
-    def evaluate_ln(self, x: numpy.ndarray):
+    def evaluate_ln(self, x: numpy.ndarray) -> numpy.ndarray:
         """ Evaluates the log-exponential term at x.
         
         :param x: numpy.ndarray [N, D]
@@ -44,14 +53,14 @@ class ConjugateFactor:
         :param r: list
             Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
             
-        :return: numpy.ndarray [N, R] or [N, len(r)]
+        :return: numpy.ndarray [N, R]
             Log exponential term.
         """
         x_Lambda_x = numpy.einsum('adc,dc->ad', numpy.einsum('abc,dc->adb', self.Lambda, x), x)
         x_nu = numpy.dot(x, self.nu.T).T
         return - .5 * x_Lambda_x + x_nu + self.ln_beta[:,None]
     
-    def evaluate(self, x: numpy.ndarray):
+    def evaluate(self, x: numpy.ndarray) -> numpy.ndarray:
         """ Evaluates the exponential term at x.
         
         :param x: numpy.ndarray [N, D]
@@ -62,7 +71,7 @@ class ConjugateFactor:
         """
         return numpy.exp(self.evaluate_ln(x))
     
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'ConjugateFactor':
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -76,7 +85,7 @@ class ConjugateFactor:
         ln_beta_new = self.ln_beta[indices]
         return ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
     
-    def multiply_with_measure(self, measure: 'GaussianMeasure', update_full: bool=False):
+    def multiply_with_measure(self, measure: 'GaussianMeasure', update_full: bool=False) -> 'GaussianMeasure':
         """ Coumputes the product between the current factor and a Gaussian measure u
         
             f(x) * u(x)
@@ -102,7 +111,7 @@ class ConjugateFactor:
         return product        
         
     @staticmethod
-    def invert_matrix(A):
+    def invert_matrix(A: numpy.ndarray) -> (numpy.ndarray, numpy.ndarray):
         L = numpy.linalg.cholesky(A)
         # TODO: Check whether we can make it mor efficienty with solve_triangular.
         #L_inv = solve_triangular(L, numpy.eye(L.shape[0]), lower=True,
@@ -113,7 +122,7 @@ class ConjugateFactor:
         return A_inv, ln_det_A
     
     @staticmethod
-    def get_trace(A):
+    def get_trace(A: numpy.ndarray) -> numpy.ndarray:
         return numpy.sum(A.diagonal(axis1=1,axis2=2), axis=1)
     
     
@@ -155,7 +164,7 @@ class OneRankFactor(LowRankFactor):
         Lambda = self._get_Lambda()
         super().__init__(Lambda, nu, ln_beta)
         
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'OneRankFactor':
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -170,7 +179,7 @@ class OneRankFactor(LowRankFactor):
         ln_beta_new = self.ln_beta[indices]
         return OneRankFactor(v_new, g_new, nu_new, ln_beta_new)
         
-    def _get_Lambda(self):
+    def _get_Lambda(self) -> numpy.ndarray:
         """ Computes the rank one matrix
         
             Lambda=g* vv'
@@ -180,7 +189,7 @@ class OneRankFactor(LowRankFactor):
         """
         return numpy.einsum('ab,ac->abc', self.v, self.g[:,None] * self.v)
     
-    def multiply_with_measure(self, measure: 'GaussianMeasure', update_full=True):
+    def multiply_with_measure(self, measure: 'GaussianMeasure', update_full=True) -> 'GaussianMeasure':
         """ Coumputes the product between the current factor and a Gaussian measure u
         
             f(x) * u(x)
@@ -246,12 +255,12 @@ class LinearFactor(ConjugateFactor):
         else:
             self.ln_beta = ln_beta
             
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'LinearFactor':
         nu_new = self.nu[indices]
         ln_beta_new = self.ln_beta[indices]
         return LinearFactor(nu_new, ln_beta_new)
             
-    def multiply_with_measure(self, measure: 'GaussianMeasure', update_full=True):
+    def multiply_with_measure(self, measure: 'GaussianMeasure', update_full=True) -> 'GaussianMeasure':
         """ Coumputes the product between the current factor and a Gaussian measure u
         
             f(x) * u(x)
@@ -308,11 +317,11 @@ class ConstantFactor(ConjugateFactor):
         ln_beta = ln_beta
         super().__init__(Lambda, nu, ln_beta)
             
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'ConstantFactor':
         ln_beta_new = self.ln_beta[indices]
         return ConstantFactor(ln_beta_new, self.D)
     
-    def multiply_with_measure(self, measure: 'GaussianMeasure', update_full=True):
+    def multiply_with_measure(self, measure: 'GaussianMeasure', update_full=True) -> 'GaussianMeasure':
         """ Coumputes the product between the current factor and a Gaussian measure u
         
             f(x) * u(x)

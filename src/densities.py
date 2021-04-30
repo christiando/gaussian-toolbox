@@ -1,3 +1,13 @@
+##################################################################################################
+# This file is part of the Gaussian Toolbox.                                                     #
+#                                                                                                #
+# It contains the functionality for Gaussian (mixture) probability densities.                    #
+#                                                                                                #
+# Author: Christian Donner                                                                       #
+##################################################################################################
+
+__author__ = "Christian Donner"
+
 import numpy
 import measures
 
@@ -24,7 +34,7 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
         """
         self.weights /= numpy.sum(self.weights)
         
-    def sample(self, num_samples: int):
+    def sample(self, num_samples: int) -> numpy.ndarray:
         """ Generates samples from the Gaussian mixture density.
         
         :param num_samples: int
@@ -41,6 +51,22 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
             comp_idx = numpy.where(comp_samples==icomp)[0]
             samples[comp_idx] = self.components[icomp].sample(len(comp_idx))
         return samples
+    
+    def slice(self, indices: list) -> 'GaussianMixtureDensity':
+        """ Returns an object with only the specified entries.
+        
+        :param indices: list
+            The entries that should be contained in the returned object.
+            
+        :return: GaussianMixtureMeasure
+            The resulting Gaussian mixture measure.
+        """
+        components_new = []
+        for icomp in range(self.num_components):
+            comp_sliced = self.components[icomp].slice(indices)
+            components_new.append(comp_sliced)
+        
+        return GaussianMixtureDensity(components_new, self.weights)
 
 class GaussianDensity(measures.GaussianMeasure):
     
@@ -69,7 +95,7 @@ class GaussianDensity(measures.GaussianMeasure):
         self._prepare_integration()
         self.normalize()
         
-    def sample(self, num_samples: int):
+    def sample(self, num_samples: int) -> numpy.ndarray:
         """ Generates samples from the Gaussian density.
         
         :param num_samples: int
@@ -83,7 +109,7 @@ class GaussianDensity(measures.GaussianMeasure):
         x_samples = self.mu[None] + numpy.einsum('abc,dac->dab', L, rand_nums)
         return x_samples
     
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'GaussianDensity':
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -123,7 +149,7 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         self.mu = mu
         self.normalize()
         
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'GaussianDiagDensity':
         """ Returns an object with only the specified entries.
         
         :param indices: list

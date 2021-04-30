@@ -1,3 +1,13 @@
+##################################################################################################
+# This file is part of the Gaussian Toolbox.                                                     #
+#                                                                                                #
+# It contains the functionality for Gaussian (mixture) measures.                                 #
+#                                                                                                #
+# Author: Christian Donner                                                                       #
+##################################################################################################
+
+__author__ = "Christian Donner"
+
 import numpy
 import factors
 from scipy.special import logsumexp
@@ -24,7 +34,7 @@ class GaussianMixtureMeasure:
         self.components = components
         self.R, self.D = self.components[0].R, self.components[0].D
         
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'GaussianMixtureMeasure':
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -40,7 +50,7 @@ class GaussianMixtureMeasure:
         
         return GaussianMixtureMeasure(components_new, self.weights)
         
-    def evaluate_ln(self, x: numpy.ndarray):
+    def evaluate_ln(self, x: numpy.ndarray) -> numpy.ndarray:
         """ Evaluates the log-exponential term at x.
         
         :param x: numpy.ndarray [N, D]
@@ -57,7 +67,7 @@ class GaussianMixtureMeasure:
                                 return_sign=True)
         return ln_u, signs
     
-    def evaluate(self, x: numpy.ndarray):
+    def evaluate(self, x: numpy.ndarray) -> numpy.ndarray:
         """ Evaluates the exponential term at x.
 
         :param x: numpy.ndarray [N, D]
@@ -90,7 +100,7 @@ class GaussianMixtureMeasure:
             components_new.append(comp_new)
         return GaussianMixtureMeasure(components_new, weights=self.weights)
     
-    def integrate(self, expr:str='1', **kwargs):
+    def integrate(self, expr:str='1', **kwargs) -> numpy.ndarray:
         """ Integrates the indicated expression with respect to the Gaussian mixture measure.
         
         :param expr: str
@@ -138,7 +148,7 @@ class GaussianMeasure(factors.ConjugateFactor):
                                  'Ax_aBx_bCx_cDx_d_inner': self.integrate_general_quartic_inner,
                                  'Ax_aBx_bCx_cDx_d_outer': self.integrate_general_quartic_outer}
         
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'GaussianMeasure':
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -192,7 +202,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         """
         return factor.multiply_with_measure(self, update_full=update_full)
     
-    def integrate(self, expr:str='1', **kwargs):
+    def integrate(self, expr:str='1', **kwargs) -> numpy.ndarray:
         """ Integrates the indicated expression with respect to the Gaussian measure.
         
         :param expr: str
@@ -202,165 +212,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         """
         return self.integration_dict[expr](**kwargs)
     
-    
-    ### This needs to be unified with the functionality of conjugate factors.
-    def multiply_squared_exponential_term(self, Lambda: numpy.ndarray, nu: numpy.ndarray=None, ln_beta: numpy.ndarray=None, r: list=[]):
-        """ Multiplies an exponential factor with another one.
-        
-        u(x) * beta * exp(-.5 * x'Lambda x + x'nu) 
-        
-        :param Lambda: numpy.ndarray [R2, D, D]
-            Matrix of the second order term.
-        :param nu: numpy.ndarray [R2, D] or None
-            Vector of the linear order term. If None, zero vector is assumed. (Default=None)
-        :param ln_beta: numpy.ndarray [R2] or None
-            Log constant. If None, zero is assumed. (Default=None)
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
-        
-        :return: SquaredExponential
-            The resulting object.
-        """
-        if len(r) == 0:
-            r = range(self.R)
-        R1, R2 = len(r), Lambda.shape[0]
-        Lambda_new = (self.Lambda[r,None] + Lambda[None]).reshape((R1 * R2, self.D, self.D))
-        if nu is None:
-            nu_new = numpy.tile(self.nu[r,None], (1,R2,1)).reshape((R1 * R2, self.D))
-        else:
-            nu_new = (self.nu[r,None] + nu[None]).reshape((R1 * R2, self.D))
-        if ln_beta is None:
-            ln_beta_new = numpy.tile(self.ln_beta[r,None], (1, R2)).reshape((R1 * R2))
-        else:
-            ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
-        product = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
-        return product
-    
-    def multiply_linear_exponential_term(self, nu: numpy.ndarray, ln_beta: numpy.ndarray=None, r: list=[]):
-        """ Multiplies an exponential factor with another one.
-        
-        u(x) * beta * exp(x'nu) 
-        
-        :param nu: numpy.ndarray [R2, D] or None
-            Vector of the linear order term. If None, zero vector is assumed. (Default=None)
-        :param ln_beta: numpy.ndarray [R2] or None
-            Log constant. If None, zero is assumed. (Default=None)
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
-        
-        :return: SquaredExponential
-            The resulting object.
-        """
-        
-        ### Remark: Discrepancy to sampling becomes big, if nu shifts the mean strongly. Check if that is only a numerical issue.
-        if len(r) == 0:
-            r = range(self.R)
-        R1, R2 = len(r), nu.shape[0]
-        Lambda_new = numpy.tile(self.Lambda[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
-        nu_new = (self.nu[r,None] + nu[None]).reshape((R1 * R2, self.D))
-        if ln_beta is None:
-            ln_beta_new = numpy.tile(self.ln_beta[r,None], (1, R2)).reshape((R1 * R2))
-        else:
-            ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
-        product = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
-        product.invert_lambda()
-        if self.Sigma is not None:
-            product.Sigma = numpy.tile(self.Sigma[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
-        if self.ln_det_Sigma is not None:
-            product.ln_det_Sigma = numpy.tile(self.ln_det_Sigma[r,None], (1, R2)).reshape((R1 * R2))
-            product.ln_det_Lambda = -product.ln_det_Sigma
-        elif self.ln_det_Lambda is not None:
-            product.ln_det_Lambda = numpy.tile(self.ln_det_Lambda[r,None], (1, R2)).reshape((R1 * R2))
-            product.ln_det_Sigma = -product.ln_det_Lambda
-            
-        return product
-    
-    def multiply_constant_term(self, ln_beta: numpy.ndarray, r: list=[]):
-        """ Multiplies an exponential factor with another one.
-        
-        u(x) * beta
-        
-        :param nu: numpy.ndarray [R2, D] or None
-            Vector of the linear order term. If None, zero vector is assumed. (Default=None)
-        :param ln_beta: numpy.ndarray [R2] or None
-            Log constant. If None, zero is assumed. (Default=None)
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
-        
-        :return: SquaredExponential
-            The resulting object.
-        """
-        if len(r) == 0:
-            r = range(self.R)
-        R1, R2 = len(r), ln_beta.shape[0]
-        Lambda_new = numpy.tile(self.Lambda[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
-        nu_new = numpy.tile(self.nu[r,None], (1,R2,1)).reshape((R1 * R2, self.D))
-        ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R1 * R2))
-        product = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
-        if self.Sigma is not None:
-            product.Sigma = numpy.tile(self.Sigma[r,None], (1, R2, 1, 1)).reshape((R1 * R2, self.D, self.D))
-        if self.ln_det_Sigma is not None:
-            product.ln_det_Sigma = numpy.tile(self.ln_det_Sigma[r,None], (1, R2)).reshape((R1 * R2))
-            product.ln_det_Lambda = -product.ln_det_Sigma
-        elif self.ln_det_Lambda is not None:
-            product.ln_det_Lambda = numpy.tile(self.ln_det_Lambda[r,None], (1, R2)).reshape((R1 * R2))
-            product.ln_det_Sigma = -product.ln_det_Lambda
-        return product
-    
-    def multiply_rank_one(self, U: numpy.ndarray, G: numpy.ndarray, nu: numpy.ndarray=None, ln_beta: numpy.ndarray=None, r: list=[]):
-        """ Multiplies the exponential term with another exponential term, where the Lambda is rank 1, i.e.
-        
-        Lambda = U G U'
-            
-        Where G is an [1 x 1] diagonal matrix and U and [D x 1] with a vector. 
-        If already computed, the covariance matrix Sigma and its log-determinant are efficiently updated.
-        
-        :param U: numpy.ndarray [R1, D]
-            Vector of low rank matrix with orthogonal vectors.
-        :param G: numpy.ndarray [R1]
-            Diagonal entries of the low-rank matrix.
-        :param nu: numpy.ndarray [R1, D]
-            Information vector of the low rank part. If None all entries are zero. (Default=None)
-        :param nu: numpy.ndarray [R1]
-            Log factor of the low rank part. If None all entries are zero. (Default=None)
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
-            
-        :return: Squared exponential
-            The resulting product, where the number of Gaussians is self.R * R1.
-        """
-        if len(r) == 0:
-            r = range(self.R)
-        R = len(r)
-        R1 = G.shape[0]
-        UGU = numpy.einsum('ab,ac->abc', U, G[:,None] * U)
-        Lambda_new = (self.Lambda[r,None] + UGU[None]).reshape((R * R1, self.D, self.D))
-        if nu is None:
-            nu_new = numpy.tile(self.nu[r,None], (1, R1, 1)).reshape((R * R1, self.D))
-        else:
-            nu_new = (self.nu[r,None] + nu[None]).reshape((R * R1, self.D))
-        if ln_beta is None:
-            ln_beta_new = numpy.tile(self.ln_beta[:,None], (1,R1)).reshape((R * R1))
-        else:
-            ln_beta_new = (self.ln_beta[r,None] + ln_beta[None]).reshape((R * R1))
-        product = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
-        
-        # if the Sigma of the object is known the Sherman-morrison formula and the matrix determinant lemma are used for efficient update of the inverses and the log determinants.
-        if self.Sigma is not None and self.ln_det_Sigma is not None:
-            # Sherman morrison inversion
-            Sigma_U = numpy.einsum('abc,dc->adb', self.Sigma[r], U)
-            U_Sigma_U = numpy.einsum('abc,bc->ab', Sigma_U, U)
-            denominator = 1. + G[None] * U_Sigma_U
-            nominator = G[None,:,None,None] * numpy.einsum('abc,abd->abcd', Sigma_U, Sigma_U)
-            Sigma_new = self.Sigma[r, None] - nominator / denominator[:,:,None,None]
-            product.Sigma = Sigma_new.reshape((R*R1, self.D, self.D))
-            # Matrix determinant lemma
-            ln_det_Sigma_new = self.ln_det_Sigma[r,None] - numpy.log(denominator)
-            product.ln_det_Sigma = ln_det_Sigma_new.reshape((R * R1))
-            product.ln_det_Lambda = -product.ln_det_Sigma
-        return product
-    
-    def log_integral(self):
+    def log_integral(self) -> numpy.ndarray:
         """ Computes the log integral of the exponential term.
         
         log \int u(x) dx.
@@ -371,7 +223,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         self._prepare_integration()
         return self.lnZ + self.ln_beta
     
-    def integral(self):
+    def integral(self) -> numpy.ndarray:
         """ Computes the log integral of the exponential term.
         
         \int u(x) dx.
@@ -389,7 +241,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         self.compute_lnZ()
         self.ln_beta = -self.lnZ
         
-    def is_normalized(self):
+    def is_normalized(self) -> numpy.ndarray:
         return numpy.equal(self.lnZ, -self.ln_beta)
     
     def compute_mu(self):
@@ -402,7 +254,7 @@ class GaussianMeasure(factors.ConjugateFactor):
             self.invert_lambda()
         self.mu = numpy.einsum('abc,ac->ab', self.Sigma, self.nu)
     
-    def get_density(self):
+    def get_density(self) -> 'GaussianDensity':
         """ Returns the corresponing normalised density object.
         
         :return: GaussianDensity
@@ -413,7 +265,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         return densities.GaussianDensity(Sigma=self.Sigma, mu=self.mu, Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
             
         
-    def _get_default(self, mat, vec):
+    def _get_default(self, mat, vec) -> (numpy.ndarray, numpy.ndarray):
         """ Small method to get default matrix and vector.
         """
         if mat is None:
@@ -424,7 +276,7 @@ class GaussianMeasure(factors.ConjugateFactor):
             
     ##### Linear integals
             
-    def _expectation_x(self):
+    def _expectation_x(self) -> numpy.ndarray:
         """ Computes the expectation.
         
             int x du(x) / int du(x)
@@ -434,7 +286,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         """
         return self.mu 
             
-    def integrate_x(self):
+    def integrate_x(self) -> numpy.ndarray:
         """ Computes the integral.
         
             int x du(x)
@@ -445,7 +297,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         constant = self.integral()
         return constant[:,None] * self._expectation_x()
     
-    def _expectation_general_linear(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray):
+    def _expectation_general_linear(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the linear expectation.
         
             int (Ax+a) dphi(x),
@@ -462,7 +314,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         """
         return numpy.einsum('ab,cb->ca', A_mat, self.mu) + a_vec
     
-    def integrate_general_linear(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None):
+    def integrate_general_linear(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None) -> numpy.ndarray:
         """ Computes the linear expectation.
         
             int (Ax+a) dphi(x),
@@ -484,7 +336,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     
     ##### Quadratic integrals
     
-    def _expectation_xxT(self):
+    def _expectation_xxT(self) -> numpy.ndarray:
         """ Computes the expectation.
         
             int xx' du(x) / int du(x)
@@ -494,7 +346,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         """
         return self.Sigma + numpy.einsum('ab,ac->acb', self.mu, self.mu)
     
-    def integrate_xxT(self):
+    def integrate_xxT(self) -> numpy.ndarray:
         """ Computes the integral.
         
             int xx' du(x)
@@ -505,7 +357,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         constant = self.integral()
         return constant[:,None,None] * self._expectation_xxT()
     
-    def _expectation_general_quadratic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray):
+    def _expectation_general_quadratic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quartic expectation.
         
             int (Ax+a)'(Bx+b) dphi(x),
@@ -531,7 +383,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         aBm_b = numpy.einsum('a, ba->b', a_vec, self._expectation_general_linear(B_mat, b_vec))
         return ABSigma_trace + mu_AB_mu + muAb + aBm_b
     
-    def integrate_general_quadratic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None):
+    def integrate_general_quadratic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None) -> numpy.ndarray:
         """ Computes the quadratic expectation.
         
             int (Ax+a)'(Bx+b) dphi(x),
@@ -555,7 +407,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         constant = self.integral()
         return constant * self._expectation_general_quadratic_inner(A_mat, a_vec, B_mat, b_vec)
     
-    def _expectation_general_quadratic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray):
+    def _expectation_general_quadratic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quadratic expectation.
         
             int (Ax+a)(Bx+b)' dphi(x),
@@ -581,7 +433,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         return AxxB + Axb + aBx_b
     
     def integrate_general_quadratic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
-                                          B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None):
+                                          B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None) -> numpy.ndarray:
         """ Computes the quadratic expectation.
         
             int (Ax+a)(Bx+b)' dphi(x),
@@ -607,7 +459,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     
     ##### Cubic integrals
     
-    def _expectation_xbxx(self, b_vec: numpy.ndarray):
+    def _expectation_xbxx(self, b_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the cubic expectation.
         
             int xb'xx' dphi(x),
@@ -630,7 +482,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         return mbExx + bmSigma + Sigmabm
         
     
-    def intergate_xbxx(self, b_vec: numpy.ndarray):
+    def intergate_xbxx(self, b_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the cubic integral.
         
             int xb'xx' du(x)
@@ -642,7 +494,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         constant = self.integral()
         return constant[:,None,None] * self._expectation_xbxx(b_vec)
     
-    def _expectation_xAxx(self, A_mat: numpy.ndarray):
+    def _expectation_xAxx(self, A_mat: numpy.ndarray) -> numpy.ndarray:
         """ Computes the cubic integral.
         
             int xAx'x dphi(x)
@@ -663,7 +515,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     
     def _expectation_general_cubic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
                                          B_mat: numpy.ndarray, b_vec: numpy.ndarray,
-                                         C_mat: numpy.ndarray, c_vec: numpy.ndarray):
+                                         C_mat: numpy.ndarray, c_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quartic expectation.
         
             int (Ax+a)(Bx+b)'(Cx+c) dphi(x),
@@ -701,7 +553,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     
     def integrate_general_cubic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
                                       B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
-                                      C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None):
+                                      C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None) -> numpy.ndarray:
         """ Computes the quadratic expectation.
         
             int (Ax+a)(Bx+b)'(Cx+c)  dphi(x),
@@ -731,7 +583,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     
     def _expectation_general_cubic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray,  
                                          B_mat: numpy.ndarray, b_vec: numpy.ndarray,
-                                         C_mat: numpy.ndarray, c_vec: numpy.ndarray):
+                                         C_mat: numpy.ndarray, c_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the cubic expectation.
         
             int (Ax+a)'(Bx+b)(Cx+c)' dphi(x),
@@ -773,7 +625,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     
     def integrate_general_cubic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
                                       B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
-                                      C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None):
+                                      C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None) -> numpy.ndarray:
         """ Computes the quadratic expectation.
         
            int (Bx+b)'(Cx+c)(Dx+d)' du(x),
@@ -801,7 +653,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     
     ##### Quartic integrals
     
-    def _expectation_xxTxxT(self):
+    def _expectation_xxTxxT(self) -> numpy.ndarray:
         """ Computes the cubic integral.
         
             int xx'xx' dphi(x),
@@ -819,7 +671,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         Sigma_mumu_p2 = numpy.einsum('abc,acd->abd', Sigma_mumu_p, Sigma_mumu_p)
         return 2. * Sigma_mumu_p2 + mumu_inner[:,None,None] * Sigma_mumu_m + Sigma_trace[:,None,None] * Sigma_mumu_p
         
-    def integrate_xxTxxT(self):
+    def integrate_xxTxxT(self) -> numpy.ndarray:
         """ Computes the quartic integral.
         
             int xx'xx' du(x).
@@ -830,7 +682,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         constant = self.integral()
         return constant[:,None,None] * self._expectation_xxTxxT()
     
-    def _expectation_xxTAxxT(self, A_mat: numpy.ndarray):
+    def _expectation_xxTAxxT(self, A_mat: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quartic expectation.
         
             int xx'Axx' dphi(x),
@@ -852,7 +704,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         ASigma_trace = self.get_trace(numpy.einsum('ab,cbd->cad', A_mat, self.Sigma))
         return Sigma_AA_Sigma + muAmu[:,None,None] * Sigma_mumu_m + ASigma_trace[:,None,None] * Sigma_mumu_p
     
-    def integrate_xxTAxxT(self, A_mat: numpy.ndarray):
+    def integrate_xxTAxxT(self, A_mat: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quartic integral.
         
             int xx'xx' du(x)
@@ -863,7 +715,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         return constant[:,None,None] * self._expectation_xxTAxxT(A_mat)
     
     def _expectation_general_quartic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
-                                           C_mat: numpy.ndarray, c_vec: numpy.ndarray, D_mat: numpy.ndarray, d_vec: numpy.ndarray):
+                                           C_mat: numpy.ndarray, c_vec: numpy.ndarray, D_mat: numpy.ndarray, d_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quartic expectation.
         
             int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' dphi(x),
@@ -915,7 +767,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def integrate_general_quartic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
                                        B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
                                        C_mat: numpy.ndarray, c_vec: numpy.ndarray, 
-                                       D_mat: numpy.ndarray, d_vec: numpy.ndarray):
+                                       D_mat: numpy.ndarray, d_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quartic integral.
         
             int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
@@ -950,7 +802,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def _expectation_general_quartic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
                                            B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
                                            C_mat: numpy.ndarray, c_vec: numpy.ndarray, 
-                                           D_mat: numpy.ndarray, d_vec: numpy.ndarray):
+                                           D_mat: numpy.ndarray, d_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quartic expectation.
         
             int (Ax+a)'(Bx+b)(Cx+c)'(Dx+d) dphi(x),
@@ -1002,7 +854,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def integrate_general_quartic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
                                        B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
                                        C_mat: numpy.ndarray, c_vec: numpy.ndarray, 
-                                       D_mat: numpy.ndarray, d_vec: numpy.ndarray):
+                                       D_mat: numpy.ndarray, d_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the quartic integral.
         
             int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
@@ -1044,12 +896,12 @@ class GaussianDiagMeasure(GaussianMeasure):
         self.ln_det_Sigma = -self.ln_det_Lambda   
         
     @staticmethod
-    def invert_diagonal(A: numpy.ndarray):
+    def invert_diagonal(A: numpy.ndarray) -> (numpy.ndarray,numpy.ndarray):
         A_inv = numpy.concatenate([numpy.diag(mat)[None] for mat in  1./A.diagonal(axis1=1, axis2=2)], axis=0)
         ln_det_A = numpy.sum(numpy.log(A.diagonal(axis1=1, axis2=2)), axis=1)
         return A_inv, ln_det_A
     
-    def slice(self, indices: list):
+    def slice(self, indices: list) -> 'GaussianDiagMeasure':
         """ Returns an object with only the specified entries.
         
         :param indices: list
