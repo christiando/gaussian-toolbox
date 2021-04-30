@@ -6,9 +6,9 @@ This library's aim is to quickly manipulate Gaussians and solve integrals with r
 
 This library provides the functionality to quickly manipulate, integrate and sample from Gaussians. If 
 
-```math
+<pre xml:lang="latex">
 \phi(\mathbf{x}) = {\cal N}(\boldsymbol{\mu}, \Sigma),
-```
+</pre>
 
 is a Gaussian density, this library allows to quickly compute the resulting functional form
 
