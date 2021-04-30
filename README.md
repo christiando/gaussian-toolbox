@@ -13,7 +13,7 @@ This library provides the functionality to quickly manipulate, integrate and sam
 is a Gaussian density, this library allows to quickly compute the resulting functional form
 
 ```math
-u(\mathbf{x}) = \beta\exp(-\frac{1}{2}\mathbf{x}^\top\Lambda \mathbf{x} + \nu^\top \mathbf{x})\phi(\mathbf{x}).
+u(\mathbf{x}) = \beta\exp\left(-\frac{1}{2}\mathbf{x}^\top\Lambda \mathbf{x} + \nu^\top \mathbf{x}\right)\phi(\mathbf{x}).
 ```
 
 For the resulting measure certain integrals can then be computed quickly
