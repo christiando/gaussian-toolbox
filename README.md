@@ -29,7 +29,7 @@ where $`f`$ is can be up to fourth order of $`\mathbf{x}`$. Furthermore, some fu
 The main code is in `/src/` folder. 
 
 + In `factors.py` contains the main utilities for functions that are conjugate to Gaussian measures, i.e. its product with a Gaussian measure is again a Gaussian measure. The main class is `ConjugateFactor`, which is the most general functional form. Check the documentation for subclasses.
-+ `measures.py` contains the functionality of `GaussianMeasure`, i.e. the integration functionality. They can be multiplied with `ConjugateFactor` and the result ar again `GaussianMeasure`. In addition `GaussianMixtureMeasure` is provided that is a class for a linear combination of Gaussian measures. Check the documentation for subclasses.
++ `measures.py` contains the functionality of `GaussianMeasure`, i.e. the integration functionality. They can be multiplied with `ConjugateFactor` and the result are again `GaussianMeasure`. In addition `GaussianMixtureMeasure` is provided that is a class for a linear combination of Gaussian measures. Check the documentation for subclasses.
 + `densities.py` has the utilities for probability densities, i.e. it is enforced, that they are normalized. One can sample from instances of `GaussianDensity`. Furthermore, they inherit all the functionality from `GaussianMeasure`. Also here the `GaussianMixtureDensity` is provided, which is the density counter part of `GaussianMixtureMeasure`.
 
 ## Caution
