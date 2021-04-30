@@ -4,37 +4,29 @@ This library's aim is to quickly manipulate Gaussians and solve integrals with r
 
 ## Introduction
 
-This is a Renku project - basically a git repository with some
-bells and whistles. You'll find we have already created some
-useful things like `data` and `notebooks` directories and
-a `Dockerfile`.
+This library provides the functionality to quickly manipulate, integrate and sample from Gaussians. If 
 
-## Working with the project
+$\phi(\mathbf{x}) = {\cal N}(\boldsymbol{\mu}, \Sigma)$
 
-The simplest way to start your project is right from the Renku
-platform - just click on the `Environments` tab and start a new session.
-This will start an interactive environment right in your browser.
+is a Gaussian density, this library allows to quickly compute the resulting functional form
 
-To work with the project anywhere outside the Renku platform,
-click the `Settings` tab where you will find the
-git repo URLs - use `git` to clone the project on whichever machine you want.
+$\u(\mathbf{x}) = \beta\exp(-\frac{1}{2}\mathbf{x}^\top\Lambda \mathbf{x} + \bolsymbol{\nu}^\top \mathbf{x})\phi(\mathbf{x}).$
 
-### Changing interactive environment dependencies
+For the resulting measure certain integrals can then be computed quickly
 
-Initially we install a very minimal set of packages to keep the images small.
-However, you can add python and conda packages in `requirements.txt` and
-`environment.yml` to your heart's content. If you need more fine-grained
-control over your environment, please see [the documentation](https://renku.readthedocs.io/en/latest/user/advanced_interfaces.html#dockerfile-modifications).
 
-## Project configuration
+$\int f(\mathbf{x}) {\rm d}u((\mathbf{x}))$,
 
-Project options can be found in `.renku/renku.ini`. In this
-project there is currently only one option, which specifies
-the default type of environment to open, in this case `/lab` for
-JupyterLab. You may also choose `/tree` to get to the "classic" Jupyter
-interface.
+where $f$ is can be up to fourth order of $\mathbf{x}$. Furthermore, some functionality for mixture measures and density is provided.
 
-## Moving forward
+## The code structure
 
-Once you feel at home with your project, we recommend that you replace
-this README file with your own project documentation! Happy data wrangling!
+The main code is in `/src/` folder. 
+
++ In `factors.py` contains the main utilities for functions that are conjugate to Gaussian measures, i.e. its product with a Gaussian measure is again a Gaussian measure. The main class is `ConjugateFactor`, which is the most general functional form. Check the documentation for subclasses.
++ `measures.py` contains the functionality of `GaussianMeasure`, i.e. the integration functionality. They can be multiplied with `ConjugateFactors` and the result ar again `GaussianMeasure`. In addition `GaussianMixtureMeasure` is provided that is a class for a linear combination of Gaussian measures. Check the documentation for subclasses.
++ `densities.py` has the utilities for probability densities, i.e. it is enforced, that they are normalized. One can sample from instances of `GaussianDensity`. Furthermore, they inherit all the functionality from `GaussianMeasure`. Also here the `GaussianMixtureDensity` is provided, which is the density counter part of `GaussianMixtureMeasure`.
+
+## Caution
+
+This is code under development. Inegrals were checked by sampling, but no guarantees. ;)
