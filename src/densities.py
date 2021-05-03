@@ -140,7 +140,7 @@ class GaussianDensity(measures.GaussianMeasure):
         self.ln_det_Sigma[indices] = density.ln_det_Sigma
         self.lnZ[indices] = density.lnZ
         self.nu[indices] = density.nu
-        self.ln_beta[indices] = self.ln_beta
+        self.ln_beta[indices] = density.ln_beta
     
     def get_marginal(self, dim_x: list) -> 'GaussianDensity':
         """ Gets the marginal of the indicated dimensions.
@@ -350,7 +350,7 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         self.ln_det_Sigma[indices] = density.ln_det_Sigma
         self.lnZ[indices] = density.lnZ
         self.nu[indices] = density.nu
-        self.ln_beta[indices] = self.ln_beta
+        self.ln_beta[indices] = density.ln_beta
     
     def get_marginal(self, dim_idx: list) -> 'GaussianDiagDensity':
         """ Gets the marginal of the indicated dimensions.
