@@ -126,6 +126,22 @@ class GaussianDensity(measures.GaussianMeasure):
         new_measure = GaussianDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
     
+    def update(self, indices: list, density: 'GaussianDensity'):
+        """ Updates densities at indicated entries.
+        
+        :param indices: list
+            The entries that should be updated.
+        :param density: GaussianDensity
+            New densities.
+        """
+        self.Lambda[indices] = density.Lambda
+        self.Sigma[indices] = density.Sigma
+        self.mu[indices] = density.mu
+        self.ln_det_Sigma[indices] = density.ln_det_Sigma
+        self.lnZ[indices] = density.lnZ
+        self.nu[indices] = density.nu
+        self.ln_beta[indices] = self.ln_beta
+    
     def get_marginal(self, dim_x: list) -> 'GaussianDensity':
         """ Gets the marginal of the indicated dimensions.
         
@@ -319,6 +335,22 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         ln_det_Sigma_new = self.ln_det_Sigma[indices]
         new_measure = GaussianDiagDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
+    
+    def update(self, indices: list, density: 'GaussianDiagDensity'):
+        """ Updates densities at indicated entries.
+        
+        :param indices: list
+            The entries that should be updated.
+        :param density: GaussianDiagDensity
+            New densities.
+        """
+        self.Lambda[indices] = density.Lambda
+        self.Sigma[indices] = density.Sigma
+        self.mu[indices] = density.mu
+        self.ln_det_Sigma[indices] = density.ln_det_Sigma
+        self.lnZ[indices] = density.lnZ
+        self.nu[indices] = density.nu
+        self.ln_beta[indices] = self.ln_beta
     
     def get_marginal(self, dim_idx: list) -> 'GaussianDiagDensity':
         """ Gets the marginal of the indicated dimensions.
