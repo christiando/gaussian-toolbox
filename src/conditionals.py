@@ -1,3 +1,14 @@
+##################################################################################################
+# This file is part of the Gaussian Toolbox.                                                     #
+#                                                                                                #
+# It contains the functionality for conditional Gaussian densities, that can be seen as          #
+# operators.                                                                                     #
+#                                                                                                #
+# Author: Christian Donner                                                                       #
+##################################################################################################
+
+__author__ = "Christian Donner"
+
 import numpy
 
 class ConditionalGaussianDensity:

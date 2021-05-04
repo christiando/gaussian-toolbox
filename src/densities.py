@@ -12,7 +12,6 @@ import numpy
 import measures
 import conditionals
 
-
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     
     def __init__(self, components: ['GaussianDensities'], weights: numpy.ndarray=None):
