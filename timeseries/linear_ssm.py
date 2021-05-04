@@ -8,12 +8,7 @@ class KalmanFilter:
     def __init__(self, X: numpy.ndarray, A: numpy.ndarray, b: numpy.ndarray, Qz: numpy.ndarray, 
                  C: numpy.ndarray, d: numpy.ndarray, Qx: numpy.ndarray):
         """ This is a linear Kalman filter.
-        
-        $$
-        z_{t} = A z_{t-1} + b + \zeta_t \\
-        x_{t} = C z_t + d + \xi_t.
-        $$
-        
+
         
         :param X: numpy.ndarray [N, Dx]
             The observed data.
@@ -210,6 +205,7 @@ class StateSpace_EM:
         """
         llk_list = []
         converged = False
+        i = 0
         while i < n_iter and not converged:
             self.estep()
             llk_list.append(self.compute_log_likelihood())
@@ -218,6 +214,7 @@ class StateSpace_EM:
                 conv = (llk_list[-1] - llk_list[-2]) / numpy.amax([1, numpy.abs(llk_list[-1]), numpy.abs(llk_list[-2])])
                 converged = conv < conv_crit
             i += 1
+            print('Iteration %d - llk=%.1f' %(i,llk_list[-1]))
         return llk_list
     
     def estep(self):
@@ -243,11 +240,11 @@ class StateSpace_EM:
         """ Calculates the Qfunction. (TODO: Still a small bug here, somewhere!)
         """
         # E[(z_t - Az_{t-1} - b)'Qz^{1}(z_{t} - Az_{t-1} - b)]
-        joint_density = ssm.ks.smoothing_density.affine_joint_transformation(ssm.ks.state_density)
+        joint_density = self.ks.smoothing_density.affine_joint_transformation(self.ks.state_density)
         A = numpy.hstack([-self.A, numpy.eye(self.Dz)])
         a = -self.b
         B = numpy.dot(self.Qz_inv, A)
-        b = -numpy.dot(self.Qz_inv, ssm.b)
+        b = -numpy.dot(self.Qz_inv, self.b)
         Ezz = numpy.sum(joint_density.integrate('Ax_aBx_b_inner', A_mat=A, a_vec=a, B_mat=B, b_vec=b)[:-1])
         Ezz += self.T * (self.ln_det_Qz + self.Dz * numpy.log(2 * numpy.pi))
         # E[(x_t - Cz_{t} - d)'Qx^{-1}(x_{t} - Cz_{t} - d)]
@@ -273,7 +270,7 @@ class StateSpace_EM:
     def update_A(self):
         """ Computes the optimal state transition matrix.
         """
-        joint_density = ssm.ks.smoothing_density.affine_joint_transformation(ssm.ks.state_density)
+        joint_density = self.ks.smoothing_density.affine_joint_transformation(self.ks.state_density)
         Ezz = joint_density.integrate('xx')[:-1]
         Ezz_past = numpy.sum(Ezz[:,:self.Dz, :self.Dz], axis=0)
         mu_b = self.ks.smoothing_density.mu[:-1,None] * self.b[None,:,None]
@@ -288,7 +285,7 @@ class StateSpace_EM:
     def update_Qz(self):
         """ Computes the optimal state covariance.
         """
-        joint_density = ssm.ks.smoothing_density.affine_joint_transformation(ssm.ks.state_density)
+        joint_density = self.ks.smoothing_density.affine_joint_transformation(self.ks.state_density)
         A = numpy.hstack([-self.A, numpy.eye(self.Dz)])
         a = -self.b
         self.Qz =  numpy.mean(joint_density.integrate('Ax_aBx_b_outer', A_mat=A, a_vec=a, B_mat=A, b_vec=a)[:-1], axis=0)
