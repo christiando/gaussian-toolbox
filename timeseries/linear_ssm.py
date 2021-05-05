@@ -183,7 +183,6 @@ class StateSpace_EM:
         self.Dz = Dz
         self.Qx = noise_x ** 2 * numpy.eye(self.Dx)
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
-        self.Qz_inv = numpy.linalg.inv(self.Qz)
         self.A, self.b = numpy.eye(self.Dz), numpy.zeros((self.Dz,))
         self.C, self.d = numpy.random.randn(self.Dx, self.Dz), numpy.zeros((self.Dx,))
         if self.Dx == self.Dz:
