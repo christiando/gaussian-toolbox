@@ -310,6 +310,10 @@ class GaussianMeasure(factors.ConjugateFactor):
             mat = numpy.eye(self.D)
         if vec is None:
             vec = numpy.zeros(mat.shape[0])
+        if mat.ndim == 2:
+            mat = numpy.tile(mat[None], [1, 1, 1])
+        if vec.ndim == 1:
+            vec = numpy.tile(vec[None], [1, 1])
         return mat, vec
             
     ##### Linear integals
@@ -350,7 +354,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: numpy.ndarray [R, K]
             The solved intergal.
         """
-        return numpy.einsum('ab,cb->ca', A_mat, self.mu) + a_vec
+        return numpy.einsum('abc,ac->ab', A_mat, self.mu) + a_vec
     
     def integrate_general_linear(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None) -> numpy.ndarray:
         """ Computes the linear expectation.
@@ -414,11 +418,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: numpy.ndarray [R]
             The solved intergal.
         """
-        AB = numpy.dot(A_mat.T, B_mat)
-        ABSigma_trace = self.get_trace(numpy.einsum('ab,cbd->cad', AB, self.Sigma))
-        mu_AB_mu = numpy.einsum('ab,ab->a', numpy.einsum('ab, bc-> ac', self.mu, AB), self.mu)
-        muAb = numpy.einsum('ab,b->a', numpy.einsum('ab,cb->ac', self.mu, A_mat), b_vec)
-        aBm_b = numpy.einsum('a, ba->b', a_vec, self._expectation_general_linear(B_mat, b_vec))
+        AB = numpy.einsum('abc,abd->acd', A_mat, B_mat)
+        ABSigma_trace = self.get_trace(numpy.einsum('cab,cbd->cad', AB, self.Sigma))
+        mu_AB_mu = numpy.einsum('ab,ab->a', numpy.einsum('ab, abc-> ac', self.mu, AB), self.mu)
+        muAb = numpy.einsum('ab,ab->a', numpy.einsum('ab,acb->ac', self.mu, A_mat), b_vec)
+        aBm_b = numpy.einsum('ab, ab->a', a_vec, self._expectation_general_linear(B_mat, b_vec))
         return ABSigma_trace + mu_AB_mu + muAb + aBm_b
     
     def integrate_general_quadratic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None) -> numpy.ndarray:
@@ -465,9 +469,9 @@ class GaussianMeasure(factors.ConjugateFactor):
             The solved intergal.
         """
         Exx = self._expectation_xxT()
-        AxxB = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,dc->abd', Exx, B_mat))
-        Axb = numpy.einsum('ab,c->abc', numpy.einsum('ab,cb->ca', A_mat, self.mu), b_vec)
-        aBx_b = numpy.einsum('a, bc->bac', a_vec, self._expectation_general_linear(B_mat, b_vec))
+        AxxB = numpy.einsum('cab,cbd->cad', A_mat, numpy.einsum('abc,adc->abd', Exx, B_mat))
+        Axb = numpy.einsum('ab,ac->abc', numpy.einsum('cab,cb->ca', A_mat, self.mu), b_vec)
+        aBx_b = numpy.einsum('ba, bc->bac', a_vec, self._expectation_general_linear(B_mat, b_vec))
         return AxxB + Axb + aBx_b
     
     def integrate_general_quadratic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
@@ -576,15 +580,15 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: numpy.ndarray [R]
             The solved intergal.
         """
-        Amu_a = numpy.einsum('ab,cb-> ca', A_mat, self.mu) + a_vec[None]
-        Bmu_b = numpy.einsum('ab,cb-> ca', B_mat, self.mu) + b_vec[None]
-        Cmu_c = numpy.einsum('ab,cb-> ca', C_mat, self.mu) + c_vec[None]
-        BSigmaC = numpy.einsum('ab,cbd->cad', B_mat, numpy.einsum('abc,cd->abd', self.Sigma, C_mat.T))
+        Amu_a = numpy.einsum('cab,cb-> ca', A_mat, self.mu) + a_vec
+        Bmu_b = numpy.einsum('cab,cb-> ca', B_mat, self.mu) + b_vec
+        Cmu_c = numpy.einsum('cab,cb-> ca', C_mat, self.mu) + c_vec
+        BSigmaC = numpy.einsum('cab,cbd->cad', B_mat, numpy.einsum('abc,adc->abd', self.Sigma, C_mat))
         BmubCmuc = numpy.einsum('ab,ab->a', Bmu_b, Cmu_c)
         
-        BCm_c = numpy.einsum('ab,ca->cb', B_mat, Cmu_c)
-        CBm_b = numpy.einsum('ab,ca->cb', C_mat, Bmu_b)
-        first_term = numpy.einsum('abc,ac->ab', numpy.einsum('ab,cbd->cad', A_mat, self.Sigma), BCm_c + CBm_b)
+        BCm_c = numpy.einsum('cab,ca->cb', B_mat, Cmu_c)
+        CBm_b = numpy.einsum('cab,ca->cb', C_mat, Bmu_b)
+        first_term = numpy.einsum('abc,ac->ab', numpy.einsum('cab,cbd->cad', A_mat, self.Sigma), BCm_c + CBm_b)
         second_term = Amu_a * (self.get_trace(BSigmaC) + BmubCmuc)[:,None]
         return first_term + second_term
     
@@ -646,12 +650,12 @@ class GaussianMeasure(factors.ConjugateFactor):
             
         # REMARK: Does the same thing as inner transposed.
         """
-        Amu_a = numpy.einsum('ab,cb-> ca', A_mat, self.mu) + a_vec[None]
-        Bmu_b = numpy.einsum('ab,cb-> ca', B_mat, self.mu) + b_vec[None]
-        Cmu_c = numpy.einsum('ab,cb-> ca', C_mat, self.mu) + c_vec[None]
-        BSigmaC = numpy.einsum('ab,cbd->cad', B_mat, numpy.einsum('abc,cd->abd', self.Sigma, C_mat.T))
-        ASigmaC = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,cd->abd', self.Sigma, C_mat.T))
-        ASigmaB = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,cd->abd', self.Sigma, B_mat.T))
+        Amu_a = numpy.einsum('cab,cb-> ca', A_mat, self.mu) + a_vec
+        Bmu_b = numpy.einsum('cab,cb-> ca', B_mat, self.mu) + b_vec
+        Cmu_c = numpy.einsum('cab,cb-> ca', C_mat, self.mu) + c_vec
+        BSigmaC = numpy.einsum('cab,cbd->cad', B_mat, numpy.einsum('abc,adc->abd', self.Sigma, C_mat))
+        ASigmaC = numpy.einsum('cab,cbd->cad', A_mat, numpy.einsum('abc,adc->abd', self.Sigma, C_mat))
+        ASigmaB = numpy.einsum('cab,cbd->cad', A_mat, numpy.einsum('abc,adc->abd', self.Sigma, B_mat))
         BmubCmuc = numpy.einsum('ab,ac->abc', Bmu_b, Cmu_c)
         AmuaCmuc = numpy.einsum('ab,ac->abc', Amu_a, Cmu_c)
         AmuaBmub = numpy.einsum('ab,ab->a', Amu_a, Bmu_b)
@@ -780,16 +784,16 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: numpy.ndarray [R, K, M]
             The solved intergal.
         """
-        Amu_a = numpy.einsum('ab,cb-> ca', A_mat, self.mu) + a_vec[None]
-        Bmu_b = numpy.einsum('ab,cb-> ca', B_mat, self.mu) + b_vec[None]
-        Cmu_c = numpy.einsum('ab,cb-> ca', C_mat, self.mu) + c_vec[None]
-        Dmu_d = numpy.einsum('ab,cb-> ca', D_mat, self.mu) + d_vec[None]
-        ASigmaB = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,cd->abd', self.Sigma, B_mat.T))
-        CSigmaD = numpy.einsum('ab,cbd->cad', C_mat, numpy.einsum('abc,cd->abd', self.Sigma, D_mat.T))
-        ASigmaC = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,cd->abd', self.Sigma, C_mat.T))
-        BSigmaD = numpy.einsum('ab,cbd->cad', B_mat, numpy.einsum('abc,cd->abd', self.Sigma, D_mat.T))
-        ASigmaD = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,cd->abd', self.Sigma, D_mat.T))
-        BSigmaC = numpy.einsum('ab,cbd->cad', B_mat, numpy.einsum('abc,cd->abd', self.Sigma, C_mat.T))
+        Amu_a = numpy.einsum('cab,cb-> ca', A_mat, self.mu) + a_vec
+        Bmu_b = numpy.einsum('cab,cb-> ca', B_mat, self.mu) + b_vec
+        Cmu_c = numpy.einsum('cab,cb-> ca', C_mat, self.mu) + c_vec
+        Dmu_d = numpy.einsum('cab,cb-> ca', D_mat, self.mu) + d_vec
+        ASigmaB = numpy.einsum('cab,cbd->cad', A_mat, numpy.einsum('abc,adc->abd', self.Sigma, B_mat))
+        CSigmaD = numpy.einsum('cab,cbd->cad', C_mat, numpy.einsum('abc,adc->abd', self.Sigma, D_mat))
+        ASigmaC = numpy.einsum('cab,cbd->cad', A_mat, numpy.einsum('abc,adc->abd', self.Sigma, C_mat))
+        BSigmaD = numpy.einsum('cab,cbd->cad', B_mat, numpy.einsum('abc,adc->abd', self.Sigma, D_mat))
+        ASigmaD = numpy.einsum('cab,cbd->cad', A_mat, numpy.einsum('abc,adc->abd', self.Sigma, D_mat))
+        BSigmaC = numpy.einsum('cab,cbd->cad', B_mat, numpy.einsum('abc,adc->abd', self.Sigma, C_mat))
         AmuaBmub = numpy.einsum('ab,ac->abc', Amu_a, Bmu_b)
         CmucDmud = numpy.einsum('ab,ac->abc', Cmu_c, Dmu_d)
         AmuaCmuc = numpy.einsum('ab,ac->abc', Amu_a, Cmu_c)
@@ -867,23 +871,23 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: numpy.ndarray [R]
             The solved intergal.
         """
-        Amu_a = numpy.einsum('ab,cb-> ca', A_mat, self.mu) + a_vec[None]
-        Bmu_b = numpy.einsum('ab,cb-> ca', B_mat, self.mu) + b_vec[None]
-        Cmu_c = numpy.einsum('ab,cb-> ca', C_mat, self.mu) + c_vec[None]
-        Dmu_d = numpy.einsum('ab,cb-> ca', D_mat, self.mu) + d_vec[None]
-        ASigmaB = numpy.einsum('ab,cbd->cad', A_mat, numpy.einsum('abc,cd->abd', self.Sigma, B_mat.T))
-        CSigmaD = numpy.einsum('ab,cbd->cad', C_mat, numpy.einsum('abc,cd->abd', self.Sigma, D_mat.T))
+        Amu_a = numpy.einsum('cab,cb-> ca', A_mat, self.mu) + a_vec
+        Bmu_b = numpy.einsum('cab,cb-> ca', B_mat, self.mu) + b_vec
+        Cmu_c = numpy.einsum('cab,cb-> ca', C_mat, self.mu) + c_vec
+        Dmu_d = numpy.einsum('cab,cb-> ca', D_mat, self.mu) + d_vec
+        ASigmaB = numpy.einsum('cab,cbd->cad', A_mat, numpy.einsum('abc,adc->abd', self.Sigma, B_mat))
+        CSigmaD = numpy.einsum('cab,cbd->cad', C_mat, numpy.einsum('abc,adc->abd', self.Sigma, D_mat))
         
         AmuaBmub = numpy.einsum('ab,ab->a', Amu_a, Bmu_b)
         CmucDmud = numpy.einsum('ab,ab->a', Cmu_c, Dmu_d)
-        CD = numpy.dot(C_mat.T, D_mat)
-        CD_DC = CD + CD.T
-        SCD_DCS = numpy.einsum('abc,acd->abd', numpy.einsum('abc,cd->abd', self.Sigma, CD_DC), self.Sigma)
-        ASCD_DCSB = numpy.einsum('abc,dc->abd', numpy.einsum('ab,cbd->cad', A_mat, SCD_DCS), B_mat)
-        Am_aB = numpy.einsum('ab,bc->ac', Amu_a, B_mat)
-        Bm_bA = numpy.einsum('ab,bc->ac', Bmu_b, A_mat)
-        CDm_d = numpy.einsum('ab,ca->cb', C_mat, Dmu_d)
-        DCm_c = numpy.einsum('ab,ca->cb', D_mat, Cmu_c)
+        CD = numpy.einsum('abc,abd->acd', C_mat, D_mat)
+        CD_DC = CD + numpy.swapaxes(CD, axis1=1, axis2=2)
+        SCD_DCS = numpy.einsum('abc,acd->abd', numpy.einsum('abc,acd->abd', self.Sigma, CD_DC), self.Sigma)
+        ASCD_DCSB = numpy.einsum('abc,adc->abd', numpy.einsum('cab,cbd->cad', A_mat, SCD_DCS), B_mat)
+        Am_aB = numpy.einsum('ab,abc->ac', Amu_a, B_mat)
+        Bm_bA = numpy.einsum('ab,abc->ac', Bmu_b, A_mat)
+        CDm_d = numpy.einsum('cab,ca->cb', C_mat, Dmu_d)
+        DCm_c = numpy.einsum('cab,ca->cb', D_mat, Cmu_c)
         first_term = self.get_trace(ASCD_DCSB)
         second_term = numpy.einsum('ab,ab->a', numpy.einsum('ab,abc->ac', Am_aB + Bm_bA, self.Sigma), CDm_d + DCm_c)
         third_term = (self.get_trace(ASigmaB) + AmuaBmub) * (self.get_trace(CSigmaD) + CmucDmud)
