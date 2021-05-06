@@ -185,30 +185,38 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
     def k(self, h, omega):
         return numpy.log(self.sigma_x ** 2 + self.f(omega_dagger)) + .5 * self.g(omega) * (h ** 2 - omega ** 2)
         
-    def get_inv_lb(self, t: int, iu: int, conv_crit: float=1e-4):
-        phi = self.ks.smoothing_density.slice([t])
-        omega_star = 1.
+    def get_inv_lb(self, iu: int, conv_crit: float=1e-4, gradient_output: bool=False):
         w_i = self.W[1:,iu:iu+1].T
+        v = numpy.tile(w_i, (self.T, 1))
         b_i = self.W[0,iu:iu+1]
         u_i = self.U[:,iu:iu+1]
         beta = self.beta[iu:iu+1]
         uC = numpy.dot(u_i.T, -self.C)
-        ux_d = numpy.dot(u_i.T, self.ks.X[t-1]-self.d)
+        ux_d = numpy.dot(u_i.T, self.ks.X.T-self.d[:,None])
+        # Lower bound for E[ln (sigma_x^2 + f(h))]
+        phi = self.ks.smoothing_density.slice(range(1,self.T+1))
+        omega_dagger = numpy.sqrt(phi.integrate('Ax_aBx_b_inner', A_mat=w_i, a_vec=b_i,
+                                                                  B_mat=w_i, b_vec=b_i))
+        f_omega_dagger = self.f(omega_dagger, beta)
+        log_lb = numpy.log(self.sigma_x ** 2 + f_omega_dagger)
+        # Lower bound for E[f(h) / (sigma_x^2 + f(h)) * (u'epsilon(z))^2]
+        omega_star = numpy.ones(self.T)
         converged = False
         while not converged:
             # From the lower bound term
             g_omega = self.g(omega_star, beta)
-            nu_plus = (1. - g_omega) * b_i * w_i
-            nu_minus = (-1. - g_omega) * b_i * w_i
+            nu_plus = (1. - g_omega[:,None]) * (b_i * w_i)
+            nu_minus = (-1. - g_omega[:,None]) * (b_i * w_i)
             ln_beta = - numpy.log(self.sigma_x ** 2 + self.f(omega_star, beta)) + .5 * g_omega * omega_star ** 2 + numpy.log(beta)
             ln_beta_plus = ln_beta + b_i
             ln_beta_minus = ln_beta - b_i
             # Create OneRankFactors
-            exp_factor_plus = factors.OneRankFactor(v=w_i, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus)
-            exp_factor_minus = factors.OneRankFactor(v=w_i, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus)
+            print(v.shape, g_omega.shape, nu_plus.shape, ln_beta_plus.shape)
+            exp_factor_plus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus)
+            exp_factor_minus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus)
             # Create the two measures
-            exp_phi_plus = phi.multiply(exp_factor_plus)
-            exp_phi_minus = phi.multiply(exp_factor_minus)
+            exp_phi_plus = phi.hadamard(exp_factor_plus)
+            exp_phi_minus = phi.hadamard(exp_factor_minus)
             # Fourth order integrals E[h^2 (x-Cz-d)^2]
             mat1 = uC
             vec1 = ux_d
@@ -218,64 +226,98 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
                                                                               C_mat=mat2, c_vec=vec2, D_mat=mat2, d_vec=vec2)
             quart_int_minus = exp_phi_minus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1, 
                                                                               C_mat=mat2, c_vec=vec2, D_mat=mat2, d_vec=vec2)
-            quart_int = quart_int_plus[0] + quart_int_minus[0]
+            quart_int = quart_int_plus + quart_int_minus
             # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
             quad_int_plus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
             quad_int_minus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
-            quad_int = quad_int_plus[0] + quad_int_minus[0]
+            quad_int = quad_int_plus + quad_int_minus
             omega_old = omega_star
-            omega_star = numpy.amin([numpy.amax([numpy.sqrt(quart_int / quad_int), 1e-10]), 1e2])
-            converged = numpy.abs(omega_star - omega_old) < conv_crit
+            #omega_star = numpy.amin([numpy.amax([numpy.sqrt(quart_int / quad_int), 1e-10]), 1e2])
+            omega_star = numpy.sqrt(quart_int / quad_int)
+            # For numerical stability
+            omega_star[omega_star < 1e-10] = 1e-10
+            omega_star[omega_star > 200] = 200
+            converged = numpy.amax(numpy.abs(omega_star - omega_old)) < conv_crit
+            
+            
+            
             
         mat1 = -self.C
-        vec1 = self.ks.X[t-1]-self.d
-        R_plus = exp_phi_plus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)[0]
-        R_minus = exp_phi_minus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)[0]
+        vec1 = self.ks.X - self.d[None]
+        R_plus = exp_phi_plus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
+        R_minus = exp_phi_minus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
         R = R_plus + R_minus
-        intD_inv_zz_plus = exp_phi_plus.integrate('xx')[0]
-        intD_inv_zz_minus = exp_phi_minus.integrate('xx')[0]
-        intD_inv_zz = intD_inv_zz_plus + intD_inv_zz_minus
-        intD_inv_z_plus = exp_phi_plus.integrate('x')[0]
-        intD_inv_z_minus = exp_phi_minus.integrate('x')[0]
-        intD_inv_z = intD_inv_z_plus + intD_inv_z_minus
-        intD_inv_zx_d = intD_inv_z[:,None] * (self.ks.X[t-1] - self.d)[None]
-        intD_inv_plus = exp_phi_plus.integrate()[0]
-        intD_inv_minus = exp_phi_minus.integrate()[0]
-        intD_inv = intD_inv_plus + intD_inv_minus
-        intD_inv_x_Cz = intD_inv * self.ks.X[t-1] - numpy.dot(self.C, intD_inv_z)
-        return R, intD_inv, intD_inv_zz, intD_inv_zx_d, intD_inv_x_Cz, omega_star
-    
-    def get_log_lb(self, t: int, iu: int):
-        w_i = self.W[1:,iu:iu+1].T
-        b_i = self.W[0,iu:iu+1]
-        beta = self.beta[iu:iu+1]
-        phi = self.ks.smoothing_density.slice([t])
-        omega_dagger = numpy.sqrt(phi.integrate('Ax_aBx_b_inner', A_mat=w_i, a_vec=b_i,
-                                                                  B_mat=w_i, b_vec=b_i))
-        log_lb = numpy.log(self.sigma_x ** 2 + self.f(omega_dagger, beta))
-        return log_lb, omega_dagger
+        uRu = numpy.sum(u_i * numpy.dot(numpy.sum(R, axis=0), u_i))
+        log_lb_sum = numpy.sum(log_lb)
+        if gradient_output:
+            uRu = numpy.sum(u_i * numpy.dot(numpy.sum(R, axis=0), u_i))
+            ##### w_i gradiend ######################################################################
+            # E[f'(h)exp(-k(h,omega^*)) dh/dw (u'epsilon(z))^2]
+            # Matrix and vector for dh/dw
+            dW = numpy.zeros((self.Dz + 1, self.Dz))
+            dW[1:] = numpy.eyes(self.Dz)
+            db = numpy.zeros(self.Dz + 1)
+            db[0] = 1
+            dw_i = numpy.sum(exp_phi_plus.integrate('Ax_aBx_bCx_c_inner', A_mat=uC, a_vec=ux_d,
+                                                    B_mat=uC, b_vec=ux_d, C_mat=dW, c_vec=db), axis=0)
+            dw_i -= numpy.sum(exp_phi_minus.integrate('Ax_aBx_bCx_c_inner', A_mat=uC, a_vec=ux_d, 
+                                                      B_mat=uC, b_vec=ux_d, C_mat=dW, c_vec=db), axis=0)
+            # -g(omega) * E[f(h)exp(-k(h,omega^*)) h dh/dw (u'epsilon(z))^2]
+            dw_i -= numpy.einsum('a,ab->b', g_omega, exp_phi_plus.integrate('Ax_aBx_bCx_cDx_d_outer', A_mat=w_i, a_vec=b_i,
+                                                                            B_mat=uC, b_vec=ux_d, C_mat=uC, c_vec=ux_d,
+                                                                            D_mat=dW, d_vec=db)[:,0])
+            dw_i -= numpy.einsum('a,ab->b', g_omega, exp_phi_minus.integrate('Ax_aBx_bCx_cDx_d_outer', A_mat=w_i, a_vec=b_i,
+                                                                             B_mat=uC, b_vec=ux_d, C_mat=uC, c_vec=ux_d,
+                                                                             D_mat=dW, d_vec=db)[:,0])
+            dw_i /= self.sigma_x ** 2
+            # g(omega^+)E[h dh/dw]
+            dw_i -= numpy.einsum('a,ab->b', self.g(omega_dagger, beta), phi.integrate('Ax_aBx_b_outer', A_mat=w_i, a_vec=b_i, 
+                                                                                      B_mat=dW, b_vec=db)[:,0])
+            dw_i /= 2.
+            ###########################################################################################
+            ##### beta_i gradient #####################################################################
+            weighted_R = numpy.einsum('abc,a->bc', R, 1. / (hssm.sigma_x ** 2 + hssm.f(omega_star, beta))) 
+            #  u'R u / (sigma_x^2 + f(omega^*))
+            dbeta_i = numpy.sum(u_i * numpy.dot(weighted_R, u_i))
+            dbeta_i -= numpy.sum(f_omega_dagger / (self.sigma_x ** 2 + f_omega_dagger))
+            dbeta_i /= 2. * self.beta
+            ##### sigma_x ** 2 gradient ###############################################################
+            dsigma2 =  - uRu / self.sigma_x ** 2
+            dsigma2 -= numpy.sum(u_i * numpy.dot(weighted_R, u_i))
+            dsigma2 /= self.sigma_x ** 2
+            dsigma2 -= numpy.sum(1. / (self.sigma_x ** 2 + f_omega_dagger))
+            dsigma2 /= 2.
+            return uRu, log_lb_sum, dw_i, dbeta_i, dsigma
+        else:
+            intD_inv_zz_plus = exp_phi_plus.integrate('xx')
+            intD_inv_zz_minus = exp_phi_minus.integrate('xx')
+            intD_inv_zz = intD_inv_zz_plus + intD_inv_zz_minus
+            intD_inv_z_plus = exp_phi_plus.integrate('x')
+            intD_inv_z_minus = exp_phi_minus.integrate('x')
+            intD_inv_z = intD_inv_z_plus + intD_inv_z_minus
+            intD_inv_plus = exp_phi_plus.integrate()
+            intD_inv_minus = exp_phi_minus.integrate()
+            intD_inv = intD_inv_plus + intD_inv_minus
+            return R, uRu, log_lb_sum, intD_inv, intD_inv_z, intD_inv_zz
     
     def get_lower_bounds(self):
         self.omega_star = numpy.empty((self.T, self.Du))
-        self.R_mat = numpy.zeros((self.Du, self.Dx, self.Dx))
-        self.intD_inv = numpy.zeros(1,)
-        self.intD_inv_zz = numpy.zeros((self.Dz, self.Dz))
-        self.intD_inv_zx_d = numpy.zeros((self.Dz, self.Dx))
-        self.intD_inv_x_Cz = numpy.zeros((self.Dx))
+        self.R_mat = numpy.zeros((self.T, self.Du, self.Dx, self.Dx))
+        self.intD_inv = numpy.zeros(self.T,)
+        self.intD_inv_z = numpy.zeros((self.T, self.Dz))
+        self.intD_inv_zz = numpy.zeros((self.T, self.Dz, self.Dz))
         self.omega_dagger = numpy.empty((self.T, self.Du))
         self.log_lb = numpy.zeros(self.Du)
-        for t in range(1,self.T+1):
-            for iu in range(self.Du):
-                R_mat, intD_inv, intD_inv_zz, intD_inv_zx_d, intD_inv_x_Cz, omega_star = self.get_inv_lb(t, iu)
-                self.R_mat[iu] += R_mat
-                self.omega_star[t-1, iu] = omega_star
-                self.intD_inv_zz += intD_inv_zz
-                self.intD_inv_zx_d += intD_inv_zx_d
-                self.intD_inv_x_Cz += intD_inv_x_Cz
-                self.intD_inv += intD_inv 
-                log_lb, omega_dagger = self.get_log_lb(t, iu)
-                self.log_lb[iu] += log_lb
-                self.omega_dagger[t-1, iu] = omega_dagger
+        for iu in range(self.Du):
+            R, uRu, log_lb_sum, intD_inv, intD_inv_z, intD_inv_zz = self.get_lb_i(iu)
+            self.R_mat[:,iu] = R_mat
+            self.omega_star[:,iu] = omega_star
+            self.intD_inv_zz += intD_inv_zz
+            self.intD_inv_z += intD_inv_z
+            self.intD_inv += intD_inv 
+            log_lb, omega_dagger = self.get_log_lb(iu)
+            self.log_lb[iu] = numpy.sum(log_lb, axis=0)
+            self.omega_dagger[:, iu] = omega_dagger
 
     def compute_Q(self):
         """ Calculates the Qfunction. (TODO: Still a small bug here, somewhere!)
@@ -313,28 +355,33 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
     
     def update_U(self):
         converged = False
+        R = numpy.sum(self.R_mat, axis=0)
         while not converged:
             U_old = numpy.copy(self.U)
             for iu in range(self.Du):
                 U_not_i = numpy.delete(self.U, [iu], axis=1)
                 V = self.partial_gs(U_not_i)
-                VRV = numpy.dot(numpy.dot(V.T, self.R_mat[iu]), V)
+                VRV = numpy.dot(numpy.dot(V.T, R[iu]), V)
                 alpha = scipy.linalg.eigh(VRV, eigvals=(VRV.shape[0]-1,VRV.shape[0]-1))[1]
                 u_new = numpy.dot(V, alpha)[:,0]
                 self.U[:,iu] = u_new
             converged = numpy.sum(numpy.abs(self.U - U_old)) < 1e-4
             
     def update_C(self):
-        A = numpy.sum(self.ks.smoothing_density.integrate('xx')[1:], axis=0) / self.ks.sigma_x ** 2 - self.Sigma_inv_zz
+        A = numpy.sum(self.ks.smoothing_density.integrate('xx')[1:], axis=0) / self.ks.sigma_x ** 2 - self.intD_inv_zz
         B = numpy.dot((self.ks.X - self.d).T, self.ks.smoothing_density.integrate('x')[1:])
         B -= self.intD_inv_zx_d.T
-        self.C = numpy.linalg.solve(A, B.T).T
+        C_new = numpy.linalg.solve(A, B.T).T
+        return C_new
         
     def update_d(self):
         denominator = self.T / self.sigma_x ** 2 - self.intD_inv
         nominator = numpy.sum(self.ks.X - numpy.dot(self.ks.smoothing_density.integrate('x')[1:], self.C.T), axis=0) / self.sigma_x ** 2
         nominator -= self.intD_inv_x_Cz
-        self.d = nominator / denominator
+        d_new = nominator / denominator
+        return d_new
+    
+    #def grad_beta(self):
         
             
     @staticmethod
