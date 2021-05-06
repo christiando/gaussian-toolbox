@@ -346,9 +346,9 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D]
+        :param A_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param a_vec: numpy.ndarray [K]
+        :param a_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
             
         :return: numpy.ndarray [R, K]
@@ -363,10 +363,10 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D] or None
+        :param A_mat: numpy.ndarray [K,D] or [R,K,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param a_vec: numpy.ndarray [K] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
+        :param a_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
             
         :return: numpy.ndarray [R, K]
             The solved intergal.
@@ -406,14 +406,14 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D]
+        :param A_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param a_vec: numpy.ndarray [K]
+        :param a_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
-        :param B_mat: numpy.ndarray [K,D] or None
-            Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param b_vec: numpy.ndarray [K] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
+        :param B_mat: numpy.ndarray [1,K,D] or [R,K,D]
+            Real valued matrix.
+        :param b_vec: numpy.ndarray [1,K] or [R,K]
+            Real valued vector.
             
         :return: numpy.ndarray [R]
             The solved intergal.
@@ -432,14 +432,14 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D] or None
+        :param A_mat: numpy.ndarray [K,D] or [R,K,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param a_vec: numpy.ndarray [K] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
-        :param B_mat: numpy.ndarray [K,D] or None
+        :param a_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param B_mat: numpy.ndarray [K,D] or [R,K,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param b_vec: numpy.ndarray [K] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
+        :param b_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
             
         :return: numpy.ndarray [R]
             The solved intergal.
@@ -456,16 +456,16 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D]
+        :param A_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param a_vec: numpy.ndarray [K]
+        :param a_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
-        :param B_mat: numpy.ndarray [L,D] or None
-            Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param b_vec: numpy.ndarray [L] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
+        :param B_mat: numpy.ndarray [1,L,D] or [R,L,D]
+            Real valued matrix.
+        :param b_vec: numpy.ndarray [1,L] or [R,L]
+            Real valued vector.
             
-        :return: numpy.ndarray [R]
+        :return: numpy.ndarray [R, K, L]
             The solved intergal.
         """
         Exx = self._expectation_xxT()
@@ -482,14 +482,14 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D] or None
+        :param A_mat: numpy.ndarray [K,D] or [R,K,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param a_vec: numpy.ndarray [K] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
-        :param B_mat: numpy.ndarray [L,D] or None
+        :param a_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param B_mat: numpy.ndarray [L,D] or [R,L,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param b_vec: numpy.ndarray [L] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
+        :param b_vec: numpy.ndarray [L] or [R,L]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
             
         :return: numpy.ndarray [R,K,L]
             The solved intergal.
@@ -564,20 +564,20 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D]
+        :param A_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param a_vec: numpy.ndarray [K]
+        :param a_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
-        :param B_mat: numpy.ndarray [L,D]
+        :param B_mat: numpy.ndarray [1,L,D] or [R,L,D]
             Real valued matrix.
-        :param b_vec: numpy.ndarray [L]
+        :param b_vec: numpy.ndarray [1,L] or [R,L]
             Real valued vector.
-        :param C_mat: numpy.ndarray [L,D]
+        :param C_mat: numpy.ndarray [1,L,D] or [R,L,D]
             Real valued matrix.
-        :param c_vec: numpy.ndarray [L]
+        :param c_vec: numpy.ndarray [1,L] or [R,L]
             Real valued vector.
             
-        :return: numpy.ndarray [R]
+        :return: numpy.ndarray [R, K]
             The solved intergal.
         """
         Amu_a = numpy.einsum('cab,cb-> ca', A_mat, self.mu) + a_vec
@@ -602,18 +602,18 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D] or None
+        :param A_mat: numpy.ndarray [K,D] or [R,K,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param a_vec: numpy.ndarray [K] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
-        :param B_mat: numpy.ndarray [L,D] or None
+        :param a_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param B_mat: numpy.ndarray [L,D] or [R,L,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param b_vec: numpy.ndarray [L] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
-        :param C_mat: numpy.ndarray [L,D] or None
+        :param b_vec: numpy.ndarray [L] or [R,L]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param C_mat: numpy.ndarray [L,D] or [R,L,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param c_vec: numpy.ndarray [L] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)            
+        :param c_vec: numpy.ndarray [L] or [R,L]
+            Real valued vector. If None, it is assumed zeros. (Default=None)           
         :return: numpy.ndarray [R, K]
             The solved intergal.
         """
@@ -632,20 +632,20 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [L,D]
+        :param A_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param a_vec: numpy.ndarray [L]
+        :param a_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
-        :param B_mat: numpy.ndarray [L,D]
+        :param B_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param b_vec: numpy.ndarray [L]
+        :param b_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
-        :param C_mat: numpy.ndarray [M,D]
+        :param C_mat: numpy.ndarray [1,L,D] or [R,L,D]
             Real valued matrix.
-        :param c_vec: numpy.ndarray [M]
+        :param c_vec: numpy.ndarray [1,L] or [R,L]
             Real valued vector.
             
-        :return: numpy.ndarray [R, K, M]
+        :return: numpy.ndarray [R, L]
             The solved intergal.
             
         # REMARK: Does the same thing as inner transposed.
@@ -672,19 +672,19 @@ class GaussianMeasure(factors.ConjugateFactor):
         
            int (Bx+b)'(Cx+c)(Dx+d)' du(x),
             
-        :param A_mat: numpy.ndarray [K,D] or None
+        :param A_mat: numpy.ndarray [K,D] or [R,K,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param a_vec: numpy.ndarray [K] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
-        :param B_mat: numpy.ndarray [L,D] or None
+        :param a_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param B_mat: numpy.ndarray [K,D] or [R,K,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param b_vec: numpy.ndarray [L] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)
-        :param C_mat: numpy.ndarray [L,D] or None
+        :param b_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param C_mat: numpy.ndarray [L,D] or [R,L,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
-        :param c_vec: numpy.ndarray [L] or None
-            Real valued vector. If None, it is assumed identity. (Default=None)            
-        :return: numpy.ndarray [R, K]
+        :param c_vec: numpy.ndarray [L] or [R,L]
+            Real valued vector. If None, it is assumed zeros. (Default=None)      
+        :return: numpy.ndarray [R, L]
             The solved intergal.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
@@ -764,21 +764,21 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D]
+        :param A_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param a_vec: numpy.ndarray [K]
+        :param a_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
-        :param B_mat: numpy.ndarray [L,D]
+        :param B_mat: numpy.ndarray [1,L,D] or [R,L,D]
             Real valued matrix.
-        :param b_vec: numpy.ndarray [L]
+        :param b_vec: numpy.ndarray [1,L] or [R,L]
             Real valued vector.
-        :param C_mat: numpy.ndarray [L,D]
+        :param C_mat: numpy.ndarray [1,L,D] or [R,L,D]
             Real valued matrix.
-        :param c_vec: numpy.ndarray [L]
+        :param c_vec: numpy.ndarray [1,L] or [R,L]
             Real valued vector.
-        :param D_mat: numpy.ndarray [M,D]
+        :param D_mat: numpy.ndarray [1,M,D] or [R,M,D]
             Real valued matrix.
-        :param d_vec: numpy.ndarray [M]
+        :param d_vec: numpy.ndarray [1,M,D] or [R,M,D]
             Real valued vector.
             
         :return: numpy.ndarray [R, K, M]
@@ -806,30 +806,30 @@ class GaussianMeasure(factors.ConjugateFactor):
         fourth_term = self.get_trace(BSigmaC)[:,None,None] * (ASigmaD + AmuaDmud)
         return first_term + second_term + third_term + fourth_term
         
-    def integrate_general_quartic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
-                                       B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
-                                       C_mat: numpy.ndarray, c_vec: numpy.ndarray, 
-                                       D_mat: numpy.ndarray, d_vec: numpy.ndarray) -> numpy.ndarray:
+    def integrate_general_quartic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
+                                       B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
+                                       C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None, 
+                                       D_mat: numpy.ndarray=None, d_vec: numpy.ndarray=None) -> numpy.ndarray:
         """ Computes the quartic integral.
         
             int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
             
-        :param A_mat: numpy.ndarray [K,D]
-            Real valued matrix.
-        :param a_vec: numpy.ndarray [K]
-            Real valued vector.
-        :param B_mat: numpy.ndarray [L,D]
-            Real valued matrix.
-        :param b_vec: numpy.ndarray [L]
-            Real valued vector.
-        :param C_mat: numpy.ndarray [L,D]
-            Real valued matrix.
-        :param c_vec: numpy.ndarray [L]
-            Real valued vector.
-        :param D_mat: numpy.ndarray [M,D]
-            Real valued matrix.
-        :param d_vec: numpy.ndarray [M]
-            Real valued vector.
+        :param A_mat: numpy.ndarray [K,D] or [R,K,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param a_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param B_mat: numpy.ndarray [L,D] or [R,L,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param b_vec: numpy.ndarray [L] or [R,L]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param C_mat: numpy.ndarray [L,D] or [R,L,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param c_vec: numpy.ndarray [L] or [R,L]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param D_mat: numpy.ndarray [M,D] or [R,M,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param d_vec: numpy.ndarray [M,D] or [R,M,D]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
             
         :return: numpy.ndarray [R, K, M]
             The solved intergal.
@@ -851,21 +851,21 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param A_mat: numpy.ndarray [K,D]
+        :param A_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param a_vec: numpy.ndarray [K]
+        :param a_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
-        :param B_mat: numpy.ndarray [K,D]
+        :param B_mat: numpy.ndarray [1,K,D] or [R,K,D]
             Real valued matrix.
-        :param b_vec: numpy.ndarray [L]
+        :param b_vec: numpy.ndarray [1,K] or [R,K]
             Real valued vector.
-        :param C_mat: numpy.ndarray [L,D]
+        :param C_mat: numpy.ndarray [1,L,D] or [R,L,D]
             Real valued matrix.
-        :param c_vec: numpy.ndarray [L]
+        :param c_vec: numpy.ndarray [1,L] or [R,L]
             Real valued vector.
-        :param D_mat: numpy.ndarray [L,D]
+        :param D_mat: numpy.ndarray [1,L,D] or [R,L,D]
             Real valued matrix.
-        :param d_vec: numpy.ndarray [L]
+        :param d_vec: numpy.ndarray [1,L] or [R,L]
             Real valued vector.
             
         :return: numpy.ndarray [R]
@@ -893,30 +893,30 @@ class GaussianMeasure(factors.ConjugateFactor):
         third_term = (self.get_trace(ASigmaB) + AmuaBmub) * (self.get_trace(CSigmaD) + CmucDmud)
         return first_term + second_term + third_term
         
-    def integrate_general_quartic_inner(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray, 
-                                       B_mat: numpy.ndarray, b_vec: numpy.ndarray, 
-                                       C_mat: numpy.ndarray, c_vec: numpy.ndarray, 
-                                       D_mat: numpy.ndarray, d_vec: numpy.ndarray) -> numpy.ndarray:
+    def integrate_general_quartic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
+                                       B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
+                                       C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None, 
+                                       D_mat: numpy.ndarray=None, d_vec: numpy.ndarray=None) -> numpy.ndarray:
         """ Computes the quartic integral.
         
             int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
             
-        :param A_mat: numpy.ndarray [K,D]
-            Real valued matrix.
-        :param a_vec: numpy.ndarray [K]
-            Real valued vector.
-        :param B_mat: numpy.ndarray [K,D]
-            Real valued matrix.
-        :param b_vec: numpy.ndarray [K]
-            Real valued vector.
-        :param C_mat: numpy.ndarray [L,D]
-            Real valued matrix.
-        :param c_vec: numpy.ndarray [L]
-            Real valued vector.
-        :param D_mat: numpy.ndarray [L,D]
-            Real valued matrix.
-        :param d_vec: numpy.ndarray [L]
-            Real valued vector.
+        :param A_mat: numpy.ndarray [K,D] or [R,K,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param a_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param B_mat: numpy.ndarray [K,D] or [R,K,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param b_vec: numpy.ndarray [K] or [R,K]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param C_mat: numpy.ndarray [L,D] or [R,L,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param c_vec: numpy.ndarray [L] or [R,L]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        :param D_mat: numpy.ndarray [L,D] or [R,L,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param d_vec: numpy.ndarray [L] or [R,L]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
             
         :return: numpy.ndarray [R]
             The solved intergal.
