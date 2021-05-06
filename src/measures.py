@@ -100,6 +100,27 @@ class GaussianMixtureMeasure:
             components_new.append(comp_new)
         return GaussianMixtureMeasure(components_new, weights=self.weights)
     
+    def hadamard(self, factor: factors.ConjugateFactor, update_full: bool=False) -> 'GaussianMeasure':
+        """ Computes the hadamard (componentwise) product between the measure u and a conjugate factor f
+        
+            f(x) * u(x)
+            
+            and returns the resulting Gaussian measure.
+            
+        :param factor: ConjugateFactor
+            The conjugate factor the measure is multiplied with.
+        :param update_full: bool
+            Whether also the covariance and the log determinants of the new Gaussian measure should be computed. (Default=True)
+            
+        :return: GaussianMixtureMeasure
+            Returns the resulting GaussianMixtureMeasure.
+        """
+        components_new = []
+        for icomp in range(self.num_components):
+            comp_new = factor.hadamard_with_measure(self.components[icomp], update_full=update_full)
+            components_new.append(comp_new)
+        return GaussianMixtureMeasure(components_new, weights=self.weights)
+    
     def integrate(self, expr:str='1', **kwargs) -> numpy.ndarray:
         """ Integrates the indicated expression with respect to the Gaussian mixture measure.
         
@@ -201,6 +222,23 @@ class GaussianMeasure(factors.ConjugateFactor):
             Returns the resulting GaussianMeasure.
         """
         return factor.multiply_with_measure(self, update_full=update_full)
+    
+    def hadamard(self, factor: factors.ConjugateFactor, update_full: bool=False) -> 'GaussianMeasure':
+        """ Computes the hadamard (componentwise) product between the measure u and a conjugate factor f
+        
+            f(x) * u(x)
+            
+            and returns the resulting Gaussian measure.
+            
+        :param factor: ConjugateFactor
+            The conjugate factor the measure is multiplied with.
+        :param update_full: bool
+            Whether also the covariance and the log determinants of the new Gaussian measure should be computed. (Default=True)
+            
+        :return: GaussianMeasure
+            Returns the resulting GaussianMeasure.
+        """
+        return factor.hadamard_with_measure(self, update_full=update_full)
     
     def integrate(self, expr:str='1', **kwargs) -> numpy.ndarray:
         """ Integrates the indicated expression with respect to the Gaussian measure.

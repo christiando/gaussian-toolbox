@@ -108,7 +108,32 @@ class ConjugateFactor:
         if update_full:
             product.Sigma, product.ln_det_Lambda = self.invert_matrix(Lambda_new)
             product.ln_det_Sigma = -product.ln_det_Lambda
-        return product        
+        return product  
+    
+    def hadamard_with_measure(self, measure: 'GaussianMeasure', update_full: bool=False) -> 'GaussianMeasure':
+        """ Coumputes the hadamard (componentwise) product between the current factor and a Gaussian measure u
+        
+            f(x) * u(x)
+            
+            and returns the resulting Gaussian measure.
+            
+        :param u: GaussianMeasure
+            The gaussian measure the factor is multiplied with.
+        :param update_full: bool
+            Whether also the covariance and the log determinants of the new Gaussian measure should be computed. (Default=False)
+            
+        :return: GaussianMeasure
+            Returns the resulting GaussianMeasure.
+        """
+        import measures
+        Lambda_new = measure.Lambda + self.Lambda
+        nu_new = measure.nu + self.nu
+        ln_beta_new = measure.ln_beta + self.ln_beta
+        product = measures.GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        if update_full:
+            product.Sigma, product.ln_det_Lambda = self.invert_matrix(Lambda_new)
+            product.ln_det_Sigma = -product.ln_det_Lambda
+        return product  
         
     @staticmethod
     def invert_matrix(A: numpy.ndarray) -> (numpy.ndarray, numpy.ndarray):
@@ -227,6 +252,43 @@ class OneRankFactor(LowRankFactor):
                 product.ln_det_Lambda = -product.ln_det_Sigma
         return product
     
+    def hadamard_with_measure(self, measure: 'GaussianMeasure', update_full=True) -> 'GaussianMeasure':
+        """ Coumputes the hadamard (componentwise) product between the current factor and a Gaussian measure u
+        
+            f(x) * u(x)
+            
+            and returns the resulting Gaussian measure. In contrast to full rank updates, the updated covariances and log determinants can be computed efficiently.
+            
+        :param u: GaussianMeasure
+            The gaussian measure the factor is multiplied with.
+        :param update_full: bool
+            Whether also the covariance and the log determinants of the new Gaussian measure should be computed. (Default=True)
+            
+        :return: GaussianMeasure
+            Returns the resulting GaussianMeasure.
+        """
+        import measures
+        Lambda_new = measure.Lambda + self.Lambda
+        nu_new = measure.nu + self.nu
+        ln_beta_new = measure.ln_beta + self.ln_beta
+        product = measures.GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        if update_full:
+            if measure.Sigma is None:
+                product.Sigma, product.ln_det_Lambda = self.invert_matrix(Lambda_new)
+                product.ln_det_Sigma = -product.ln_det_Lambda
+            else:
+                # Sherman morrison inversion
+                Sigma_v = numpy.einsum('abc,ac->ab', measure.Sigma, self.v)
+                v_Sigma_v = numpy.einsum('ab,ab->a', Sigma_v, self.v)
+                denominator = 1. + self.g * v_Sigma_v
+                nominator = self.g[:,None,None] * numpy.einsum('ab,ac->abc', Sigma_v, Sigma_v)
+                Sigma_new = measure.Sigma - nominator / denominator[:,None,None]
+                product.Sigma = Sigma_new
+                # Matrix determinant lemma
+                product.ln_det_Sigma = measure.ln_det_Sigma - numpy.log(denominator)
+                product.ln_det_Lambda = -product.ln_det_Sigma
+        return product
+    
 class LinearFactor(ConjugateFactor):
     
     def __init__(self, nu: numpy.ndarray, ln_beta: numpy.ndarray=None):
@@ -290,6 +352,35 @@ class LinearFactor(ConjugateFactor):
                 product.ln_det_Lambda = -product.ln_det_Sigma
         return product
     
+    def hadamard_with_measure(self, measure: 'GaussianMeasure', update_full=True) -> 'GaussianMeasure':
+        """ Coumputes the hadamard (componentwise) product between the current factor and a Gaussian measure u
+        
+            f(x) * u(x)
+            
+            and returns the resulting Gaussian measure. For the linear term, we do not need to update the covariances.
+            
+        :param u: GaussianMeasure
+            The gaussian measure the factor is multiplied with.
+        :param update_full: bool
+            Whether also the covariance and the log determinants of the new Gaussian measure should be computed. (Default=True)
+            
+        :return: GaussianMeasure
+            Returns the resulting GaussianMeasure.
+        """
+        import measures
+        nu_new = measure.nu + self.nu
+        ln_beta_new = measure.ln_beta + self.ln_beta
+        product = measures.GaussianMeasure(Lambda=measure.Lambda, nu=nu_new, ln_beta=ln_beta_new)
+        if update_full:
+            if measure.Sigma is None:
+                product.Sigma, product.ln_det_Lambda = self.invert_matrix(measure.Lambda)
+                product.ln_det_Sigma = -product.ln_det_Lambda
+            else:
+                product.Sigma = measure.Sigma
+                product.ln_det_Sigma = measure.ln_det_Sigma
+                product.ln_det_Lambda = -product.ln_det_Sigma
+        return product
+    
     
 class ConstantFactor(ConjugateFactor):
     
@@ -348,5 +439,33 @@ class ConstantFactor(ConjugateFactor):
             else:
                 product.Sigma = numpy.tile(measure.Sigma[:,None], (1, self.R, 1, 1)).reshape(measure.R * self.R, self.D, self.D)
                 product.ln_det_Sigma = numpy.tile(measure.ln_det_Sigma[:,None], (1, self.R)).reshape(measure.R * self.R)
+                product.ln_det_Lambda = -product.ln_det_Sigma
+        return product
+    
+    def hadamard_with_measure(self, measure: 'GaussianMeasure', update_full=True) -> 'GaussianMeasure':
+        """ Coumputes the hadamard (componentwise) product between the current factor and a Gaussian measure u
+        
+            f(x) * u(x)
+            
+            and returns the resulting Gaussian measure. For the linear term, we do not need to update the covariances.
+            
+        :param u: GaussianMeasure
+            The gaussian measure the factor is multiplied with.
+        :param update_full: bool
+            Whether also the covariance and the log determinants of the new Gaussian measure should be computed. (Default=True)
+            
+        :return: GaussianMeasure
+            Returns the resulting GaussianMeasure.
+        """
+        import measures
+        ln_beta_new = measure.ln_beta + self.ln_beta
+        product = measures.GaussianMeasure(Lambda=measure.Lambda, nu=measure.nu, ln_beta=ln_beta_new)
+        if update_full:
+            if measure.Sigma is None:
+                product.Sigma, product.ln_det_Lambda = self.invert_matrix(measure.Sigma)
+                product.ln_det_Sigma = -product.ln_det_Lambda
+            else:
+                product.Sigma = measure.Sigma
+                product.ln_det_Sigma = measure.ln_det_Sigma
                 product.ln_det_Lambda = -product.ln_det_Sigma
         return product
