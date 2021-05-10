@@ -1,4 +1,5 @@
 import numpy, scipy
+from scipy.optimize import minimize
 import sys
 sys.path.append('../src/')
 import densities, conditionals, factors, measures
@@ -94,13 +95,17 @@ class HeteroscedasticKalmanSmoother(KalmanSmoother):
         Sigma_x = Exx - mu_x[None] * mu_x[:,None]
         data_density = densities.GaussianDensity(Sigma=numpy.array([Sigma_x]), mu=numpy.array([mu_x]))
         # get Covariances E[xz]
-        Ezx = cur_prediction_density.integrate('Ax_aBx_b_outer', A_mat=None, a_vec=None, B_mat=self.C, b_vec=None)[0]
+        Ezx = cur_prediction_density.integrate('Ax_aBx_b_outer', A_mat=None, a_vec=None, B_mat=self.C, b_vec=self.d)[0]
         Sigma_zx = Ezx - cur_prediction_density.integrate('x')[0][:,None] * mu_x[None]
         # Filter moments
         M = numpy.dot(Sigma_zx, data_density.Lambda[0])
         mu_f = cur_prediction_density.mu[0] + numpy.dot(M, self.X[t-1] - mu_x)
         Sigma_f = cur_prediction_density.Sigma[0] - numpy.dot(M, Sigma_zx.T)
-        cur_filter_density = densities.GaussianDensity(Sigma=numpy.array([Sigma_f]), mu=numpy.array([mu_f]))
+        try:
+            cur_filter_density = densities.GaussianDensity(Sigma=numpy.array([Sigma_f]), mu=numpy.array([mu_f]))
+        except numpy.linalg.LinAlgError:
+            print(t)
+            print(Sigma_f)
         self.filter_density.update([t], cur_filter_density)
         
     def compute_log_likelihood(self) -> float:
@@ -138,12 +143,12 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.Du = Du
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
         self.A, self.b = numpy.eye(self.Dz), numpy.zeros((self.Dz,))
-        self.C, self.d = numpy.random.randn(self.Dx, self.Dz), numpy.zeros((self.Dx,))
+        self.C, self.d = 1e-2 * numpy.random.randn(self.Dx, self.Dz), numpy.zeros((self.Dx,))
         if self.Dx == self.Dz:
             self.C = numpy.eye(self.Dz)
         self.U = scipy.linalg.eigh(numpy.dot(X.T, X), eigvals=(self.Dx-self.Du, self.Dx-1))[1]
-        self.W = numpy.random.randn(self.Dz + 1, self.Du)
-        self.beta = noise_z ** 2 * numpy.ones(self.Du)
+        self.W = 1e-4 * numpy.random.randn(self.Dz + 1, self.Du)
+        self.beta = noise_x ** 2 * numpy.ones(self.Du)
         self.sigma_x = noise_x
         self.ks = HeteroscedasticKalmanSmoother(X, self.A, self.b, self.Qz, self.C, self.d, self.U, self.W, self.beta, self.sigma_x)
         self.Qz_inv, self.ln_det_Qz = self.ks.state_density.Lambda[0], self.ks.state_density.ln_det_Sigma[0]
@@ -151,12 +156,12 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
     def mstep(self):
         """ Performs the maximization step, i.e. updates all model parameters.
         """
-        self.update_A()
-        self.update_b()
-        self.update_Qz()
-        self.update_state_density()
-        #self.update_C()
-        #self.update_d()
+        #self.update_A()
+        #self.update_b()
+        #self.update_Qz()
+        #self.update_state_density()
+        self.update_C()
+        self.update_d()
         #self.update_Qx()
         #self.update_U()
         self.update_emission_density()
@@ -412,29 +417,54 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         
     def update_C(self):
         phi = self.ks.smoothing_density.slice(range(1,self.T+1))
-        intD_inv_z, intD_inv_zz = numpy.zeros((self.T, self.Dz)), numpy.zeros((self.Dz, self.Dz))
+        intD_inv_z, intD_inv_zz = numpy.zeros((self.Du, self.T, self.Dz)), numpy.zeros((self.Du, self.Dz, self.Dz))
         for iu in range(self.Du):
             intD_inv_z_i, intD_inv_zz_i = self.get_lb_i(iu, phi, update='C')
-            intD_inv_z += intD_inv_z_i
-            intD_inv_zz += numpy.sum(intD_inv_zz_i, axis=0)
-        A = numpy.sum(phi.integrate('xx'), axis=0) / self.sigma_x ** 2 - intD_inv_zz / self.sigma_x ** 2
-        B = numpy.dot((self.ks.X - self.d).T, phi.integrate('x'))
-        intD_inv_zx_d = numpy.einsum('ab,ac->bc', intD_inv_z, (self.ks.X - self.d))
-        B -= intD_inv_zx_d.T
-        self.C = numpy.linalg.solve(A, B.T).T
+            intD_inv_z[iu] = intD_inv_z_i
+            intD_inv_zz[iu] += numpy.sum(intD_inv_zz_i, axis=0)
+        Ez = phi.integrate('x')
+        Ezz = numpy.sum(phi.integrate('xx'), axis=0)
+        Ezx_d = numpy.einsum('ab,ac->bc', Ez, self.ks.X - self.d)
+        UU = numpy.einsum('ab,cb->bac', self.U, self.U)
+        intD_inv_zx_d = numpy.einsum('abc,bd->adc', intD_inv_z, self.ks.X - self.d)
+        
+        def Q_C_func(params: numpy.ndarray) -> (float, numpy.ndarray):
+            C = numpy.reshape(params, (self.Dx, self.Dz))
+            tr_CEzx_d = numpy.trace(numpy.dot(C, Ezx_d))
+            tr_CC_Ezz = numpy.trace(numpy.dot(numpy.dot(C.T, C), Ezz))
+            tr_uu_CC_Dinv_zx_d = numpy.sum(numpy.trace(numpy.einsum('abc,acd->abd', UU, numpy.einsum('ab,cdb->cad', C, intD_inv_zx_d)), axis1=1, axis2=2))
+            CD_inv_zz = numpy.einsum('ab,cbd->cad', C, intD_inv_zz)
+            CD_inv_zzC = numpy.einsum('abc,dc->abd', CD_inv_zz, C)
+            uCD_inv_zzCu = numpy.sum(numpy.einsum('ab,ba->b',self.U, numpy.einsum('abc,ca->ab', CD_inv_zzC, self.U)))
+            Q_C = 2 * tr_CEzx_d - tr_CC_Ezz - 2 * tr_uu_CC_Dinv_zx_d + uCD_inv_zzCu #- 2 * tr_uu_CC_Dinv_zx_d + uCD_inv_zzCu
+            Q_C /= 2 * self.sigma_x ** 2
+            C_Ezz = numpy.dot(C, Ezz)
+            UU_C_Dinv_zz = numpy.sum(numpy.einsum('abc,abd->acd', UU, CD_inv_zz), axis=0)
+            UU_Dinv_zx_d = numpy.sum(numpy.einsum('abc,abd->acd', UU, intD_inv_zx_d), axis=0)
+            dQ_C = Ezx_d.T - UU_Dinv_zx_d + UU_C_Dinv_zz - C_Ezz #- UU_Dinv_zx_d + UU_C_Dinv_zz
+            dQ_C /= self.sigma_x ** 2
+            return -Q_C, -dQ_C.flatten() 
+        
+        x0 = self.C.flatten()
+        result = minimize(Q_C_func, x0, method='L-BFGS-B', jac=True)
+        self.C = result.x.reshape(self.Dx, self.Dz)
     
     def update_d(self):
         phi = self.ks.smoothing_density.slice(range(1,self.T+1))
-        intD_inv, intD_inv_z = numpy.zeros((self.T, )), numpy.zeros((self.T, self.Dz,))
+        intD_inv, intD_inv_z = numpy.zeros((self.Du, self.T)), numpy.zeros((self.Du, self.T, self.Dz))
         for iu in range(self.Du):
             intD_inv_i, intD_inv_z_i = self.get_lb_i(iu, phi, update='d')
-            intD_inv += intD_inv_i
-            intD_inv_z += intD_inv_z_i
-        denominator = self.T / self.sigma_x ** 2 - numpy.sum(intD_inv, axis=0)
-        nominator = numpy.sum(self.ks.X - numpy.dot(phi.integrate('x'), self.C.T), axis=0) / self.sigma_x ** 2
-        # check whether I can spare a sum here
-        nominator -= numpy.sum(intD_inv[:,None] * self.ks.X, axis=0) - numpy.sum(numpy.einsum('ab,cb->ac', intD_inv_z , self.C), axis=0)
-        self.d = nominator / denominator
+            intD_inv[iu] = intD_inv_i
+            intD_inv_z[iu] += intD_inv_z_i
+        Ez = phi.integrate('x')
+        CEz = numpy.dot(self.C, numpy.sum(Ez,axis=0))
+        UU = numpy.einsum('ab,cb->bac', self.U, self.U)
+        A = numpy.eye(self.Dx) * self.T - numpy.sum(numpy.sum(intD_inv, axis=1)[:,None,None] * UU, axis=0)
+        sum_X = numpy.sum(self.ks.X, axis=0)
+        intDinv_X_UU = numpy.sum(numpy.einsum('ab,abc->ac', numpy.einsum('ab,bc->ac',intD_inv[:,], self.ks.X), UU), axis=0)
+        UU_C_intDinv_z = numpy.sum(numpy.einsum('abc,ac->ab', UU, numpy.einsum('ab,cb->ca', self.C, numpy.sum(intD_inv_z,axis=1))), axis=0)
+        b = sum_X - intDinv_X_UU - CEz + UU_C_intDinv_z
+        self.d = numpy.linalg.solve(A,b)
     
     def get_lower_bounds(self):
         phi = self.ks.smoothing_density.slice(range(1,self.T+1))
