@@ -93,6 +93,7 @@ class HeteroscedasticKalmanSmoother(KalmanSmoother):
                                                                                                 A_mat=self.C, a_vec=self.d,
                                                                                                 B_mat=self.C, b_vec=self.d)[0]
         Sigma_x = Exx - mu_x[None] * mu_x[:,None]
+        Sigma_x = .5 * (Sigma_x + Sigma_x.T)
         data_density = densities.GaussianDensity(Sigma=numpy.array([Sigma_x]), mu=numpy.array([mu_x]))
         # get Covariances E[xz]
         Ezx = cur_prediction_density.integrate('Ax_aBx_b_outer', A_mat=None, a_vec=None, B_mat=self.C, b_vec=self.d)[0]
@@ -101,11 +102,9 @@ class HeteroscedasticKalmanSmoother(KalmanSmoother):
         M = numpy.dot(Sigma_zx, data_density.Lambda[0])
         mu_f = cur_prediction_density.mu[0] + numpy.dot(M, self.X[t-1] - mu_x)
         Sigma_f = cur_prediction_density.Sigma[0] - numpy.dot(M, Sigma_zx.T)
-        try:
-            cur_filter_density = densities.GaussianDensity(Sigma=numpy.array([Sigma_f]), mu=numpy.array([mu_f]))
-        except numpy.linalg.LinAlgError:
-            print(t)
-            print(Sigma_f)
+        Sigma_f = .5 * (Sigma_f + Sigma_f.T)
+        cur_filter_density = densities.GaussianDensity(Sigma=numpy.array([Sigma_f]), mu=numpy.array([mu_f]))
+
         self.filter_density.update([t], cur_filter_density)
         
     def compute_log_likelihood(self) -> float:
@@ -115,10 +114,31 @@ class HeteroscedasticKalmanSmoother(KalmanSmoother):
             # get mu_x
             mu_x = numpy.dot(self.C, cur_prediction_density.mu[0]) + self.d
             # get Sigma_x
-            Sigma_x = self.integrate_Sigma_x(cur_prediction_density)
+            Exx = self.integrate_Sigma_x(cur_prediction_density) + cur_prediction_density.integrate('Ax_aBx_b_outer',
+                                                                                                A_mat=self.C, a_vec=self.d,
+                                                                                                B_mat=self.C, b_vec=self.d)[0]
+            Sigma_x = Exx - mu_x[None] * mu_x[:,None]
+            Sigma_x = .5 * (Sigma_x + Sigma_x.T)
             cur_px = densities.GaussianDensity(Sigma=numpy.array([Sigma_x]), mu=numpy.array([mu_x]))
             llk += cur_px.evaluate_ln(self.X[t-1:t])[0,0]
         return llk
+    
+    def compute_data_density(self) -> densities.GaussianDensity:
+        mu_x, Sigma_x = numpy.empty((self.T, self.Dx)), numpy.empty((self.T, self.Dx, self.Dx))
+        for t in range(1,self.T+1):
+            cur_prediction_density = self.prediction_density.slice([t])
+            # get mu_x
+            mu_x_cur = numpy.dot(self.C, cur_prediction_density.mu[0]) + self.d
+            # get Sigma_x
+            Exx = self.integrate_Sigma_x(cur_prediction_density) + cur_prediction_density.integrate('Ax_aBx_b_outer',
+                                                                                                A_mat=self.C, a_vec=self.d,
+                                                                                                B_mat=self.C, b_vec=self.d)[0]
+            Sigma_x_cur = Exx - mu_x_cur[None] * mu_x_cur[:,None]
+            Sigma_x_cur = .5 * (Sigma_x_cur + Sigma_x_cur.T)
+            mu_x[t-1] = mu_x_cur
+            Sigma_x[t-1] = Sigma_x_cur
+        data_density = densities.GaussianDensity(Sigma=Sigma_x, mu=mu_x)
+        return data_density
     
     
 class HeteroscedasticStateSpace_EM(StateSpace_EM):
@@ -142,13 +162,13 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.Dz = Dz
         self.Du = Du
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
-        self.A, self.b = numpy.eye(self.Dz), numpy.zeros((self.Dz,))
-        self.C, self.d = 1e-2 * numpy.random.randn(self.Dx, self.Dz), numpy.zeros((self.Dx,))
+        self.A, self.b = .98 * numpy.eye(self.Dz), numpy.zeros((self.Dz,))
+        self.C, self.d = numpy.random.randn(self.Dx, self.Dz), numpy.zeros((self.Dx,))
         if self.Dx == self.Dz:
             self.C = numpy.eye(self.Dz)
         self.U = scipy.linalg.eigh(numpy.dot(X.T, X), eigvals=(self.Dx-self.Du, self.Dx-1))[1]
-        self.W = 1e-4 * numpy.random.randn(self.Dz + 1, self.Du)
-        self.beta = noise_x ** 2 * numpy.ones(self.Du)
+        self.W = 1e-5 * numpy.random.randn(self.Dz + 1, self.Du)
+        self.beta = 1e-3 * numpy.ones(self.Du)
         self.sigma_x = noise_x
         self.ks = HeteroscedasticKalmanSmoother(X, self.A, self.b, self.Qz, self.C, self.d, self.U, self.W, self.beta, self.sigma_x)
         self.Qz_inv, self.ln_det_Qz = self.ks.state_density.Lambda[0], self.ks.state_density.ln_det_Sigma[0]
@@ -156,14 +176,18 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
     def mstep(self):
         """ Performs the maximization step, i.e. updates all model parameters.
         """
-        #self.update_A()
-        #self.update_b()
-        #self.update_Qz()
-        #self.update_state_density()
+        self.update_A()
+        self.update_b()
+        self.update_Qz()
+        self.update_state_density()
         self.update_C()
         self.update_d()
+        self.update_sigma_beta()
+        self.update_U()
+        #self.update_beta()
+        #self.update_W()
         #self.update_Qx()
-        #self.update_U()
+        #
         self.update_emission_density()
         self.update_init_density()
         
@@ -176,6 +200,9 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.ks.U = self.U
         self.ks.beta = self.beta
         self.ks.sigma_x = self.sigma_x
+        self.ks.sigma2_x = self.sigma_x ** 2
+        print(self.W)
+        self.ks._setup_noise_diagonal_functions()
         
     ###### Functions for bounds #####
     def f(self, h, beta):
@@ -188,7 +215,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         return self.f_prime(omega, beta) / (numpy.abs(omega) * (self.sigma_x ** 2 + self.f(omega, beta)))
                                       
     def k(self, h, omega):
-        return numpy.log(self.sigma_x ** 2 + self.f(omega_dagger)) + .5 * self.g(omega) * (h ** 2 - omega ** 2)
+        return numpy.log(self.sigma_x ** 2 + self.f(omega)) + .5 * self.g(omega) * (h ** 2 - omega ** 2)
         
     def get_lb_i(self, iu: int, phi: densities.GaussianDensity, conv_crit: float=1e-4, update: str=None):
         w_i = self.W[1:,iu:iu+1].T
@@ -206,12 +233,13 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         # Lower bound for E[f(h) / (sigma_x^2 + f(h)) * (u'epsilon(z))^2]
         omega_star = numpy.ones(self.T)
         converged = False
-        while not converged:
+        num_iter = 0
+        while not converged and num_iter < 10:
             # From the lower bound term
             g_omega = self.g(omega_star, beta)
-            nu_plus = (1. - g_omega[:,None]) * (b_i * w_i)
-            nu_minus = (-1. - g_omega[:,None]) * (b_i * w_i)
-            ln_beta = - numpy.log(self.sigma_x ** 2 + self.f(omega_star, beta)) + .5 * g_omega * omega_star ** 2 + numpy.log(beta)
+            nu_plus = (1. - g_omega[:,None] * b_i) * w_i
+            nu_minus = (-1. - g_omega[:,None] * b_i) * w_i
+            ln_beta = - numpy.log(self.sigma_x ** 2 + self.f(omega_star, beta)) - .5 * g_omega * (b_i ** 2 - omega_star ** 2) + numpy.log(beta)
             ln_beta_plus = ln_beta + b_i
             ln_beta_minus = ln_beta - b_i
             # Create OneRankFactors
@@ -222,7 +250,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
             exp_phi_minus = phi.hadamard(exp_factor_minus)
             # Fourth order integrals E[h^2 (x-Cz-d)^2]
             mat1 = uC
-            vec1 = ux_d
+            vec1 = ux_d.T
             mat2 = w_i
             vec2 = b_i
             quart_int_plus = exp_phi_plus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1, 
@@ -232,18 +260,19 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
             quart_int = quart_int_plus + quart_int_minus
             # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
             quad_int_plus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
-            quad_int_minus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
+            quad_int_minus = exp_phi_minus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
             quad_int = quad_int_plus + quad_int_minus
             omega_old = omega_star
             #omega_star = numpy.amin([numpy.amax([numpy.sqrt(quart_int / quad_int), 1e-10]), 1e2])
             #quad_int[quad_int < 1e-4] = 1e-4
-            omega_star = numpy.sqrt(quart_int / (quad_int+1e-10))
+            omega_star = numpy.sqrt(numpy.abs(quart_int / quad_int))
             # For numerical stability
-            omega_star[omega_star < 1e-4] = 1e-4
-            omega_star[omega_star > 30] = 30
+            #omega_star[omega_star < 1e-4] = 1e-4
+            #omega_star[omega_star > 30] = 30
             #print(numpy.amax(numpy.abs(omega_star - omega_old)))
             converged = numpy.amax(numpy.abs(omega_star - omega_old)) < conv_crit
-
+            num_iter += 1
+        #print(numpy.amax(numpy.abs(omega_star - omega_old)))
         mat1 = -self.C
         vec1 = self.ks.X - self.d[None]
         R_plus = exp_phi_plus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
@@ -280,15 +309,15 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
             ##### beta_i gradient #####################################################################
             weighted_R = numpy.einsum('abc,a->bc', R, 1. / (self.sigma_x ** 2 + self.f(omega_star, beta))) 
             #  u'R u / (sigma_x^2 + f(omega^*))
-            dbeta_i = numpy.sum(u_i * numpy.dot(weighted_R, u_i))
-            dbeta_i -= numpy.sum(f_omega_dagger / (self.sigma_x ** 2 + f_omega_dagger))
-            dbeta_i /= 2. * beta
+            dln_beta_i = numpy.sum(u_i * numpy.dot(weighted_R, u_i))
+            dln_beta_i -= numpy.sum(f_omega_dagger / (self.sigma_x ** 2 + f_omega_dagger))
+            dln_beta_i /= 2.
             ##### sigma_x ** 2 gradient ###############################################################
             dlnsigma2 =  - uRu / self.sigma_x ** 2
             dlnsigma2 -= numpy.sum(u_i * numpy.dot(weighted_R, u_i))
-            dlnsigma2 -= numpy.sum(1. / (self.sigma_x ** 2 + f_omega_dagger))
+            dlnsigma2 -= numpy.sum(self.sigma_x ** 2 / (self.sigma_x ** 2 + f_omega_dagger))
             dlnsigma2 /= 2.
-            return uRu, log_lb_sum, dw_i, dbeta_i, dlnsigma2
+            return uRu, log_lb_sum, dw_i, dln_beta_i, dlnsigma2
         elif update == 'C':
             intD_inv_zz_plus = exp_phi_plus.integrate('xx')
             intD_inv_zz_minus = exp_phi_minus.integrate('xx')
@@ -305,33 +334,29 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
             intD_inv_minus = exp_phi_minus.integrate()
             intD_inv = intD_inv_plus + intD_inv_minus
             return intD_inv, intD_inv_z
+        elif update == 'U':
+            return numpy.sum(R, axis=0)
         else:
             return uRu, log_lb_sum
+    
+    def update_sigma_beta(self):
+        x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
+        bounds = [(None, 5)] + [(-5, 5)] * self.Du + [(-5,5)] * (self.Du * (self.Dz + 1))
+        result = minimize(self.parameter_optimization_sigma_beta, x0, jac=True, method='L-BFGS-B', bounds=bounds)
+        #print(result)
+        self.sigma_x = numpy.exp(.5*result.x[0])
+        self.beta = numpy.exp(result.x[1:self.Du + 1])
+        self.W = result.x[self.Du + 1:].reshape((self.Dz+1, self.Du))
+    
+    def update_parameters_sigma_beta(self, params):
+        self.sigma_x = numpy.exp(.5 * params[0])
+        self.beta = numpy.exp(params[1:self.Du + 1])
+        self.W = params[self.Du + 1:].reshape((self.Dz + 1, self.Du))
         
-    def update_parameters(self, params):
-        num_params = 0
-        #self.W = params[:(self.Dz + 1) * self.Du].reshape((self.Dz + 1, self.Du))
-        self.W = params.reshape((self.Dz + 1, self.Du))
-        num_params += (self.Dz + 1) * self.Du
-        #self.beta = numpy.exp(params[num_params:num_params + self.Du])
-        #self.beta = numpy.exp(params)
-        num_params += self.Du
-        #self.sigma_x = numpy.sqrt(numpy.exp(params[num_params]))
-        
-    def update_parameters_sigma(self, params):
-        #num_params = 0
-        #self.W = params[:(self.Dz + 1) * self.Du].reshape((self.Dz + 1, self.Du))
-        #self.W = params.reshape((self.Dz + 1, self.Du))
-        #num_params += (self.Dz + 1) * self.Du
-        #self.beta = numpy.exp(params[num_params:num_params + self.Du])
-        #self.beta = numpy.exp(params)
-        #num_params += self.Du
-        self.sigma_x = numpy.sqrt(numpy.exp(params[0]))
-        
-    def parameter_optimization_sigma(self, params):
-        self.update_parameters_sigma(params)
+    def parameter_optimization_sigma_beta(self, params):
+        self.update_parameters_sigma_beta(params)
         dW = numpy.zeros(self.W.shape)
-        dbeta = numpy.zeros(self.Du)
+        dln_beta = numpy.zeros(self.Du)
         dlnsigma2_x = numpy.zeros(1)
         phi = self.ks.smoothing_density.slice(range(1,self.T+1))
         # E[epsilon(z)^2]
@@ -343,11 +368,11 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         E_D_inv_epsilon2 = 0
         E_ln_sigma2_f = 0
         for iu in range(self.Du):
-            uRu_i, log_lb_sum_i, dw_i, dbeta_i, dlnsigma2_i  = self.get_lb_i(iu, phi, update='gradients')
+            uRu_i, log_lb_sum_i, dw_i, dln_beta_i, dlnsigma2_i  = self.get_lb_i(iu, phi, update='gradients')
             E_D_inv_epsilon2 += uRu_i
             E_ln_sigma2_f += log_lb_sum_i
             dW[:,iu] = dw_i
-            dbeta[iu] = dbeta_i
+            dln_beta[iu] = dln_beta_i
             dlnsigma2_x += dlnsigma2_i
         # data part
         Qm = -.5 * (E_epsilon2 - E_D_inv_epsilon2) / self.sigma_x ** 2
@@ -355,44 +380,11 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         Qm -= .5 * E_ln_sigma2_f + .5 * self.T * (self.Dx - self.Du) * numpy.log(self.sigma_x ** 2)
         # constant part
         Qm -= self.T * self.Dx * numpy.log(2 * numpy.pi)
-        dlnsigma2_x -= .5 * self.T * (self.Dx - self.Du) / self.sigma_x ** 2
-        dln_beta = dbeta * self.beta
-        gradients = numpy.array([dlnsigma2_x])
-        print(Qm)
+        dlnsigma2_x -= .5 * self.T * (self.Dx - self.Du) #/ self.sigma_x ** 2
+        #print(numpy.array([dlnsigma2_x]).shape, dln_beta.shape)
+        gradients = numpy.concatenate([dlnsigma2_x, dln_beta, dW.flatten()])
         return -Qm, -gradients
         
-    def parameter_optimization(self, params):
-        self.update_parameters(params)
-        dW = numpy.zeros(self.W.shape)
-        dbeta = numpy.zeros(self.Du)
-        dlnsigma2_x = numpy.zeros(1)
-        phi = self.ks.smoothing_density.slice(range(1,self.T+1))
-        # E[epsilon(z)^2]
-        mat = -self.C
-        vec = self.ks.X - self.d
-        E_epsilon2 = numpy.sum(phi.integrate('Ax_aBx_b_inner', A_mat=mat, a_vec=vec, B_mat=mat, b_vec=vec), axis=0)
-        dlnsigma2_x += .5 * E_epsilon2 / self.sigma_x ** 2
-        # E[D_inv epsilon(z)^2(z)] & E[log(sigma^2 + f(h))]
-        E_D_inv_epsilon2 = 0
-        E_ln_sigma2_f = 0
-        for iu in range(self.Du):
-            uRu_i, log_lb_sum_i, dw_i, dbeta_i, dlnsigma2_i  = self.get_lb_i(iu, phi, update='gradients')
-            E_D_inv_epsilon2 += uRu_i
-            E_ln_sigma2_f += log_lb_sum_i
-            dW[:,iu] = dw_i
-            dbeta[iu] = dbeta_i
-            dlnsigma2_x += dlnsigma2_i
-        # data part
-        Qm = -.5 * (E_epsilon2 - E_D_inv_epsilon2) / self.sigma_x ** 2
-        # determinant part
-        Qm -= .5 * E_ln_sigma2_f + .5 * self.T * (self.Dx - self.Du) * numpy.log(self.sigma_x ** 2)
-        # constant part
-        Qm -= self.T * self.Dx * numpy.log(2 * numpy.pi)
-        dlnsigma2_x -= .5 * self.T * (self.Dx - self.Du) / self.sigma_x ** 2
-        dln_beta = dbeta * self.beta
-        gradients = numpy.concatenate([dW.flatten(), dln_beta, dln_sigma2])
-        print(Qm)
-        return -Qm, -gradients
         
     def get_Qm(self):
         phi = self.ks.smoothing_density.slice(range(1,self.T+1))
@@ -515,8 +507,13 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
     
     def update_U(self):
         converged = False
-        R = numpy.sum(self.R_mat, axis=0)
-        while not converged:
+        phi = self.ks.smoothing_density.slice(range(1,self.T+1))
+        intD_inv_z, intD_inv_zz = numpy.zeros((self.Du, self.T, self.Dz)), numpy.zeros((self.Du, self.Dz, self.Dz))
+        R = numpy.empty([self.Du, self.Dx, self.Dx])
+        for iu in range(self.Du):
+            R[iu] = self.get_lb_i(iu, phi, update='U')
+        num_iter = 0
+        while not converged and num_iter < 50:
             U_old = numpy.copy(self.U)
             for iu in range(self.Du):
                 U_not_i = numpy.delete(self.U, [iu], axis=1)
@@ -526,6 +523,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
                 u_new = numpy.dot(V, alpha)[:,0]
                 self.U[:,iu] = u_new
             converged = numpy.sum(numpy.abs(self.U - U_old)) < 1e-4
+            num_iter += 1
     
     #def grad_beta(self):
         
