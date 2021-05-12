@@ -75,8 +75,9 @@ class HeteroscedasticKalmanSmoother(KalmanSmoother):
             Integrated covariance matrix.
         """
         # int 2 cosh(h(z)) dphi(z)
-        D_int = phi.multiply(self.exp_h_plus).integrate()[0] + phi.multiply(self.exp_h_minus).integrate()[0]
-        return self.sigma2_x * numpy.eye(self.Dx) + numpy.dot(self.U, (self.beta * D_int * self.U).T)
+        D_int = phi.multiply(self.exp_h_plus).integrate() + phi.multiply(self.exp_h_minus).integrate()
+        #print(D_int.shape)
+        return self.sigma2_x * numpy.eye(self.Dx) + numpy.dot(numpy.dot(self.U, numpy.diag(self.beta * D_int)), self.U.T)
     
     def filtering(self, t: int):
         """ Here the approximate filtering density is calculated via moment matching.
@@ -162,11 +163,15 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.Dz = Dz
         self.Du = Du
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
-        self.A, self.b = .98 * numpy.eye(self.Dz), numpy.zeros((self.Dz,))
-        self.C, self.d = numpy.random.randn(self.Dx, self.Dz), numpy.zeros((self.Dx,))
+        self.A, self.b = .98 * numpy.eye(self.Dz), numpy.zeros(self.Dz)
+        self.d = numpy.mean(X, axis=0)
+        self.C = scipy.linalg.eigh(numpy.dot((X-self.d[None]).T, X-self.d[None]), eigvals=(self.Dx-self.Dz, self.Dx-1))[1]
         if self.Dx == self.Dz:
             self.C = numpy.eye(self.Dz)
-        self.U = scipy.linalg.eigh(numpy.dot(X.T, X), eigvals=(self.Dx-self.Du, self.Dx-1))[1]
+        z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X - self.d).T).T
+        delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
+        cov = numpy.dot(delta_X.T, delta_X)
+        self.U = scipy.linalg.eigh(cov, eigvals=(self.Dx-self.Du, self.Dx-1))[1]
         self.W = 1e-5 * numpy.random.randn(self.Dz + 1, self.Du)
         self.beta = 1e-3 * numpy.ones(self.Du)
         self.sigma_x = noise_x
@@ -182,8 +187,8 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.update_state_density()
         self.update_C()
         self.update_d()
-        self.update_sigma_beta()
         self.update_U()
+        self.update_sigma_beta()
         #self.update_beta()
         #self.update_W()
         #self.update_Qx()
@@ -199,7 +204,6 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.ks.W = self.W
         self.ks.U = self.U
         self.ks.beta = self.beta
-        self.ks.sigma_x = self.sigma_x
         self.ks.sigma2_x = self.sigma_x ** 2
         print(self.W)
         self.ks._setup_noise_diagonal_functions()
@@ -212,7 +216,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         return 2 * beta * numpy.sinh(h)
     
     def g(self, omega, beta):
-        return self.f_prime(omega, beta) / (numpy.abs(omega) * (self.sigma_x ** 2 + self.f(omega, beta)))
+        return self.f_prime(omega, beta) / (self.sigma_x ** 2 + self.f(omega, beta)) / numpy.abs(omega)
                                       
     def k(self, h, omega):
         return numpy.log(self.sigma_x ** 2 + self.f(omega)) + .5 * self.g(omega) * (h ** 2 - omega ** 2)
@@ -267,7 +271,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
             #quad_int[quad_int < 1e-4] = 1e-4
             omega_star = numpy.sqrt(numpy.abs(quart_int / quad_int))
             # For numerical stability
-            #omega_star[omega_star < 1e-4] = 1e-4
+            omega_star[omega_star < 1e-8] = 1e-8
             #omega_star[omega_star > 30] = 30
             #print(numpy.amax(numpy.abs(omega_star - omega_old)))
             converged = numpy.amax(numpy.abs(omega_star - omega_old)) < conv_crit
@@ -341,7 +345,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
     
     def update_sigma_beta(self):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
-        bounds = [(None, 5)] + [(-5, 5)] * self.Du + [(-5,5)] * (self.Du * (self.Dz + 1))
+        bounds = [(-8, 5)] + [(-10, 10)] * self.Du + [(-10,10)] * (self.Du * (self.Dz + 1))
         result = minimize(self.parameter_optimization_sigma_beta, x0, jac=True, method='L-BFGS-B', bounds=bounds)
         #print(result)
         self.sigma_x = numpy.exp(.5*result.x[0])
@@ -524,9 +528,6 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
                 self.U[:,iu] = u_new
             converged = numpy.sum(numpy.abs(self.U - U_old)) < 1e-4
             num_iter += 1
-    
-    #def grad_beta(self):
-        
             
     @staticmethod
     def gen_lin_ind_vecs(U):
