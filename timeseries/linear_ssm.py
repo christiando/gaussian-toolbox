@@ -269,12 +269,13 @@ class StateSpace_EM:
     def update_A(self):
         """ Computes the optimal state transition matrix.
         """
-        joint_density = self.ks.smoothing_density.affine_joint_transformation(self.ks.state_density)
-        Ezz = joint_density.integrate('xx')[:-1]
-        Ezz_past = numpy.sum(Ezz[:,:self.Dz, :self.Dz], axis=0)
+        Ezz = self.ks.smoothing_density.integrate('xx')
         mu_b = self.ks.smoothing_density.mu[:-1,None] * self.b[None,:,None]
-        Ezz_cross = numpy.sum(Ezz[:, self.Dz:, :self.Dz] - mu_b, axis=0)
-        self.A = numpy.linalg.solve(Ezz_past, Ezz_cross).T
+        M_fp = numpy.einsum('ab,cbd->cad', self.A, self.ks.filter_density.Sigma[:-1])
+        M_l = numpy.einsum('abc,acd->abd', M_fp, self.ks.prediction_density.Lambda[1:])
+        Ezz_cross = numpy.einsum('abc,acd->abd', M_l, self.ks.smoothing_density.Sigma[1:])
+        Ezz_cross += self.ks.smoothing_density.mu[:-1,None] * self.ks.smoothing_density.mu[1:,:,None]
+        self.A = numpy.linalg.solve(numpy.sum(Ezz[:-1], axis=0), numpy.sum(Ezz_cross -  mu_b, axis=0)).T
         
     def update_b(self):
         """ Computes the optimal state offset.
@@ -284,10 +285,18 @@ class StateSpace_EM:
     def update_Qz(self):
         """ Computes the optimal state covariance.
         """
-        joint_density = self.ks.smoothing_density.affine_joint_transformation(self.ks.state_density)
-        A = numpy.hstack([-self.A, numpy.eye(self.Dz)])
-        a = -self.b
-        self.Qz =  numpy.mean(joint_density.integrate('Ax_aBx_b_outer', A_mat=A, a_vec=a, B_mat=A, b_vec=a)[:-1], axis=0)
+        M_fp = numpy.einsum('ab,cbd->cad', self.A, self.ks.filter_density.Sigma[:-1])
+        M_l = numpy.einsum('abc,acd->abd', M_fp, self.ks.prediction_density.Lambda[1:])
+        Ezz_cross = numpy.einsum('abc,acd->abd', M_l, self.ks.smoothing_density.Sigma[1:])
+        Ezz_cross += self.ks.smoothing_density.mu[:-1,None] * self.ks.smoothing_density.mu[1:,:,None]
+        Ezz = self.ks.smoothing_density.integrate('xx')
+        AEzz_cross = numpy.sum(numpy.einsum('ab,cbd->cad', self.A, Ezz_cross), axis=0)
+        Ez_b = self.ks.smoothing_density.mu[:,None] * self.b[None,:,None]
+        AEz_b = numpy.sum(numpy.einsum('ab,cbd->cad', self.A, Ez_b[:-1]), axis=0)
+        Az_b2 = numpy.sum(self.ks.smoothing_density.integrate('Ax_aBx_b_outer', A_mat=self.A, a_vec=self.b, B_mat=self.A, b_vec=self.b)[:-1],axis=0)
+        mu_b = numpy.sum(Ez_b[1:], axis=0)
+        AEzzA = numpy.sum(numpy.einsum('abc,cd->abd', numpy.einsum('ab,cbd->cad', self.A, Ezz[:-1]), self.A.T), axis=0)
+        self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T) / self.T
         
     def update_state_density(self):
         """ Updates the state density.
