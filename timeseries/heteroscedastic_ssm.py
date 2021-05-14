@@ -165,7 +165,8 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
         self.A, self.b = .98 * numpy.eye(self.Dz), numpy.zeros(self.Dz)
         self.d = numpy.mean(X, axis=0)
-        self.C = scipy.linalg.eigh(numpy.dot((X-self.d[None]).T, X-self.d[None]), eigvals=(self.Dx-self.Dz, self.Dx-1))[1]
+        eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X-self.d[None]).T, X-self.d[None]), eigvals=(self.Dx-self.Dz, self.Dx-1))
+        self.C =  eig_vecs * eig_vals / self.T
         if self.Dx == self.Dz:
             self.C = numpy.eye(self.Dz)
         z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X - self.d).T).T
@@ -187,8 +188,9 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.update_state_density()
         self.update_C()
         self.update_d()
-        self.update_U()
         self.update_sigma_beta()
+        print(self.sigma_x)
+        self.update_U()
         #self.update_beta()
         #self.update_W()
         #self.update_Qx()
@@ -205,7 +207,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.ks.U = self.U
         self.ks.beta = self.beta
         self.ks.sigma2_x = self.sigma_x ** 2
-        print(self.W)
+        #print(self.W)
         self.ks._setup_noise_diagonal_functions()
         
     ###### Functions for bounds #####
@@ -238,7 +240,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         omega_star = numpy.ones(self.T)
         converged = False
         num_iter = 0
-        while not converged and num_iter < 10:
+        while not converged and num_iter < 50:
             # From the lower bound term
             g_omega = self.g(omega_star, beta)
             nu_plus = (1. - g_omega[:,None] * b_i) * w_i
@@ -271,7 +273,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
             #quad_int[quad_int < 1e-4] = 1e-4
             omega_star = numpy.sqrt(numpy.abs(quart_int / quad_int))
             # For numerical stability
-            omega_star[omega_star < 1e-8] = 1e-8
+            #omega_star[omega_star < 1e-10] = 1e-10
             #omega_star[omega_star > 30] = 30
             #print(numpy.amax(numpy.abs(omega_star - omega_old)))
             converged = numpy.amax(numpy.abs(omega_star - omega_old)) < conv_crit
@@ -345,9 +347,11 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
     
     def update_sigma_beta(self):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
-        bounds = [(-8, 5)] + [(-10, 10)] * self.Du + [(-10,10)] * (self.Du * (self.Dz + 1))
+        bounds = [(-10, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         result = minimize(self.parameter_optimization_sigma_beta, x0, jac=True, method='L-BFGS-B', bounds=bounds)
         #print(result)
+        #if not result.success:
+        #    raise RuntimeError('Sigma, beta, W did not converge!!')
         self.sigma_x = numpy.exp(.5*result.x[0])
         self.beta = numpy.exp(result.x[1:self.Du + 1])
         self.W = result.x[self.Du + 1:].reshape((self.Dz+1, self.Du))
@@ -412,6 +416,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         return Qm
         
     def update_C(self):
+        C_old = numpy.copy(self.C)
         phi = self.ks.smoothing_density.slice(range(1,self.T+1))
         intD_inv_z, intD_inv_zz = numpy.zeros((self.Du, self.T, self.Dz)), numpy.zeros((self.Du, self.Dz, self.Dz))
         for iu in range(self.Du):
@@ -443,7 +448,12 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         
         x0 = self.C.flatten()
         result = minimize(Q_C_func, x0, method='L-BFGS-B', jac=True)
-        self.C = result.x.reshape(self.Dx, self.Dz)
+        if not result.success:
+            print(result)
+            print('C did not converge!! Falling back to old C.')
+            self.C = C_old
+        else:
+            self.C = result.x.reshape(self.Dx, self.Dz)
     
     def update_d(self):
         phi = self.ks.smoothing_density.slice(range(1,self.T+1))
@@ -509,25 +519,116 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         Ez0 += self.ks.filter_density.ln_det_Sigma[0] + self.Dz * numpy.log(2 * numpy.pi)
         return - .5 * (Exx + Ezz + Ez0)
     
+    
+    # def update_U(self):
+    #     phi = self.ks.smoothing_density.slice(range(1,self.T+1))
+    #     intD_inv_z, intD_inv_zz = numpy.zeros((self.Du, self.T, self.Dz)), numpy.zeros((self.Du, self.Dz, self.Dz))
+    #     R = numpy.empty([self.Du, self.Dx, self.Dx])
+    #     for iu in range(self.Du):
+    #         R[iu] = self.get_lb_i(iu, phi, update='U')
+    #         
+    #     triu_idx = numpy.triu_indices(self.Du)
+    #         
+    #     def Q_u(params: numpy.ndarray) -> (float, numpy.ndarray):
+    #         U = params.reshape((self.Dx, self.Du))
+    #         #lagrange_multipliers = params[self.Du * self.Dx:].reshape((self.Du, self.Du))
+    #         RU = numpy.einsum('abc,ca->ab', R, U)
+    #         Q_u = .5 * numpy.sum(numpy.einsum('ab,ba->a', U, RU)) / self.T
+    #         return -Q_u, -RU / self.T
+    #     
+    #     def eq_constraints(params: numpy.ndarray):
+    #         U = params.reshape((self.Dx, self.Du))
+    #         constraint = numpy.eye(self.Du) - numpy.dot(U.T, U)
+    #         numpy.triu_indices(self.Du)
+    #         return constraint[triu_idx]
+    #     
+    #     def jac_constraints(params: numpy.ndarray):
+    #         U = params.reshape((self.Dx, self.Du))
+    #         dconstraint = 2. * self.U.flatten()
+    #         return numpy.tile(dconstraint[None], (self.Du ** 2, 1))
+    #     
+    #     eq_cons = {'type': 'eq',
+    #                 'fun' : eq_constraints}#,
+    #                 #'jac' : jac_constraints}
+    #     
+    #     x0 = self.U.flatten()
+    #    U_old = numpy.copy(self.U)
+    #     result = minimize(Q_u, x0, method='SLSQP', jac=True,
+    #            constraints=[eq_cons], options={'ftol': 1e-7, 'maxiter':10000})
+    #     if not result.success:
+    #         print(result)
+    #         print('U did not converge!! Falling back to old U.')
+    #         self.U = U_old
+    #     else:
+    #         self.U = result.x.reshape(self.Dx, self.Du)
+        
+    
+    # def update_U(self):
+    #     phi = self.ks.smoothing_density.slice(range(1,self.T+1))
+    #     intD_inv_z, intD_inv_zz = numpy.zeros((self.Du, self.T, self.Dz)), numpy.zeros((self.Du, self.Dz, self.Dz))
+    #     R = numpy.empty([self.Du, self.Dx, self.Dx])
+    #    for iu in range(self.Du):
+    #         R[iu] = self.get_lb_i(iu, phi, update='U')
+    #         
+    #         
+    #     def Q_u_lagrange(params: numpy.ndarray) -> (float, numpy.ndarray):
+    #         U = params[:self.Du * self.Dx].reshape((self.Dx, self.Du))
+    #         lagrange_multipliers = params[self.Du * self.Dx:].reshape((self.Du, self.Du))
+    #         RU = numpy.einsum('abc,ca->ab', R, U)
+    #         Q_u = numpy.sum(numpy.einsum('ab,ba->a', U, RU))
+    #         constraints = 2 * numpy.eye(self.Du) - numpy.dot(U.T, U)
+    #         print(constraints)
+    #        print(numpy.sum(numpy.abs(U)))
+    #         L_u = 0*Q_u - numpy.trace(numpy.dot(lagrange_multipliers, constraints))
+    #         dU = (0*RU + 2. * numpy.dot(lagrange_multipliers, U.T)).T
+    #         print(dU)
+    #         dlm = -constraints
+    #         gradients = numpy.concatenate([dU.flatten(), dlm.flatten()])
+    #         print(L_u)
+    #         return -L_u, -gradients
+    #     
+    #     lm0 = numpy.zeros((self.Du, self.Du))
+    #     x0 = numpy.concatenate([self.U.flatten(), lm0.flatten()])
+    #     U_old = numpy.copy(self.U)
+    #     result = minimize(Q_u_lagrange, x0, method='L-BFGS-B', jac=True)
+    #     if not result.success:
+    #         print(result)
+    #         print('U did not converge!! Falling back to old U.')
+    #         self.U = U_old
+    #     else:
+    #         self.U = result.x[:self.Dx * self.Du].reshape(self.Dx, self.Du)
+    #         
+        
+    
     def update_U(self):
         converged = False
         phi = self.ks.smoothing_density.slice(range(1,self.T+1))
-        intD_inv_z, intD_inv_zz = numpy.zeros((self.Du, self.T, self.Dz)), numpy.zeros((self.Du, self.Dz, self.Dz))
         R = numpy.empty([self.Du, self.Dx, self.Dx])
         for iu in range(self.Du):
             R[iu] = self.get_lb_i(iu, phi, update='U')
+            R[iu] /= numpy.amax(R[iu])
         num_iter = 0
+        Q_u = numpy.sum(numpy.einsum('ab,ba->a', self.U, numpy.einsum('abc,ca->ab', R, self.U)))
         while not converged and num_iter < 50:
+            print(Q_u)
             U_old = numpy.copy(self.U)
             for iu in range(self.Du):
                 U_not_i = numpy.delete(self.U, [iu], axis=1)
                 V = self.partial_gs(U_not_i)
                 VRV = numpy.dot(numpy.dot(V.T, R[iu]), V)
-                alpha = scipy.linalg.eigh(VRV, eigvals=(VRV.shape[0]-1,VRV.shape[0]-1))[1]
+                VRV /= numpy.amax(VRV)
+                #alpha = scipy.linalg.eigh(VRV, eigvals=(VRV.shape[0]-1,VRV.shape[0]-1))[1]
+                alpha = numpy.linalg.eig(VRV)[1][:,:1]
                 u_new = numpy.dot(V, alpha)[:,0]
                 self.U[:,iu] = u_new
-            converged = numpy.sum(numpy.abs(self.U - U_old)) < 1e-4
+            Q_u_old = Q_u
+            Q_u = numpy.sum(numpy.einsum('ab,ba->a', self.U, numpy.einsum('abc,ca->ab', R, self.U)))
+            converged = (Q_u - Q_u_old) < 1e-4
             num_iter += 1
+        if (Q_u - Q_u_old) < 0:
+            self.U = U_old
+            
+        print(numpy.dot(self.U.T, self.U))
             
     @staticmethod
     def gen_lin_ind_vecs(U):
@@ -549,8 +650,8 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         """
         N, M = U.shape
         V = numpy.empty((N, N - M))
-        I = self.gen_lin_ind_vecs(U)#numpy.random.randn(N,N-M)
-        #I = numpy.eye(N)[:,M:]
+        #I = self.gen_lin_ind_vecs(U)#numpy.random.randn(N,N-M)
+        I = numpy.eye(N)[:,M:]
         #I[-1,0] = 1
         for d in range(N - M):
             v = I[:,d]
