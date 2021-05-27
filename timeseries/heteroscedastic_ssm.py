@@ -165,16 +165,17 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
         self.A, self.b = .98 * numpy.eye(self.Dz), numpy.zeros(self.Dz)
         self.d = numpy.mean(X, axis=0)
-        eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X-self.d[None]).T, X-self.d[None]), eigvals=(self.Dx-self.Dz, self.Dx-1))
+        X_smoothed = numpy.empty(X.shape)
+        for i in range(X.shape[1]):
+            X_smoothed[:,i] = numpy.convolve(X[:,i], numpy.ones(10) / 10., mode='same')
+        eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X_smoothed-self.d[None]).T, X_smoothed-self.d[None]), eigvals=(self.Dx-self.Dz, self.Dx-1))
         self.C =  eig_vecs * eig_vals / self.T
-        if self.Dx == self.Dz:
-            self.C = numpy.eye(self.Dz)
-        z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X - self.d).T).T
+        z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
         cov = numpy.dot(delta_X.T, delta_X)
         self.U = scipy.linalg.eigh(cov, eigvals=(self.Dx-self.Du, self.Dx-1))[1]
-        self.W = 1e-5 * numpy.random.randn(self.Dz + 1, self.Du)
-        self.beta = 1e-3 * numpy.ones(self.Du)
+        self.W = 1e-10 * numpy.random.randn(self.Dz + 1, self.Du)
+        self.beta = 1e-5 * numpy.ones(self.Du)
         self.sigma_x = noise_x
         self.ks = HeteroscedasticKalmanSmoother(X, self.A, self.b, self.Qz, self.C, self.d, self.U, self.W, self.beta, self.sigma_x)
         self.Qz_inv, self.ln_det_Qz = self.ks.state_density.Lambda[0], self.ks.state_density.ln_det_Sigma[0]
@@ -189,7 +190,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         self.update_C()
         self.update_d()
         self.update_sigma_beta()
-        print(self.sigma_x)
+        #print(self.sigma_x)
         self.update_U()
         #self.update_beta()
         #self.update_W()
@@ -270,7 +271,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
             quad_int = quad_int_plus + quad_int_minus
             omega_old = omega_star
             #omega_star = numpy.amin([numpy.amax([numpy.sqrt(quart_int / quad_int), 1e-10]), 1e2])
-            #quad_int[quad_int < 1e-4] = 1e-4
+            #quad_int[quad_int < 1e-10] = 1e-10
             omega_star = numpy.sqrt(numpy.abs(quart_int / quad_int))
             # For numerical stability
             #omega_star[omega_star < 1e-10] = 1e-10
@@ -347,7 +348,7 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
     
     def update_sigma_beta(self):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
-        bounds = [(-10, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
+        bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         result = minimize(self.parameter_optimization_sigma_beta, x0, jac=True, method='L-BFGS-B', bounds=bounds)
         #print(result)
         #if not result.success:
@@ -610,17 +611,26 @@ class HeteroscedasticStateSpace_EM(StateSpace_EM):
         num_iter = 0
         Q_u = numpy.sum(numpy.einsum('ab,ba->a', self.U, numpy.einsum('abc,ca->ab', R, self.U)))
         while not converged and num_iter < 50:
-            print(Q_u)
+            #print(Q_u)
             U_old = numpy.copy(self.U)
             for iu in range(self.Du):
                 U_not_i = numpy.delete(self.U, [iu], axis=1)
                 V = self.partial_gs(U_not_i)
+                #A = numpy.hstack([U_not_i, numpy.eye(self.Dx)[:,-self.Du-1:]])
+                #V_full = numpy.linalg.qr(A)[0]
+                #print(numpy.dot(V_full[:,:-self.Du-1].T, U_not_i))
+                #V = V_full[:,-self.Du-1:]
                 VRV = numpy.dot(numpy.dot(V.T, R[iu]), V)
                 VRV /= numpy.amax(VRV)
                 #alpha = scipy.linalg.eigh(VRV, eigvals=(VRV.shape[0]-1,VRV.shape[0]-1))[1]
                 alpha = numpy.linalg.eig(VRV)[1][:,:1]
                 u_new = numpy.dot(V, alpha)[:,0]
-                self.U[:,iu] = u_new
+                U_new = numpy.copy(self.U)
+                U_new[:,iu] = u_new
+                if numpy.allclose(numpy.dot(U_new.T, U_new), numpy.eye(self.Du)):
+                    self.U[:,iu] = u_new
+                else:
+                    print('Warning: U not orthonormal')
             Q_u_old = Q_u
             Q_u = numpy.sum(numpy.einsum('ab,ba->a', self.U, numpy.einsum('abc,ca->ab', R, self.U)))
             converged = (Q_u - Q_u_old) < 1e-4

@@ -1,4 +1,4 @@
-import numpy
+import numpy, scipy
 import sys
 sys.path.append('../src/')
 import densities, conditionals
@@ -98,6 +98,10 @@ class KalmanFilter:
             cur_px = px.slice([t])
             llk += cur_px.evaluate_ln(self.X[t-1:t])[0,0]
         return llk
+    
+    def compute_data_density(self) -> densities.GaussianDensity:
+        px = self.prediction_density.affine_marginal_transformation(self.emission_density)
+        return px.slice(numpy.arange(1, self.T+1))
             
 class KalmanSmoother(KalmanFilter):
     
@@ -184,9 +188,15 @@ class StateSpace_EM:
         self.Qx = noise_x ** 2 * numpy.eye(self.Dx)
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
         self.A, self.b = numpy.eye(self.Dz), numpy.zeros((self.Dz,))
-        self.C, self.d = numpy.random.randn(self.Dx, self.Dz), numpy.zeros((self.Dx,))
-        if self.Dx == self.Dz:
-            self.C = numpy.eye(self.Dz)
+        self.d = numpy.mean(X, axis=0)
+        X_smoothed = numpy.empty(X.shape)
+        for i in range(X.shape[1]):
+            X_smoothed[:,i] = numpy.convolve(X[:,i], numpy.ones(10) / 10., mode='same')
+        eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X_smoothed-self.d[None]).T, X_smoothed-self.d[None]), eigvals=(self.Dx-self.Dz, self.Dx-1))
+        self.C =  eig_vecs * eig_vals / self.T
+        z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
+        delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
+        self.Qx = numpy.dot(delta_X.T, delta_X)
         self.ks = KalmanSmoother(X, self.A, self.b, self.Qz, self.C, self.d, self.Qx)
         self.Qz_inv, self.ln_det_Qz = self.ks.state_density.Lambda[0], self.ks.state_density.ln_det_Sigma[0]
         self.Qx_inv, self.ln_det_Qx = self.ks.emission_density.Lambda[0], self.ks.emission_density.ln_det_Sigma[0]
