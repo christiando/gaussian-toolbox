@@ -388,18 +388,14 @@ class ConstantFactor(ConjugateFactor):
         """ A term, which can be multiplied with a Gaussian and the result is still a Gaussian and it has the form
             i.e. has the functional form
         
-            f(x) = beta * exp(x'nu),
+            f(x) = beta,
 
             D is the dimension, and R the number of Gaussians.
-
-            Note: At least Lambda or nu should be specified!
             
-        :param nu: numpy.ndarray [R, D]
-            Information vector of a Gaussian distribution.
         :param ln_beta: numpy.ndarray [R]
-            The log constant factor of the factor. If None all zeros. (Default=None)
-        :param ln_beta: numpy.ndarray [R]
-            The log constant factor of the factor. If None all zeros. (Default=None)
+            The log constant factor of the factor.
+        :param D: int
+            The dimension of the Gaussian.
         """
 
         self.R, self.D = ln_beta.shape[0], D
