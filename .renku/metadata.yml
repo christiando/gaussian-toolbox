@@ -1,8 +1,8 @@
-'@id': https://limited.renku.ch/projects/chdonner/Gaussian%20Toolbox
+'@id': https://limited.renku.ch/projects/chdonner/gaussian-toolbox
 '@type':
 - http://schema.org/Project
 - http://www.w3.org/ns/prov#Location
-http://schema.org/agent: 0.14.2.dev8
+http://schema.org/agent: 0.15.1
 http://schema.org/creator:
   '@id': mailto:chdonner@ethz.ch
   '@type':
