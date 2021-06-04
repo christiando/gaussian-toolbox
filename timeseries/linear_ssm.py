@@ -34,13 +34,15 @@ class KalmanFilter:
         self.prediction_density = self._setup_density()
         self.filter_density = self._setup_density()
         
-    def _setup_density(self) -> densities.GaussianDensity:
+    def _setup_density(self, D: int=None) -> densities.GaussianDensity:
         """ Initializes a density object (with uniform densities).
         """
-        Sigma = numpy.tile(numpy.eye(self.Dz)[None], (self.T+1,1,1))
-        Lambda = numpy.tile(numpy.eye(self.Dz)[None], (self.T+1,1,1))
-        mu = numpy.zeros((self.T + 1, self.Dz))
-        ln_det_Sigma = self.Dz * numpy.log(numpy.ones(self.T+1))
+        if D is None:
+            D = self.Dz
+        Sigma = numpy.tile(numpy.eye(D)[None], (self.T+1,1,1))
+        Lambda = numpy.tile(numpy.eye(D)[None], (self.T+1,1,1))
+        mu = numpy.zeros((self.T + 1, D))
+        ln_det_Sigma = D * numpy.log(numpy.ones(self.T+1))
         return densities.GaussianDensity(Sigma, mu, Lambda, ln_det_Sigma)
         
         
@@ -128,6 +130,9 @@ class KalmanSmoother(KalmanFilter):
             
         super().__init__(X, A, b, Qz, C, d, Qx)
         self.smoothing_density = self._setup_density()
+        # First dimension z_{t+1}, second z_t (Note that this can become expensive if Dz is large)
+        self.twostep_smoothing_density = self._setup_density(D= int(2*self.Dz))
+        self.twostep_smoothing_density = self.twostep_smoothing_density.slice(range(self.T))
         
     def backward_path(self):
         """ Backward iteration.
@@ -164,8 +169,11 @@ class KalmanSmoother(KalmanFilter):
         post_smoothing_density = self.smoothing_density.slice([t+1])
         # p(z_{t} | x_{1:T})
         cur_smoothing_density = post_smoothing_density.affine_marginal_transformation(backward_density)
+        # p(z_{t}, z_{t+1} | x_{1:T})
+        cur_two_step_smoothing_density = post_smoothing_density.affine_joint_transformation(backward_density)
         # Write result into smoothing density collection
         self.smoothing_density.update([t], cur_smoothing_density)
+        self.twostep_smoothing_density.update([t], cur_two_step_smoothing_density)
         
         
 class StateSpace_EM:
@@ -214,16 +222,16 @@ class StateSpace_EM:
         """
         llk_list = []
         converged = False
-        i = 0
-        while i < n_iter and not converged:
+        self.iteration = 0
+        while self.iteration < n_iter and not converged:
             self.estep()
             llk_list.append(self.compute_log_likelihood())
             self.mstep()
-            if i>1:
+            if self.iteration>1:
                 conv = (llk_list[-1] - llk_list[-2]) / numpy.amax([1, numpy.abs(llk_list[-1]), numpy.abs(llk_list[-2])])
                 converged = conv < conv_crit
-            i += 1
-            print('Iteration %d - llk=%.1f' %(i,llk_list[-1]))
+            self.iteration += 1
+            print('Iteration %d - llk=%.1f' %(self.iteration,llk_list[-1]))
         return llk_list
     
     def estep(self):
