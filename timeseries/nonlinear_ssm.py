@@ -1,8 +1,8 @@
-import numpy
+import numpy, scipy
 import sys
 sys.path.append('../src/')
 import densities, conditionals, factors
-from linear_ssm import KalmanFilter
+from linear_ssm import KalmanFilter, StateSpace_EM
 
 
 class NonLinearGaussianConditional(conditionals.ConditionalGaussianDensity):
@@ -40,12 +40,13 @@ class NonLinearGaussianConditional(conditionals.ConditionalGaussianDensity):
         self.Dx = self.W.shape[1]
         self.Dk = self.W.shape[0]
         self.Dphi = self.Dk + self.Dx
+        self._setup_phi()
         
     def _setup_phi(self):
         """ Sets up the non-linear kernel function in phi(x).
         """
         v = self.W
-        nu = self.W * self.w0
+        nu = self.W * self.w0[:,None]
         ln_beta = - .5 * self.w0 ** 2
         self.k_func = factors.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
         
@@ -127,7 +128,7 @@ class NonLinearGaussianConditional(conditionals.ConditionalGaussianDensity):
         Sigma_y -= mu_y[:,None] * mu_y[:,:,None]
         return mu_y, Sigma_y
     
-    def get_expected_cross_terms(self, phi_x: 'GaussianDensity') -> numpy.narray:
+    def get_expected_cross_terms(self, phi_x: 'GaussianDensity') -> numpy.ndarray:
         """ Computes
         
             E[yx'] = \int\int yx' p(y|x)phi(x) dydx = int (M f(x) + b)x' phi(x) dx
@@ -186,7 +187,7 @@ class NonLinearGaussianConditional(conditionals.ConditionalGaussianDensity):
         phi_xy = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
         return phi_xy
     
-    def affine_conditional_moment_matching(self, phi: 'GaussianDensity') -> 'ConditionalGaussianDensity':
+    def affine_conditional_moment_matching(self, phi_x: 'GaussianDensity') -> 'ConditionalGaussianDensity':
         """ Gets an approximation of the joint density via moment matching
         
             p(x|y) ~= N(mu_{x|y},Sigma_{x|y}),
@@ -208,7 +209,7 @@ class NonLinearGaussianConditional(conditionals.ConditionalGaussianDensity):
         cond_phi_xy = conditionals.ConditionalGaussianDensity(M=M_new, b=b_new, Sigma=Sigma_new)
         return cond_phi_xy
         
-    def affine_marginal_moment_matching(self, phi: 'GaussianDensity') -> 'GaussianDensity':
+    def affine_marginal_moment_matching(self, phi_x: 'GaussianDensity') -> 'GaussianDensity':
         """ Gets an approximation of the marginal density
         
             p(y) ~= N(mu_y,Sigma_y),
@@ -261,7 +262,7 @@ class NonLinearKalmanFilter(KalmanFilter):
         self.Dz, self.Dx = Qz.shape[0], Qx.shape[0]
         self.T = X.shape[0]
         self.X = X
-        self.state_density = NonLinearGaussianConditional(M=numpy.array([A]), b=numpy.array([b]) W=W, Sigma=Qz)
+        self.state_density = NonLinearGaussianConditional(M=numpy.array([A]), b=numpy.array([b]), W=W, Sigma=numpy.array([Qz]))
         self.emission_density = conditionals.ConditionalGaussianDensity(numpy.array([C]), numpy.array([d]), numpy.array([Qx]))
         self.prediction_density = self._setup_density()
         self.filter_density = self._setup_density()
@@ -295,6 +296,9 @@ class NonLinearKalmanSmoother(NonLinearKalmanFilter):
         
         super().__init__(X, A, b, W, Qz, C, d, Qx)
         self.smoothing_density = self._setup_density()
+        # First dimension z_{t+1}, second z_t (Note that this can become expensive if Dz is large)
+        self.twostep_smoothing_density = self._setup_density(D= int(2*self.Dz))
+        self.twostep_smoothing_density = self.twostep_smoothing_density.slice(range(self.T))
         
     def backward_path(self):
         """ Backward iteration.
@@ -305,7 +309,7 @@ class NonLinearKalmanSmoother(NonLinearKalmanFilter):
         for t in numpy.arange(self.T-1,-1,-1):
             self.smoothing(t)
             
-        def smoothing(self, t: int):
+    def smoothing(self, t: int):
         """ Here we do the smoothing step.
         
         First we appoximate the backward density by moment matching
@@ -331,6 +335,148 @@ class NonLinearKalmanSmoother(NonLinearKalmanFilter):
         post_smoothing_density = self.smoothing_density.slice([t+1])
         # p(z_{t} | x_{1:T})
         cur_smoothing_density = post_smoothing_density.affine_marginal_transformation(backward_density)
+        # p(z_{t}, z_{t+1} | x_{1:T})
+        cur_two_step_smoothing_density = post_smoothing_density.affine_joint_transformation(backward_density)
         # Write result into smoothing density collection
         self.smoothing_density.update([t], cur_smoothing_density)
+        self.twostep_smoothing_density.update([t], cur_two_step_smoothing_density)
+        
+
+class NonLinearStateSpace_EM(StateSpace_EM):
+    
+    def __init__(self, X: numpy.ndarray, Dz: int, Dk: int, noise_x: float=.1, noise_z: float=.1):
+        """ This object implements a non linear state-space model and optimizes it according to the 
+            expectation-maximization (EM) pocedure.
+            
+        :param X: numpy.ndarray [N, Dx]
+            The observed data.
+        :param Dz: int
+            Number of latent dimensions.
+        :param noise_x: float
+            Initial standard deviation of observations. (Default=1e-1)
+        :param noise_z: float
+            Initial standard deviation of state transition matrix. (Default=1e-1) 
+        """
+        
+        self.T, self.Dx = X.shape
+        self.Dz = Dz
+        self.Dk = Dk
+        self.Dphi = Dk + Dz
+        self.Qx = noise_x ** 2 * numpy.eye(self.Dx)
+        self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
+        self.A = numpy.zeros([self.Dz, self.Dphi])
+        self.A[:,:self.Dz] = numpy.eye(self.Dz)
+        self.b = numpy.zeros((self.Dz,))
+        self.d = numpy.mean(X, axis=0)
+        X_smoothed = numpy.empty(X.shape)
+        for i in range(X.shape[1]):
+            X_smoothed[:,i] = numpy.convolve(X[:,i], numpy.ones(10) / 10., mode='same')
+        eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X_smoothed-self.d[None]).T, X_smoothed-self.d[None]), eigvals=(self.Dx-self.Dz, self.Dx-1))
+        self.C =  eig_vecs * eig_vals / self.T
+        z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
+        delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
+        self.Qx = numpy.dot(delta_X.T, delta_X)
+        self.W = numpy.random.randn(self.Dk, self.Dz + 1)
+        self.ks = NonLinearKalmanSmoother(X, self.A, self.b, self.W, self.Qz, self.C, self.d, self.Qx)
+        self.Qz_inv, self.ln_det_Qz = self.ks.state_density.Lambda[0], self.ks.state_density.ln_det_Sigma[0]
+        self.Qx_inv, self.ln_det_Qx = self.ks.emission_density.Lambda[0], self.ks.emission_density.ln_det_Sigma[0]
+        
+    def mstep(self):
+        """ Performs the maximization step, i.e. updates all model parameters.
+        """
+        if self.iteration % 3 == 0:
+            self.update_A()
+        elif self.iteration % 3 == 1:
+            self.update_b()
+        else:
+            self.update_Qz()
+        self.update_W()
+        #
+        self.update_state_density()
+        self.update_C()
+        self.update_d()
+        self.update_Qx()
+        self.update_emission_density()
+        self.update_init_density()
+    
+    def update_A(self):
+        """ Computes the optimal state transition matrix.
+        """
+        phi = self.ks.smoothing_density.slice(range(self.T))
+        
+        # E[f(z)f(z)']
+        Ekk = phi.multiply(self.ks.state_density.k_func).multiply(self.ks.state_density.k_func).integrate().reshape((self.T, self.Dk, self.Dk))
+        Ekz = phi.multiply(self.ks.state_density.k_func).integrate('x').reshape((self.T, self.Dk, self.Dz))
+        Eff = numpy.empty((self.Dphi, self.Dphi))
+        Eff[:self.Dz,:self.Dz] = numpy.sum(phi.integrate('xx'), axis=0)
+        Eff[self.Dz:,self.Dz:] = numpy.sum(Ekk, axis=0)
+        Eff[self.Dz:,:self.Dz] = numpy.sum(Ekz, axis=0)
+        Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
+        # E[f(z)] b'
+        Ez = numpy.sum(phi.integrate('x'), axis=0)
+        Ek = numpy.sum(phi.multiply(self.ks.state_density.k_func).integrate().reshape((self.T,self.Dk)), axis=0)
+        Ef = numpy.concatenate([Ez, Ek])
+        Ebf = Ef[None] * self.b[:,None]
+        # E[z f(z)']
+        v_joint = numpy.zeros([self.Dk, int(2 * self.Dz)])
+        v_joint[:,self.Dz:] = self.ks.state_density.k_func.v
+        nu_joint = numpy.zeros([self.Dk, int(2 * self.Dz)])
+        nu_joint[:,self.Dz:] = self.ks.state_density.k_func.nu
+        ln_beta = self.ks.state_density.k_func.ln_beta
+        joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=ln_beta)
+        Ezz_cross = numpy.sum(self.ks.twostep_smoothing_density.integrate('xx')[:,self.Dz:,:self.Dz], axis=0)
+        Ezk = numpy.sum(self.ks.twostep_smoothing_density.multiply(joint_k_func).integrate('x').reshape((self.T,self.Dk,(2*self.Dz)))[:,:,:self.Dz], axis=0).T
+        Ezf = numpy.concatenate([Ezz_cross, Ezk], axis=1)
+        self.A = numpy.linalg.solve(Eff, (Ezf -  Ebf).T).T
+        
+    def update_b(self):
+        """ Computes the optimal state offset.
+        """
+        Ez = self.ks.smoothing_density.integrate('x')
+        Ek = self.ks.smoothing_density.multiply(self.ks.state_density.k_func).integrate().reshape((self.T+1,self.Dk))
+        Ef = numpy.concatenate([Ez, Ek], axis=1)
+        self.b = numpy.mean(self.ks.smoothing_density.mu[1:] - numpy.dot(self.A, Ef[:-1].T).T, axis=0)
+        
+    def update_W(self):
+        pass
+        
+    def update_Qz(self):
+        """ Computes the optimal state covariance.
+        """
+        Ezz = self.ks.smoothing_density.integrate('xx')
+        # E[zz']
+        Ezz_sum = numpy.sum(Ezz[1:], axis=0)
+        # E[z f(z)'] A'
+        v_joint = numpy.zeros([self.Dk, int(2 * self.Dz)])
+        v_joint[:,self.Dz:] = self.ks.state_density.k_func.v
+        nu_joint = numpy.zeros([self.Dk, int(2 * self.Dz)])
+        nu_joint[:,self.Dz:] = self.ks.state_density.k_func.nu
+        joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=self.ks.state_density.k_func.ln_beta)
+        Ezz_cross = self.ks.twostep_smoothing_density.integrate('xx')[:,self.Dz:,:self.Dz]
+        Ekz = self.ks.twostep_smoothing_density.multiply(joint_k_func).integrate('x').reshape((self.T,self.Dk,int(2*self.Dz)))[:,:,:self.Dz]
+        Ezf = numpy.concatenate([Ezz_cross, numpy.swapaxes(Ekz,1,2)], axis=2)
+        EzfA = numpy.einsum('abc,dc->bd', Ezf, self.A)
+        # E[z]b'
+        Ezb = numpy.sum(self.ks.smoothing_density.integrate('x')[1:,None] * self.b[None,:,None], axis=0)
+        # A E[f(z)] b'
+        Ez = numpy.sum(self.ks.smoothing_density.integrate('x')[:-1], axis=0)
+        Ek = numpy.sum(self.ks.smoothing_density.multiply(self.ks.state_density.k_func).integrate().reshape((self.T+1,self.Dk))[:-1], axis=0)
+        Ef = numpy.concatenate([Ez, Ek])
+        AEfb = numpy.dot(self.A, Ef)[:,None] * self.b[None]
+        # A E[f(z)f(z)'] A'
+        Ekk = self.ks.smoothing_density.multiply(self.ks.state_density.k_func).multiply(self.ks.state_density.k_func).integrate().reshape((self.T+1, self.Dk, self.Dk))
+        Ekz = self.ks.smoothing_density.multiply(self.ks.state_density.k_func).integrate('x').reshape((self.T+1, self.Dk, self.Dz))
+        Eff = numpy.empty((self.Dphi, self.Dphi))
+        Eff[:self.Dz,:self.Dz] = numpy.sum(Ezz[:-1], axis=0)
+        Eff[self.Dz:,self.Dz:] = numpy.sum(Ekk[:-1], axis=0)
+        Eff[self.Dz:,:self.Dz] = numpy.sum(Ekz[:-1], axis=0)
+        Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
+        AEffA = numpy.dot(numpy.dot(self.A, Eff), self.A.T)
+        self.Qz = (Ezz_sum - EzfA - EzfA.T + AEffA - Ezb - Ezb.T + AEfb + AEfb.T + self.T * self.b[:,None] * self.b[None]) / self.T
+        
+    def update_state_density(self):
+        """ Updates the state density.
+        """
+        self.ks.state_density = NonLinearGaussianConditional(M=numpy.array([self.A]), b=numpy.array([self.b]), W=self.W, Sigma=numpy.array([self.Qz]))
+        self.Qz_inv, self.ln_det_Qz = self.ks.state_density.Lambda[0], self.ks.state_density.ln_det_Sigma[0]
         
