@@ -376,7 +376,7 @@ class NonLinearStateSpace_EM(StateSpace_EM):
         z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
         self.Qx = numpy.dot(delta_X.T, delta_X)
-        self.W = numpy.random.randn(self.Dk, self.Dz + 1)
+        self.W = 1e-4 * numpy.random.randn(self.Dk, self.Dz + 1)
         self.ks = NonLinearKalmanSmoother(X, self.A, self.b, self.W, self.Qz, self.C, self.d, self.Qx)
         self.Qz_inv, self.ln_det_Qz = self.ks.state_density.Lambda[0], self.ks.state_density.ln_det_Sigma[0]
         self.Qx_inv, self.ln_det_Qx = self.ks.emission_density.Lambda[0], self.ks.emission_density.ln_det_Sigma[0]
@@ -384,12 +384,13 @@ class NonLinearStateSpace_EM(StateSpace_EM):
     def mstep(self):
         """ Performs the maximization step, i.e. updates all model parameters.
         """
-        if self.iteration % 3 == 0:
-            self.update_A()
-        elif self.iteration % 3 == 1:
-            self.update_b()
-        else:
-            self.update_Qz()
+        #if self.iteration % 2 == 0:
+        self.update_A()
+        self.update_b()
+        #elif self.iteration % 2 == 1:
+        #self.update_b()
+        #else:
+        self.update_Qz()
         self.update_W()
         #
         self.update_state_density()
@@ -427,6 +428,7 @@ class NonLinearStateSpace_EM(StateSpace_EM):
         Ezz_cross = numpy.sum(self.ks.twostep_smoothing_density.integrate('xx')[:,self.Dz:,:self.Dz], axis=0)
         Ezk = numpy.sum(self.ks.twostep_smoothing_density.multiply(joint_k_func).integrate('x').reshape((self.T,self.Dk,(2*self.Dz)))[:,:,:self.Dz], axis=0).T
         Ezf = numpy.concatenate([Ezz_cross, Ezk], axis=1)
+        Eff += numpy.eye(self.Dphi)
         self.A = numpy.linalg.solve(Eff, (Ezf -  Ebf).T).T
         
     def update_b(self):
