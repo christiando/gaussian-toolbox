@@ -182,7 +182,7 @@ class OneRankFactor(LowRankFactor):
         self.R, self.D = v.shape
         self.v = v
         if g is None:
-            self.g = numpy.ones(R)
+            self.g = numpy.ones(self.R)
         else:
             self.g = g
             
