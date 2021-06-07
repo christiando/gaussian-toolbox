@@ -10,6 +10,7 @@
 __author__ = "Christian Donner"
 
 import numpy
+from densities import GaussianDensity
 
 class ConditionalGaussianDensity:
     
@@ -110,3 +111,127 @@ class ConditionalGaussianDensity:
         A_inv = numpy.einsum('acb,acd->abd', L_inv, L_inv)
         ln_det_A = 2. * numpy.sum(numpy.log(L.diagonal(axis1=1, axis2=2)), axis=1)
         return A_inv, ln_det_A
+    
+    def affine_joint_transformation(self, p_x: 'GaussianDensity') -> 'GaussianDensity':
+        """ Returns the joint density 
+        
+            p(x,y) = p(y|x)p(x),
+            
+            where p(y|x) is the object itself.
+            
+        :param p_x: GaussianDensity
+            Marginal density over x.
+        
+        :return: GaussianDensity
+            The joint density.
+        """
+        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of multiple marginals
+        # and multiple cond
+        try:
+            assert p_x.R == 1 or self.R == 1
+        except AssertionError:
+            raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
+        R = p_x.R * self.R
+        D_xy = p_x.D + self.Dyp_x
+        # Mean
+        mu_x = numpy.tile(p_x.mu[None], (self.R, 1, 1,)).reshape((R, p_x.D))
+        mu_y = self.get_conditional_mu(p_x.mu).reshape((R, self.Dy))
+        mu_xy = numpy.hstack([mu_x, mu_y])
+        # Sigma
+        Sigma_x = numpy.tile(p_x.Sigma[None], (self.R, 1, 1, 1)).reshape(R, p_x.D, p_x.D)
+        MSigma_x = numpy.einsum('abc,dce->adbe', self.M, p_x.Sigma) # [R1,R,Dy,D]
+        MSigmaM = numpy.einsum('abcd,aed->abce', MSigma_x, self.M)
+        Sigma_y = (self.Sigma[:,None] + MSigmaM).reshape((R, self.Dy, self.Dy))
+        C_xy = MSigma_x.reshape((R, self.Dy, p_x.D))
+        Sigma_xy = numpy.empty((R, D_xy, D_xy))
+        Sigma_xy[:,:p_x.D,:p_x.D] = Sigma_x
+        Sigma_xy[:,p_x.D:,p_x.D:] = Sigma_y
+        Sigma_xy[:,p_x.D:,:p_x.D] = C_xy
+        Sigma_xy[:,:p_x.D,p_x.D:] = numpy.swapaxes(C_xy, 1, 2)
+        # Lambda
+        Lambda_y = numpy.tile(self.Lambda[:,None], (1, p_x.R, 1, 1)).reshape((R, self.Dy, self.Dy))
+        Lambda_yM = numpy.einsum('abc,abd->acd', self.Lambda, self.M) # [R1,Dy,D]
+        MLambdaM = numpy.einsum('abc,abd->acd', self.M, Lambda_yM)
+        Lambda_x = (p_x.Lambda[None] + MLambdaM[:,None]).reshape((R, p_x.D, p_x.D))
+        L_xy = numpy.tile(-Lambda_yM[:,None], (1, p_x.R, 1, 1)).reshape((R, self.Dy, p_x.D))
+        Lambda_xy = numpy.empty((R, D_xy, D_xy))
+        Lambda_xy[:,:p_x.D,:p_x.D] = Lambda_x
+        Lambda_xy[:,p_x.D:,p_x.D:] = Lambda_y
+        Lambda_xy[:,p_x.D:,:p_x.D] = L_xy
+        Lambda_xy[:,:p_x.D,p_x.D:] = numpy.swapaxes(L_xy, 1, 2)
+        # Log determinant
+        if p_x.D > self.Dy:
+            CLambda_x = numpy.einsum('abcd,bde->abce', MSigma_x, p_x.Lambda) # [R1,R,Dy,D]
+            CLambdaC = numpy.einsum('abcd,abed->abce', CLambda_x, MSigma_x) # [R1,R,Dy,Dy]
+            delta_ln_det = numpy.linalg.slogdet(Sigma_y[:,None] - CLambdaC)[1].reshape((R,))
+            ln_det_Sigma_xy = p_x.ln_det_Sigma + delta_ln_det
+        else:
+            Sigma_yL = numpy.einsum('abc,acd->abd', self.Sigma, -Lambda_yM) # [R1,Dy,Dy] x [R1, Dy, D] = [R1, Dy, D]
+            LSigmaL = numpy.einsum('abc,abd->acd', -Lambda_yM, Sigma_yL) # [R1, Dy, D] x [R1, Dy, D] = [R1, D, D]
+            LSigmaL = numpy.tile(LSigmaL[:,None], (1, p_x.R)).reshape((R, p_x.D, p_x.D))
+            delta_ln_det = numpy.linalg.slogdet(Lambda_x - LSigmaL)[1]
+            ln_det_Sigma_xy = -(numpy.tile(self.ln_det_Lambda[:,None], (1, p_x.R)).reshape((R,)) + delta_ln_det)
+        return GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
+    
+    def affine_marginal_transformation(self, p_x: 'ConditionalGaussianDensity') -> 'GaussianDensity':
+        """ Returns the marginal density p(y) given  p(y|x) and p(x), 
+            where p(y|x) is the object itself.
+            
+        :param p_x: GaussianDensity
+            Marginal density over x.
+        
+        :return: GaussianDensity
+            The marginal density.
+        """
+        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of multiple marginals
+        # and multiple cond
+        try:
+            assert p_x.R == 1 or self.R == 1
+        except AssertionError:
+            raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
+        R = p_x.R * self.R
+        # Mean
+        mu_y = self.get_conditional_mu(p_x.mu).reshape((R, self.Dy))
+        # Sigma
+        MSigma_x = numpy.einsum('abc,dce->adbe', self.M, p_x.Sigma) # [R1,R,Dy,D]
+        MSigmaM = numpy.einsum('abcd,aed->abce', MSigma_x, self.M)
+        Sigma_y = (self.Sigma[:,None] + MSigmaM).reshape((R, self.Dy, self.Dy))
+        return GaussianDensity(Sigma_y, mu_y)
+    
+    def affine_conditional_transformation(self, p_x: 'ConditionalGaussianDensity') -> 'ConditionalGaussianDensity':
+        """ Returns the conditional density p(x|y), given p(y|x) and p(x),           
+            where p(y|x) is the object itself.
+            
+        :param p_x: GaussianDensity
+            Marginal density over x.
+        
+        :return: GaussianDensity
+            The marginal density.
+        """
+        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of multiple marginals
+        # and multiple cond
+        try:
+            assert p_x.R == 1 or self.R == 1
+        except AssertionError:
+            raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
+        R = p_x.R * self.R
+        # TODO: Could be flexibly made more effiecient here.
+        # Marginal Sigma y
+        # MSigma_x = numpy.einsum('abc,dce->adbe', self.M, p_xSigma) # [R1,R,Dy,D]
+        # MSigmaM = numpy.einsum('abcd,aed->abce', MSigma_x, self.M)
+        # Sigma_y = (self.Sigma[:,None] + MSigmaM).reshape((R, self.Dy, self.Dy))
+        # Lambda_y, ln_det_Sigma_y = p_x.invert_matrix(Sigma_y)
+        # Lambda
+        Lambda_yM = numpy.einsum('abc,abd->acd', self.Lambda, self.M) # [R1,Dy,D]
+        MLambdaM = numpy.einsum('abc,abd->acd', self.M, Lambda_yM)
+        Lambda_x = (p_x.Lambda[None] + MLambdaM[:,None]).reshape((R, p_x.D, p_x.D))
+        # Sigma
+        Sigma_x, ln_det_Lambda_x = p_x.invert_matrix(Lambda_x)
+        # M_x
+        M_Lambda_y = numpy.einsum('abc,abd->acd', self.M, self.Lambda) # [R1, D, Dy]
+        M_x = numpy.einsum('abcd,ade->abce', Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), M_Lambda_y) #[R1, R, D, Dy]
+        b_x = - numpy.einsum('abcd,ad->abc', M_x, self.b) # [R1, R, D, Dy] x [R1, Dy] = [R1, R, D]
+        b_x += numpy.einsum('abcd,bd->abc', Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), p_x.nu).reshape((R, p_x.D))
+        M_x = M_x.reshape((R, p_x.D, self.Dy))
+        
+        return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
