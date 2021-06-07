@@ -11,6 +11,7 @@ __author__ = "Christian Donner"
 
 import numpy
 #from densities import GaussianDensity
+import factors
 
 class ConditionalGaussianDensity:
     
@@ -239,23 +240,25 @@ class ConditionalGaussianDensity:
         return ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
     
     
-class SEMeanGaussianConditional(ConditionalGaussianDensity):
+class LSEMGaussianConditional(ConditionalGaussianDensity):
     
     def __init__(self, M: numpy.ndarray, b: numpy.ndarray, W: numpy.ndarray, 
                  Sigma: numpy.ndarray=None, Lambda: numpy.ndarray=None, 
                  ln_det_Sigma: numpy.ndarray=None):
-        """ A conditional Gaussian density
+        """ A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
             
             p(y|x) = N(mu(x), Sigma)
             
-            with the conditional mean function mu(x) = M f(x) + b. 
+            with the conditional mean function mu(x) = M phi(x) + b. 
             phi(x) is a feature vector of the form
             
-            f(x) = (1,x_1,...,x_m,k(h_1(x)),...,k(h_n(x))),
+            phi(x) = (1,x_1,...,x_m,k(h_1(x)),...,k(h_n(x))),
             
             with
             
             k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
+            
+            Note, that the affine transformations will be approximated via moment matching.
             
             :param M: numpy.ndarray [1, Dy, Dphi]
                 Matrix in the mean function.
@@ -286,27 +289,27 @@ class SEMeanGaussianConditional(ConditionalGaussianDensity):
         ln_beta = - .5 * self.w0 ** 2
         self.k_func = factors.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
         
-    def evaluate_f(self, x: numpy.ndarray):
-        """ Evaluates the f
+    def evaluate_phi(self, x: numpy.ndarray):
+        """ Evaluates the phi
         
-        f(x) = (0,x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
+        phi(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
         
         :param x: numpy.ndarray [N, Dx]
-            Points where phi should be evaluated.
+            Points where f should be evaluated.
             
         :return: numpy.ndarray [N, Dphi]
             Deature vector.
         """
         N = x.shape[0]
-        f_x = numpy.empty((N, self.Dphi))
-        f_x[:,:self.Dx] = x
-        f_x[:,self.Dx:] = self.k_func.evaluate(x)
-        return f_x
+        phi_x = numpy.empty((N, self.Dphi))
+        phi_x[:,:self.Dx] = x
+        phi_x[:,self.Dx:] = self.k_func.evaluate(x).T
+        return phi_x
     
     def get_conditional_mu(self, x: numpy.ndarray) -> numpy.ndarray:
-        """ Computest the conditional mu function
+        """ Computes the conditional mu function
         
-            mu(x) = mu(x) = M f(x) + b
+            mu(x) = mu(x) = M phi(x) + b
             
         :param x: numpy.ndarray [N, Dx]
             Instances, the mu should be conditioned on.
@@ -314,41 +317,41 @@ class SEMeanGaussianConditional(ConditionalGaussianDensity):
         :return: numpy.ndarray [1, N, Dy]
             Conditional means.
         """
-        f_x = self.evaluate_f(x)
-        mu_y = numpy.einsum('ab,cb->ca', self.M[0], f_x) + self.b[0][None]
+        phi_x = self.evaluate_phi(x)
+        mu_y = numpy.einsum('ab,cb->ca', self.M[0], phi_x) + self.b[0][None]
         return mu_y
     
-    def get_expected_moments(self, phi_x: 'GaussianDensity') -> numpy.ndarray:
+    def get_expected_moments(self, p_x: 'GaussianDensity') -> numpy.ndarray:
         """ Computes the expected covariance
         
             Sigma_y = E[yy'] - E[y]E[y]'
             
-        :param phi_x: GaussianDensity
+        :param p_x: GaussianDensity
             The density which we average over.
 
-        :return: numpy.ndarray [phi_R, Dy, Dy]
+        :return: numpy.ndarray [p_R, Dy, Dy]
             Returns the expected mean
         """
         
         #### E[f(x)] ####
         # E[x] [R, Dx]
-        Ex = phi_x.integrate('x')
+        Ex = p_x.integrate('x')
         # E[k(x)] [R, Dphi - Dx]
-        phi_k = phi_x.multiply(self.k_func)
-        Ekx = phi_k.integrate().reshape((phi_x.R, self.Dphi - self.Dx))
+        p_k = p_x.multiply(self.k_func)
+        Ekx = p_k.integrate().reshape((p_x.R, self.Dphi - self.Dx))
         # E[f(x)]
         Ef = numpy.concatenate([Ex, Ekx], axis=1)
         
         #### E[f(x)f(x)'] ####
-        Eff = numpy.empty([phi_x.R, self.Dphi, self.Dphi])
+        Eff = numpy.empty([p_x.R, self.Dphi, self.Dphi])
         # Linear terms E[xx']
-        Eff[:,:self.Dx,:self.Dx] = phi_x.integrate('xx')
+        Eff[:,:self.Dx,:self.Dx] = p_x.integrate('xx')
         # Cross terms E[x k(x)']
-        Ekx = phi_k.integrate('x').reshape((phi_x.R, self.Dk, self.Dx))
+        Ekx = p_k.integrate('x').reshape((p_x.R, self.Dk, self.Dx))
         Eff[:,:self.Dx,self.Dx:] = numpy.swapaxes(Ekx, axis1=1, axis2=2)
         Eff[:,self.Dx:,:self.Dx] = Ekx
         # kernel terms E[k(x)k(x)']
-        Ekk = phi_x.multiply(self.k_func).multiply(self.k_func).integrate().reshape((phi_x.R, self.Dk, self.Dk))
+        Ekk = p_x.multiply(self.k_func).multiply(self.k_func).integrate().reshape((p_x.R, self.Dk, self.Dk))
         Eff[:,self.Dx:,self.Dx:] = Ekk
         
         ### mu_y = E[mu(x)] = ME[f(x)] + b ###
@@ -356,7 +359,7 @@ class SEMeanGaussianConditional(ConditionalGaussianDensity):
         
         ### Sigma_y = E[yy'] - mu_ymu_y' = Sigma + E[mu(x)mu(x)'] - mu_ymu_y'
         #                                = Sigma + ME[f(x)f(x)']M' + bE[f(x)']M' + ME[f(x)]b' + bb' - mu_ymu_y'
-        Sigma_y = numpy.tile(self.Sigma, (phi_x.R, 1, 1))
+        Sigma_y = numpy.tile(self.Sigma, (p_x.R, 1, 1))
         Sigma_y += numpy.einsum('ab,cbd->cad', self.M[0], numpy.einsum('abc,dc->abd', Eff, self.M[0]))
         MEfb = numpy.einsum('ab,c->abc', numpy.einsum('ab,cb->ca', self.M[0], Ef), self.b[0])
         Sigma_y += MEfb + numpy.swapaxes(MEfb, axis1=1, axis2=2)
@@ -364,33 +367,33 @@ class SEMeanGaussianConditional(ConditionalGaussianDensity):
         Sigma_y -= mu_y[:,None] * mu_y[:,:,None]
         return mu_y, Sigma_y
     
-    def get_expected_cross_terms(self, phi_x: 'GaussianDensity') -> numpy.ndarray:
+    def get_expected_cross_terms(self, p_x: 'GaussianDensity') -> numpy.ndarray:
         """ Computes
         
-            E[yx'] = \int\int yx' p(y|x)phi(x) dydx = int (M f(x) + b)x' phi(x) dx
+            E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx
             
-        :param phi_x: GaussianDensity
+        :param p_x: GaussianDensity
             The density which we average over.
 
-        :return: numpy.ndarray [phi_R, Dx, Dy]
+        :return: numpy.ndarray [p_R, Dx, Dy]
             Returns the cross expectations.
         """
         
         # E[xx']
-        Exx = phi_x.integrate('xx')
+        Exx = p_x.integrate('xx')
         # E[k(x)x']
-        Ekx = phi_x.multiply(self.k_func).integrate('x').reshape((phi_x.R, self.Dk, self.Dx))
+        Ekx = p_x.multiply(self.k_func).integrate('x').reshape((p_x.R, self.Dk, self.Dx))
         # E[f(x)x']
         Ef_x = numpy.concatenate([Exx, Ekx], axis=1)
         # M E[f(x)x']
         MEf_x = numpy.einsum('ab,cbd->cad', self.M[0], Ef_x)
         # bE[x']
-        bEx = self.b[0][None,:,None] * phi_x.integrate('x')[:,None]
+        bEx = self.b[0][None,:,None] * p_x.integrate('x')[:,None]
         # E[yx']
         Eyx = MEf_x + bEx
         return Eyx
         
-    def affine_joint_transformation(self, phi_x: 'GaussianDensity') -> 'GaussianDensity':
+    def affine_joint_transformation(self, p_x: 'GaussianDensity') -> 'GaussianDensity':
         """ Gets an approximation of the joint density
         
             p(x,y) ~= N(mu_{xy},Sigma_{xy}),
@@ -404,48 +407,49 @@ class SEMeanGaussianConditional(ConditionalGaussianDensity):
             Sigma_{xy} = (Sigma_x            E[xy'] - mu_xmu_y'
                           E[yx'] - mu_ymu_x' E[yy'] - mu_ymu_y').
                           
-        :param phi_x: GaussianDensity
+        :param p_x: GaussianDensity
             Marginal Gaussian density over x.
         
         :return: GaussianDensity
             Returns the joint distribution of x,y.
         """
-        mu_y, Sigma_y = self.get_expected_moments(phi_x)
-        Eyx = self.get_expected_cross_terms(phi_x)
-        mu_x = phi_x.mu
+        from densities import GaussianDensity
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
+        Eyx = self.get_expected_cross_terms(p_x)
+        mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:,:,None] * mu_x[:,None]
         mu_xy = numpy.concatenate([mu_x, mu_y], axis=1)
-        Sigma_xy = numpy.empty((phi_x.R, self.Dy + self.Dx, self.Dy + self.Dx))
-        Sigma_xy[:,:self.Dx,:self.Dx] = phi_x.Sigma
+        Sigma_xy = numpy.empty((p_x.R, self.Dy + self.Dx, self.Dy + self.Dx))
+        Sigma_xy[:,:self.Dx,:self.Dx] = p_x.Sigma
         Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
         Sigma_xy[:,:self.Dx,self.Dx:] = numpy.swapaxes(cov_yx, axis1=1, axis2=2)
         Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
-        phi_xy = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
-        return phi_xy
+        p_xy = GaussianDensity(Sigma=Sigma_y, mu=mu_y)
+        return p_xy
     
-    def affine_conditional_transformation(self, phi_x: 'GaussianDensity') -> 'ConditionalGaussianDensity':
+    def affine_conditional_transformation(self, p_x: 'GaussianDensity') -> 'ConditionalGaussianDensity':
         """ Gets an approximation of the joint density via moment matching
         
             p(x|y) ~= N(mu_{x|y},Sigma_{x|y}),
     
-        :param phi_x: GaussianDensity
+        :param p_x: GaussianDensity
             Marginal Gaussian density over x.
         
         :return: ConditionalDensity
             Returns the conditional density of x given y.
         """
-        mu_y, Sigma_y = self.get_expected_moments(phi_x)
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = self.invert_matrix(Sigma_y)[0]
-        Eyx = self.get_expected_cross_terms(phi_x)
-        mu_x = phi_x.mu
+        Eyx = self.get_expected_cross_terms(p_x)
+        mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:,:,None] * mu_x[:,None]
         M_new = numpy.einsum('abc,abd->acd', cov_yx, Lambda_y)
         b_new = mu_x - numpy.einsum('abc,ac->ab', M_new, mu_y)
-        Sigma_new = phi_x.Sigma - numpy.einsum('abc,acd->abd', M_new, cov_yx)
-        cond_phi_xy = conditionals.ConditionalGaussianDensity(M=M_new, b=b_new, Sigma=Sigma_new)
-        return cond_phi_xy
+        Sigma_new = p_x.Sigma - numpy.einsum('abc,acd->abd', M_new, cov_yx)
+        cond_p_xy = ConditionalGaussianDensity(M=M_new, b=b_new, Sigma=Sigma_new)
+        return cond_p_xy
         
-    def affine_marginal_tranformation(self, phi_x: 'GaussianDensity') -> 'GaussianDensity':
+    def affine_marginal_transformation(self, p_x: 'GaussianDensity') -> 'GaussianDensity':
         """ Gets an approximation of the marginal density
         
             p(y) ~= N(mu_y,Sigma_y),
@@ -458,13 +462,13 @@ class SEMeanGaussianConditional(ConditionalGaussianDensity):
             
             Sigma_y = E[yy'] - mu_ymu_y'.
                           
-        :param phi_x: GaussianDensity
+        :param p_x: GaussianDensity
             Marginal Gaussian density over x.
         
         :return: GaussianDensity
             Returns the joint distribution of x,y.
         """
-        
-        mu_y, Sigma_y = self.get_expected_moments(phi_x)
-        phi_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
-        return phi_y
+        from densities import GaussianDensity
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
+        p_y = GaussianDensity(Sigma=Sigma_y, mu=mu_y)
+        return p_y
