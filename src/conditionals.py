@@ -279,9 +279,9 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         self.Dx = self.W.shape[1]
         self.Dk = self.W.shape[0]
         self.Dphi = self.Dk + self.Dx
-        self._setup_phi()
+        self.update_phi()
         
-    def _setup_phi(self):
+    def update_phi(self):
         """ Sets up the non-linear kernel function in phi(x).
         """
         v = self.W
