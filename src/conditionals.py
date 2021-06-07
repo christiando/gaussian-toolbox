@@ -10,7 +10,7 @@
 __author__ = "Christian Donner"
 
 import numpy
-from densities import GaussianDensity
+#from densities import GaussianDensity
 
 class ConditionalGaussianDensity:
     
@@ -131,8 +131,9 @@ class ConditionalGaussianDensity:
             assert p_x.R == 1 or self.R == 1
         except AssertionError:
             raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
+        from densities import GaussianDensity
         R = p_x.R * self.R
-        D_xy = p_x.D + self.Dyp_x
+        D_xy = p_x.D + self.Dy
         # Mean
         mu_x = numpy.tile(p_x.mu[None], (self.R, 1, 1,)).reshape((R, p_x.D))
         mu_y = self.get_conditional_mu(p_x.mu).reshape((R, self.Dy))
@@ -189,6 +190,7 @@ class ConditionalGaussianDensity:
             assert p_x.R == 1 or self.R == 1
         except AssertionError:
             raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
+        from densities import GaussianDensity
         R = p_x.R * self.R
         # Mean
         mu_y = self.get_conditional_mu(p_x.mu).reshape((R, self.Dy))
@@ -234,7 +236,7 @@ class ConditionalGaussianDensity:
         b_x += numpy.einsum('abcd,bd->abc', Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), p_x.nu).reshape((R, p_x.D))
         M_x = M_x.reshape((R, p_x.D, self.Dy))
         
-        return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
+        return ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
     
     
 class SEMeanGaussianConditional(ConditionalGaussianDensity):
