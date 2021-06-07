@@ -166,6 +166,7 @@ class GaussianMeasure(factors.ConjugateFactor):
                                  'Ax_aBx_b_outer': self.integrate_general_quadratic_outer,
                                  'Ax_aBx_bCx_c_inner': self.integrate_general_cubic_inner,
                                  'Ax_aBx_bCx_c_outer': self.integrate_general_cubic_outer,
+                                 'xAx_ax': self.integrate_cubic_outer, # Rename
                                  'Ax_aBx_bCx_cDx_d_inner': self.integrate_general_quartic_inner,
                                  'Ax_aBx_bCx_cDx_d_outer': self.integrate_general_quartic_outer}
         
@@ -508,22 +509,63 @@ class GaussianMeasure(factors.ConjugateFactor):
             
             with phi(x) = u(x) / int du(x).
             
-        :param b_vec: numpy.ndarray [D]
+        :param b_vec: numpy.ndarray [1, D] or [R, D]
             Vector of 
         :return: numpy.ndarray [R, D, D]
             The solved intergal.
         """
         constant = self.integral()
         Exx = self._expectation_xxT()
-        mub_outer = numpy.einsum('ab,c->abc', self.mu, b_vec)
+        mub_outer = numpy.einsum('ab,ac->abc', self.mu, b_vec)
         mbExx = numpy.einsum('abc,acd->abd', mub_outer, Exx)
-        bmu_inner = numpy.einsum('ab,b->a', self.mu, b_vec)
+        bmu_inner = numpy.einsum('ab,ab->a', self.mu, b_vec)
         bmSigma = numpy.einsum('a,abc->abc', bmu_inner, self.Sigma)
-        bmu_outer = numpy.einsum('a,bc->bac', b_vec, self.mu)
+        bmu_outer = numpy.einsum('ab,ac->abc', b_vec, self.mu)
         Sigmabm = numpy.einsum('abd,ade->abe', self.Sigma, bmu_outer)
         return mbExx + bmSigma + Sigmabm
-        
     
+    
+    def _expectation_cubic_outer(self, A_mat: numpy.ndarray, a_vec: numpy.ndarray) -> numpy.ndarray:
+        """ Computes the cubic expectation.
+        
+            int x(A'x + a)x' dphi(x),
+            
+            with phi(x) = u(x) / int du(x).
+            
+        :param A_mat: numpy.ndarray [1,1,D] or [R,1,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param a_vec: numpy.ndarray [1,1] or [R,1]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+        """
+        # xAxx
+        xAxx = self._expectation_xbxx(b_vec=A_mat)
+        axx = a_vec[:,None,None] * self._expectation_xxT()
+        return xAxx + axx
+    
+    def integrate_cubic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None) -> numpy.ndarray:
+        """ Computes the cubic integration.
+        
+            int x(A'x + a)x' du(x).
+            
+        :param A_mat: numpy.ndarray [1,D] or [R,1,D]
+            Real valued matrix. If None, it is assumed identity. (Default=None)
+        :param a_vec: numpy.ndarray [1] or [R,1]
+            Real valued vector. If None, it is assumed zeros. (Default=None)
+            
+        :return: numpy.ndarray [R, D, D]
+            The solved intergal.
+        """
+        if A_mat is None:
+            A_mat = numpy.ones((1,self.D))
+        if a_vec is None:
+            a_vec = numpy.zeros(1)
+        if A_mat.ndim == 2:
+            A_mat = numpy.tile(A_mat[None], [1, 1, 1])
+        if a_vec.ndim == 1:
+            a_vec = numpy.tile(a_vec[None], [1, 1])
+        constant = self.integral()
+        return constant[:,None,None] * self._expectation_cubic_outer(A_mat=A_mat[:,0], a_vec=a_vec[:,0])
+
     def intergate_xbxx(self, b_vec: numpy.ndarray) -> numpy.ndarray:
         """ Computes the cubic integral.
         
@@ -596,11 +638,9 @@ class GaussianMeasure(factors.ConjugateFactor):
     def integrate_general_cubic_inner(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
                                       B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
                                       C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None) -> numpy.ndarray:
-        """ Computes the quadratic expectation.
+        """ Computes the quadratic integration.
         
-            int (Ax+a)(Bx+b)'(Cx+c)  dphi(x),
-            
-            with phi(x) = u(x) / int du(x).
+            int (Ax+a)(Bx+b)'(Cx+c)  du(x).
             
         :param A_mat: numpy.ndarray [K,D] or [R,K,D]
             Real valued matrix. If None, it is assumed identity. (Default=None)
@@ -668,7 +708,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def integrate_general_cubic_outer(self, A_mat: numpy.ndarray=None, a_vec: numpy.ndarray=None, 
                                       B_mat: numpy.ndarray=None, b_vec: numpy.ndarray=None, 
                                       C_mat: numpy.ndarray=None, c_vec: numpy.ndarray=None) -> numpy.ndarray:
-        """ Computes the quadratic expectation.
+        """ Computes the quadratic integration
         
            int (Bx+b)'(Cx+c)(Dx+d)' du(x),
             
