@@ -1,4 +1,6 @@
-import numpy, scipy
+#import numpy, scipy
+import scipy
+import autograd.numpy as numpy
 import sys
 sys.path.append('../src/')
 import densities, conditionals

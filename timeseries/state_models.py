@@ -1,4 +1,6 @@
-import numpy
+import autograd.numpy as numpy
+from autograd import value_and_grad
+#import numpy
 from scipy.optimize import minimize
 import sys
 sys.path.append('../src/')
@@ -255,7 +257,7 @@ class LSEMStateModel(LinearStateModel):
         self.A = numpy.zeros((self.Dz, self.Dphi))
         self.A[:,:self.Dz] = numpy.eye(self.Dz)
         self.b = numpy.zeros((self.Dz,))
-        self.W = 1e-4 * numpy.random.randn(self.Dk, self.Dz + 1)
+        self.W = 1e-2 * numpy.random.randn(self.Dk, self.Dz + 1)
         self.state_density = conditionals.LSEMGaussianConditional(M=numpy.array([self.A]), 
                                                                   b=numpy.array([self.b]), 
                                                                   W=self.W, 
@@ -265,7 +267,7 @@ class LSEMStateModel(LinearStateModel):
     def update_hyperparameters(self, smoothing_density: 'GaussianDensity', 
                                two_step_smoothing_density: 'GaussianDensity'):
         """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
-        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
+        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms).
         
         :param smoothing_density: GaussianDensity
             The smoothing density  p(z_t|x_{1:T}).
@@ -378,6 +380,18 @@ class LSEMStateModel(LinearStateModel):
         
     
     def _Wfunc(self, W, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity') -> (float, numpy.ndarray):
+        """ Computes the parts of the (negative) Q-fub
+        
+        :param W: numpy.ndarray [Dk, Dz + 1]
+            The weights in the squared exponential of conditional mean function.
+        :param smoothing_density: GaussianDensity
+            The smoothing density  p(z_t|x_{1:T}).
+        :param two_step_smoothing_density: Gaussian Density
+            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+            
+        :return: float
+            Terms of negative Q-function depending on W.
+        """
         self.W = W.reshape((self.Dk, self.Dz + 1))
         self.state_density.w0 = self.W[:,0]
         self.state_density.W = self.W[:,1:]
@@ -385,10 +399,10 @@ class LSEMStateModel(LinearStateModel):
         T = smoothing_density.R - 1
         Ezz = smoothing_density.integrate('xx')
         # E[z f(z)'] A'
-        v_joint = numpy.zeros([self.Dk, int(2 * self.Dz)])
-        v_joint[:,self.Dz:] = self.state_density.k_func.v
-        nu_joint = numpy.zeros([self.Dk, int(2 * self.Dz)])
-        nu_joint[:,self.Dz:] = self.state_density.k_func.nu
+        v_joint = numpy.zeros([self.Dk, self.Dz])
+        v_joint = numpy.concatenate([v_joint, self.state_density.k_func.v], axis=1)
+        nu_joint = numpy.zeros([self.Dk, self.Dz])
+        nu_joint = numpy.concatenate([nu_joint, self.state_density.k_func.nu], axis=1)
         joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta)
         Ezz_cross = two_step_smoothing_density.integrate('xx')[:,self.Dz:,:self.Dz]
         Ekz = two_step_smoothing_density.multiply(joint_k_func).integrate('x').reshape((T,self.Dk,int(2*self.Dz)))[:,:,:self.Dz]
@@ -402,61 +416,34 @@ class LSEMStateModel(LinearStateModel):
         # A E[f(z)f(z)'] A'
         Ekk = smoothing_density.multiply(self.state_density.k_func).multiply(self.state_density.k_func).integrate().reshape((T+1, self.Dk, self.Dk))
         Ekz = smoothing_density.multiply(self.state_density.k_func).integrate('x').reshape((T+1, self.Dk, self.Dz))
-        Eff = numpy.empty((self.Dphi, self.Dphi))
-        Eff[:self.Dz,:self.Dz] = numpy.sum(Ezz[:-1], axis=0)
-        Eff[self.Dz:,self.Dz:] = numpy.sum(Ekk[:-1], axis=0)
-        Eff[self.Dz:,:self.Dz] = numpy.sum(Ekz[:-1], axis=0)
-        Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
+        #Eff = numpy.empty((self.Dphi, self.Dphi))
+        #Eff[:self.Dz,:self.Dz] = numpy.sum(Ezz[:-1], axis=0)
+        #Eff[self.Dz:,self.Dz:] = numpy.sum(Ekk[:-1], axis=0)
+        #Eff[self.Dz:,:self.Dz] = numpy.sum(Ekz[:-1], axis=0)
+        #Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
+        Eff1 = numpy.concatenate([numpy.sum(Ezz[:-1], axis=0), numpy.sum(Ekz[:-1], axis=0)], axis=0)
+        Eff2 = numpy.concatenate([numpy.sum(Ekz[:-1], axis=0).T, numpy.sum(Ekk[:-1], axis=0)], axis=0)
+        Eff = numpy.concatenate([Eff1, Eff2], axis=1)
         AEffA = numpy.dot(numpy.dot(self.A, Eff), self.A.T)
         Qfunc_W = .5 * numpy.trace(numpy.dot(self.Qz_inv, 
                                                    - EzfA - EzfA.T + AEffA + AEfb + 
                                                    AEfb.T))
     
-        if False:
-            #for t in range(T):
-            A_mat1 = numpy.tile(self.state_density.W, (1,1))[:,None]
-            a_vec1 = numpy.tile(self.state_density.w0, (1,))[:,None]
-            A_mat2 = numpy.tile(self.state_density.W, (self.Dk, 1))[:,None]
-            a_vec2 = numpy.tile(self.state_density.w0, (self.Dk,))[:,None]
-            A_mat3 = numpy.zeros((self.Dk,1, 2 * self.Dz))
-            A_mat3[:, 0, self.Dz:] = self.state_density.W
-            Edk_dW = numpy.zeros((self.Dk, self.Dz))
-            Edk_dw0 = numpy.zeros((self.Dk, 1))
-            Ephi_dk_dW = numpy.zeros((self.Dphi, self.Dk, self.Dz))
-            Ephi_dk_dw0 = numpy.zeros((self.Dphi, self.Dk, 1))
-            Ezdk_dW = numpy.zeros((self.Dk, self.Dz, self.Dz))
-            Ezdk_dw0 = numpy.zeros((self.Dk, self.Dz, 1))
-            for t in range(T):
-                p_t = smoothing_density.slice([t])
-                p_t_k = p_t.multiply(self.state_density.k_func)
-                Edk_dW += p_t_k.integrate('Ax_aBx_b_outer', A_mat=A_mat1, a_vec=a_vec1).reshape((1,self.Dk,self.Dz))[0]
-                Edk_dw0 += p_t_k.integrate('Ax_a', A_mat=A_mat1, a_vec=a_vec1)
-                p_t_kk = p_t_k.multiply(self.state_density.k_func)
-                Ephi_dk_dW[:self.Dz] += numpy.swapaxes(p_t_k.integrate('xAx_ax', A_mat=self.state_density.W[:,None], a_vec=self.state_density.w0[:,None]), axis1=0, axis2=1)
-                Ephi_dk_dw0[:self.Dz] += numpy.swapaxes(p_t_k.integrate('Ax_aBx_b_outer', B_mat=self.state_density.W[:,None], b_vec=self.state_density.w0[:,None]), axis1=0, axis2=1)
-                Ephi_dk_dW[self.Dz:] += p_t_kk.integrate('Ax_aBx_b_outer', A_mat=A_mat2, a_vec=a_vec2).reshape((self.Dk, self.Dk, self.Dz))
-                Ephi_dk_dw0[self.Dz:] += p_t_kk.integrate('Ax_a', A_mat=A_mat2, a_vec=a_vec2).reshape((self.Dk, self.Dk, 1))
-                p_tt = two_step_smoothing_density.slice([t])
-                p_tt_k = p_tt.multiply(joint_k_func)
-                Ezdk_dW += p_tt_k.integrate('xAx_ax', A_mat=A_mat3, a_vec=a_vec1)[:,:self.Dz,self.Dz:]
-                Ezdk_dw0 += p_tt_k.integrate('Ax_aBx_b_outer', B_mat=A_mat3, b_vec=a_vec1)[:,:self.Dz]
-            Edk_dW = numpy.concatenate([Edk_dw0, Edk_dW], axis=1)
-            Ephi_dk_dW = numpy.concatenate([Ephi_dk_dw0, Ephi_dk_dW], axis=2)
-            Ezdk_dW = numpy.concatenate([Ezdk_dw0, Ezdk_dW], axis=2)
-            AEphi_dk_dW = numpy.einsum('ab,bcd->cad',self.A, Ephi_dk_dW)   
-            bEdk_dW = Edk_dW[:,None] * self.b[None,:,None]
-            dW = numpy.einsum('ab,bac->bc', self.A[:,self.Dz:], 
-                                 numpy.einsum('ab,cbd->cad', self.Qz_inv, 
-                                              (Ezdk_dW - AEphi_dk_dW - bEdk_dW)))
-            dW = numpy.einsum('ab,bac->bc', self.A[:,self.Dz:], (Ezdk_dW - AEphi_dk_dW - bEdk_dW))
-            dQfunc_dW = dW.flatten()
-        return Qfunc_W#, dQfunc_dW
+        return Qfunc_W
         
         
     def update_W(self, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity'):
-        result = minimize(self._Wfunc, self.W.flatten(), args=(smoothing_density, two_step_smoothing_density), 
-                          method='L-BFGS-B', jac=False, options={'disp': True})
-        print(result)
+        """ Updates the weights in the squared exponential of the state conditional mean.
+        
+        :param smoothing_density: GaussianDensity
+            The smoothing density  p(z_t|x_{1:T}).
+        :param two_step_smoothing_density: Gaussian Density
+            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        """
+        objective = lambda W: self._Wfunc(W, smoothing_density, two_step_smoothing_density)
+        result = minimize(value_and_grad(objective), self.W.flatten(),
+                          method='L-BFGS-B', jac=True, options={'disp': True})
+        self.W = result.x.reshape((self.Dk, self.Dz + 1))
         
     def update_state_density(self):
         """ Updates the state density.
@@ -468,6 +455,3 @@ class LSEMStateModel(LinearStateModel):
         self.Qz_inv, self.ln_det_Qz = self.state_density.Lambda[0], self.state_density.ln_det_Sigma[0]
         
     # TODO: Optimal initial state density
-        
-        
-        
