@@ -8,7 +8,8 @@
 
 __author__ = "Christian Donner"
 
-import numpy
+#import numpy
+import autograd.numpy as numpy
 import measures
 import conditionals
 

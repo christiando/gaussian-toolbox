@@ -8,7 +8,8 @@
 ##################################################################################################
 __author__ = "Christian Donner"
 
-import numpy
+#import numpy
+import autograd.numpy as numpy
 
 class ConjugateFactor:
     
@@ -143,12 +144,12 @@ class ConjugateFactor:
         #                         check_finite=False)
         L_inv = numpy.linalg.solve(L, numpy.eye(L.shape[1])[None])
         A_inv = numpy.einsum('acb,acd->abd', L_inv, L_inv)
-        ln_det_A = 2. * numpy.sum(numpy.log(L.diagonal(axis1=1, axis2=2)), axis=1)
+        ln_det_A = 2. * numpy.sum(numpy.log(L.diagonal(axis1=-1, axis2=-2)), axis=1)
         return A_inv, ln_det_A
     
     @staticmethod
     def get_trace(A: numpy.ndarray) -> numpy.ndarray:
-        return numpy.sum(A.diagonal(axis1=1,axis2=2), axis=1)
+        return numpy.sum(A.diagonal(axis1=-1,axis2=-2), axis=1)
     
     
 class LowRankFactor(ConjugateFactor):
