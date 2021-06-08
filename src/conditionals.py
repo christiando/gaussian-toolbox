@@ -77,7 +77,7 @@ class ConditionalGaussianDensity:
         
             mu(x) = M x + b.
             
-        :param y: numpy.ndarray [N, Dx]
+        :param x: numpy.ndarray [N, Dx]
             Instances, the mu should be conditioned on.
         
         :return: numpy.ndarray [R, N, Dy]
@@ -425,7 +425,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
         Sigma_xy[:,:self.Dx,self.Dx:] = numpy.swapaxes(cov_yx, axis1=1, axis2=2)
         Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
-        p_xy = GaussianDensity(Sigma=Sigma_y, mu=mu_y)
+        p_xy = GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
     
     def affine_conditional_transformation(self, p_x: 'GaussianDensity') -> 'ConditionalGaussianDensity':
@@ -473,3 +473,231 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = GaussianDensity(Sigma=Sigma_y, mu=mu_y)
         return p_y
+    
+    
+class HCCovGaussianConditional(ConditionalGaussianDensity):
+    
+    def __init__(self, M: numpy.ndarray, b: numpy.ndarray, sigma_x: numpy.ndarray, 
+                 U: numpy.ndarray, W: numpy.ndarray, beta: numpy.ndarray,):
+        """ A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
+            
+            p(y|x) = N(mu(x), Sigma(x))
+            
+            with the conditional mean function mu(x) = M x + b. 
+            The covariance matrix has the form
+            
+            Sigma_y(x) = sigma_x^2 I + \sum_i U_i D_i(x) U_i',
+            
+            and D_i(x) = 2 * beta_i * cosh(h_i(x)) and h_i(x) = w_i'x + b_i
+            
+            Note, that the affine transformations will be approximated via moment matching.
+            
+            :param M: numpy.ndarray [1, Dy, Dx]
+                Matrix in the mean function.
+            :param b: numpy.ndarray [1, Dy]
+                Vector in the conditional mean function.
+            :param W: numpy.ndarray [Du, Dx + 1]
+                Parameters for linear mapping in the nonlinear functions
+            :param sigma_x: float
+                Diagonal noise parameter.
+            :param U: numpy.ndarray [Dy, Du]
+                Othonormal vectors for low rank noise part.
+            :param W: numpy.ndarray [Du, Dx + 1]
+                Noise weights for low rank components (w_i & b_i).
+            :param beta: numpy.ndarray [Du]
+                Scaling for low rank noise components.
+        """
+        self.R, self.Dy, self.Dx = M.shape
+        if self.R != 1:
+            raise NotImplementedError('So far only R=1 is supported.')
+        self.Du = beta.shape[0]
+        self.M = M
+        self.b = b
+        self.U = U
+        self.W = W
+        self.beta = beta
+        self.sigma2_x = sigma_x ** 2
+        self._setup_noise_diagonal_functions()
+        
+    def _setup_noise_diagonal_functions(self):
+        """ Creates the functions, that later need to be integrated over, i.e.
+        
+        exp(h_i(z)) and exp(-h_i(z))
+        """
+        nu =  self.W[:,1:]
+        ln_beta = self.W[:,0]
+        self.exp_h_plus = factors.LinearFactor(nu, ln_beta)
+        self.exp_h_minus = factors.LinearFactor(-nu, -ln_beta)
+        
+    def get_conditional_cov(self, x: numpy.ndarray) -> numpy.ndarray:
+        """ Evaluates the covariance at a given x, i.e.
+        
+        Sigma_y(x) = sigma_x^2 I + \sum_i U_i D_i(x) U_i',
+            
+        with D_i(x) = 2 * beta_i * cosh(h_i(x)) and h_i(x) = w_i'x + b_i.
+        
+        :param x: numpy.ndarray [N, Dx]
+            Instances, the mu should be conditioned on.
+              
+        :return: numpy.ndarray [N, Dy, Dy]
+            Conditional covariance.
+        """
+        D_x = self.beta[None,:,None] * (self.exp_h_plus(x) + self.exp_h_minus(x))
+        Sigma_0 = self.sigma2_x * numpy.eye(self.Dy)
+        Sigma_y_x = Sigma_0[None] + numpy.einsum('ab,cb->ac', numpy.einsum('ab,cb->ca', self.U, D_x), self.U)
+        return Sigma_y_x
+    
+    def condition_on_x(self, x: numpy.ndarray) -> 'GaussianDensity':
+        """ Generates the corresponding Gaussian Density conditioned on x.
+        
+        :param x: numpy.ndarray [N, Dx]
+            Instances, the mu should be conditioned on.
+        
+        :return: GaussianDensity
+            The density conditioned on x.
+        """
+        from densities import GaussianDensity
+        N = x.shape[0]
+        mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
+        Sigma_new = self.get_conditional_cov(x)
+        return GaussianDensity(Sigma=Sigma_new, mu=mu_new)
+
+    def integrate_Sigma_x(self, p_x: 'GaussianDensity') -> numpy.ndarray:
+        """ Returns the integral
+        
+        int Sigma_y(x)p(x) dx.
+        
+        :param p_x: GaussianDensity
+            The density the covatiance is integrated with.
+            
+        :return: numpy.ndarray [Dy, Dy]
+            Integrated covariance matrix.
+        """
+        # int 2 cosh(h(z)) dphi(z)
+        D_int = p_x.multiply(self.exp_h_plus).integrate() + p_x.multiply(self.exp_h_minus).integrate()
+        D_int = self.beta[None] * D_int.reshape((p_x.R, self.Du))
+        return self.sigma2_x * numpy.eye(self.Dy)[None] + numpy.einsum('abc,dc->abd', self.U[None] * D_int[:,None], self.U)
+    
+    def get_expected_moments(self, p_x: 'GaussianDensity') -> numpy.ndarray:
+        """ Computes the expected mean and covariance
+        
+            mu_y = E[y] = M E[x] + b
+        
+            Sigma_y = E[yy'] - mu_y mu_y' = sigma_x^2 I + \sum_i U_i E[D_i(x)] U_i' + E[mu(x)mu(x)'] - mu_y mu_y'
+            
+        :param p_x: GaussianDensity
+            The density which we average over.
+
+        :return: (numpy.ndarray [p_R, Dy], numpy.ndarray [p_R, Dy, Dy])
+            Returns the expected mean and covariance.
+        """
+        
+        mu_y = self.get_conditional_mu(p_x.mu)[0]
+        Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate('Ax_aBx_b_outer',
+                                                          A_mat=self.M,
+                                                          a_vec=self.b,
+                                                          B_mat=self.M,
+                                                          b_vec=self.b)
+        Sigma_y = Eyy - mu_y[:,None] * mu_y[:,:,None]
+        #Sigma_y = .5 * (Sigma_y + Sigma_y.T)
+        return mu_y, Sigma_y
+    
+    def get_expected_cross_terms(self, p_x: 'GaussianDensity') -> numpy.ndarray:
+        """ Computes
+        
+            E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx
+            
+        :param p_x: GaussianDensity
+            The density which we average over.
+
+        :return: numpy.ndarray [p_R, Dx, Dy]
+            Returns the cross expectations.
+        """
+        
+        Eyx = p_x.integrate('Ax_aBx_b_outer', A_mat=self.M, a_vec=self.b, B_mat=None, b_vec=None)
+        return Eyx
+    
+    def affine_joint_transformation(self, p_x: 'GaussianDensity') -> 'GaussianDensity':
+        """ Gets an approximation of the joint density
+        
+            p(x,y) ~= N(mu_{xy},Sigma_{xy}),
+            
+        The mean is given by
+            
+            mu_{xy} = (mu_x, mu_y)'
+            
+        with mu_y = E[mu_y(x)]. The covariance is given by
+            
+            Sigma_{xy} = (Sigma_x            E[xy'] - mu_xmu_y'
+                          E[yx'] - mu_ymu_x' E[yy'] - mu_ymu_y').
+                          
+        :param p_x: GaussianDensity
+            Marginal Gaussian density over x.
+        
+        :return: GaussianDensity
+            Returns the joint distribution of x,y.
+        """
+        from densities import GaussianDensity
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
+        Eyx = self.get_expected_cross_terms(p_x)
+        mu_x = p_x.mu
+        cov_yx = Eyx - mu_y[:,:,None] * mu_x[:,None]
+        mu_xy = numpy.concatenate([mu_x, mu_y], axis=1)
+        #Sigma_xy = numpy.empty((p_x.R, self.Dy + self.Dx, self.Dy + self.Dx))
+        Sigma_xy1 = numpy.concatenate([p_x.Sigma, numpy.swapaxes(cov_yx, axis1=1, axis2=2)], axis=2)
+        Sigma_xy2 = numpy.concatenate([cov_yx, Sigma_y], axis=2)
+        Sigma_xy = numpy.concatenate([Sigma_xy1, Sigma_xy2], axis=1)
+        #Sigma_xy[:,:self.Dx,:self.Dx] = p_x.Sigma
+        #Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
+        #Sigma_xy[:,:self.Dx,self.Dx:] = numpy.swapaxes(cov_yx, axis1=1, axis2=2)
+        #Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
+        p_xy = GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
+        return p_xy
+    
+    def affine_conditional_transformation(self, p_x: 'GaussianDensity') -> 'ConditionalGaussianDensity':
+        """ Gets an approximation of the joint density via moment matching
+        
+            p(x|y) ~= N(mu_{x|y},Sigma_{x|y}),
+    
+        :param p_x: GaussianDensity
+            Marginal Gaussian density over x.
+        
+        :return: ConditionalDensity
+            Returns the conditional density of x given y.
+        """
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
+        Lambda_y = self.invert_matrix(Sigma_y)[0]
+        Eyx = self.get_expected_cross_terms(p_x)
+        mu_x = p_x.mu
+        cov_yx = Eyx - mu_y[:,:,None] * mu_x[:,None]
+        M_new = numpy.einsum('abc,abd->acd', cov_yx, Lambda_y)
+        b_new = mu_x - numpy.einsum('abc,ac->ab', M_new, mu_y)
+        Sigma_new = p_x.Sigma - numpy.einsum('abc,acd->abd', M_new, cov_yx)
+        cond_p_xy = ConditionalGaussianDensity(M=M_new, b=b_new, Sigma=Sigma_new)
+        return cond_p_xy
+    
+    def affine_marginal_transformation(self, p_x: 'GaussianDensity') -> 'GaussianDensity':
+        """ Gets an approximation of the marginal density
+        
+            p(y) ~= N(mu_y,Sigma_y),
+            
+        The mean is given by
+            
+            mu_y = E[mu_y(x)]. 
+            
+        The covariance is given by
+            
+            Sigma_y = E[yy'] - mu_ymu_y'.
+                          
+        :param p_x: GaussianDensity
+            Marginal Gaussian density over x.
+        
+        :return: GaussianDensity
+            Returns the joint distribution of x,y.
+        """
+        from densities import GaussianDensity
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
+        p_y = GaussianDensity(Sigma=Sigma_y, mu=mu_y)
+        return p_y
+    
+    
