@@ -1,9 +1,10 @@
 #import numpy, scipy
 import scipy
+from scipy.optimize import minimize
 import autograd.numpy as numpy
 import sys
 sys.path.append('../src/')
-import densities, conditionals
+import densities, conditionals, factors
 
 class ObservationModel:
     
@@ -164,4 +165,408 @@ class LinearObservationModel(ObservationModel):
                                                                         numpy.array([self.d]),
                                                                         numpy.array([self.Qx]))
         self.Qx_inv, self.ln_det_Qx = self.emission_density.Lambda[0], self.emission_density.ln_det_Sigma[0]
+        
+        
+        
+class HCCovObservationModel(LinearObservationModel):
     
+    
+    def __init__(self, Dx: int, Dz: int, Du: int, noise_x: float=1e-1):
+        """ This class implements a linear observation model, where the observations are generated as
+        
+            x_t = C z_t + d + xi_t     with      xi_t ~ N(0,Qx(z_t)),
+            
+        where 
+        
+            Qx(z) = sigma_x^2 I + \sum_i U_i D_i(z) U_i',
+            
+        with D_i(z) = 2 * beta_i * cosh(h_i(z)) and h_i(z) = w_i'z + b_i
+            
+        :param Dx: int
+            Dimensionality of observations.
+        :param Dz: int
+            Dimensionality of latent space.
+        :param noise_x: float
+            Intial isoptropic std. on the observations.
+        """
+        self.Dx, self.Dz, self.Du = Dx, Dz, Du
+        if Dx == Dz:
+            self.C = numpy.eye(Dx)
+        else:
+            self.C = numpy.random.randn(Dx, Dz)
+        self.d = numpy.zeros(Dx)
+        self.U = numpy.eye(Dx)[:,:Du]
+        self.W = 1e-10 * numpy.random.randn(self.Du, self.Dz + 1)
+        self.beta = 1e-5 * numpy.ones(self.Du)
+        self.sigma_x = noise_x
+        self.emission_density = conditionals.HCCovGaussianConditional(M = numpy.array([self.C]), 
+                                                                      b = numpy.array([self.d]), 
+                                                                      sigma_x = self.sigma_x,
+                                                                      U = self.U,
+                                                                      W = self.W,
+                                                                      beta = self.beta)
+        
+        
+    def pca_init(self, X: numpy.ndarray, smooth_window: int=10):
+        self.d = numpy.mean(X, axis=0)
+        T = X.shape[0]
+        X_smoothed = numpy.empty(X.shape)
+        for i in range(X.shape[1]):
+            X_smoothed[:,i] = numpy.convolve(X[:,i], 
+                                             numpy.ones(smooth_window) / smooth_window, 
+                                             mode='same')
+        eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X_smoothed-self.d[None]).T, 
+                                                         X_smoothed-self.d[None]), 
+                                               eigvals=(self.Dx-self.Dz, self.Dx-1))
+        self.C =  eig_vecs * eig_vals / T
+        z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
+        delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
+        cov = numpy.dot(delta_X.T, delta_X)
+        self.U = scipy.linalg.eigh(cov, eigvals=(self.Dx-self.Du, self.Dx-1))[1]
+        self.emission_density = conditionals.HCCovGaussianConditional(M = numpy.array([self.C]), 
+                                                                      b = numpy.array([self.d]), 
+                                                                      sigma_x = self.sigma_x,
+                                                                      U = self.U,
+                                                                      W = self.W,
+                                                                      beta = self.beta)
+        
+        
+    def update_hyperparameters(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        """ This procedure updates the hyperparameters of the observation model.
+        
+        :param smoothing_density: GaussianDensity
+            The smoothing density over the latent space.
+        :param X: numpy.ndarray [T, Dx]
+            The observations.
+        """  
+        self.update_C(smoothing_density, X)
+        self.update_d(smoothing_density, X)
+        self.update_sigma_beta_W(smoothing_density, X)
+        self.update_U(smoothing_density, X)
+        self.update_emission_density()
+        
+    def update_parameters_sigma_beta_W(self, params):
+        self.sigma_x = numpy.exp(.5 * params[0])
+        self.beta = numpy.exp(params[1:self.Du + 1])
+        self.W = params[self.Du + 1:].reshape((self.Du, self.Dz + 1))
+        
+    def parameter_optimization_sigma_beta_W(self, params: numpy.ndarray, 
+                                          smoothing_density: 'GaussianDensity', 
+                                          X: numpy.ndarray):
+        T = X.shape[0]
+        self.update_parameters_sigma_beta_W(params)
+        dW = numpy.zeros(self.W.shape)
+        dln_beta = numpy.zeros(self.Du)
+        dlnsigma2_x = numpy.zeros(1)
+        phi = smoothing_density.slice(range(1,T+1))
+        # E[epsilon(z)^2]
+        mat = -self.C
+        vec = X - self.d
+        E_epsilon2 = numpy.sum(phi.integrate('Ax_aBx_b_inner', A_mat=mat, a_vec=vec, B_mat=mat, b_vec=vec), axis=0)
+        dlnsigma2_x += .5 * E_epsilon2 / self.sigma_x ** 2
+        # E[D_inv epsilon(z)^2(z)] & E[log(sigma^2 + f(h))]
+        E_D_inv_epsilon2 = 0
+        E_ln_sigma2_f = 0
+        for iu in range(self.Du):
+            uRu_i, log_lb_sum_i, dw_i, dln_beta_i, dlnsigma2_i  = self.get_lb_i(iu, phi, X, update='gradients')
+            E_D_inv_epsilon2 += uRu_i
+            E_ln_sigma2_f += log_lb_sum_i
+            dW[iu] = dw_i
+            dln_beta[iu] = dln_beta_i
+            dlnsigma2_x += dlnsigma2_i
+        # data part
+        Qm = -.5 * (E_epsilon2 - E_D_inv_epsilon2) / self.sigma_x ** 2
+        # determinant part
+        Qm -= .5 * E_ln_sigma2_f + .5 * T * (self.Dx - self.Du) * numpy.log(self.sigma_x ** 2)
+        # constant part
+        Qm -= T * self.Dx * numpy.log(2 * numpy.pi)
+        dlnsigma2_x -= .5 * T * (self.Dx - self.Du) #/ self.sigma_x ** 2
+        #print(numpy.array([dlnsigma2_x]).shape, dln_beta.shape)
+        gradients = numpy.concatenate([dlnsigma2_x, dln_beta, dW.flatten()])
+        return -Qm, -gradients
+        
+    def update_sigma_beta_W(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
+        bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
+        objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds)
+        #print(result)
+        #if not result.success:
+        #    raise RuntimeError('Sigma, beta, W did not converge!!')
+        self.sigma_x = numpy.exp(.5*result.x[0])
+        self.beta = numpy.exp(result.x[1:self.Du + 1])
+        self.W = result.x[self.Du + 1:].reshape((self.Du, self.Dz+1))
+        
+    def update_C(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        T = X.shape[0]
+        C_old = numpy.copy(self.C)
+        phi = smoothing_density.slice(range(1,T+1))
+        intD_inv_z, intD_inv_zz = numpy.zeros((self.Du, T, self.Dz)), numpy.zeros((self.Du, self.Dz, self.Dz))
+        for iu in range(self.Du):
+            intD_inv_z_i, intD_inv_zz_i = self.get_lb_i(iu, phi, X, update='C')
+            intD_inv_z[iu] = intD_inv_z_i
+            intD_inv_zz[iu] += numpy.sum(intD_inv_zz_i, axis=0)
+        Ez = phi.integrate('x')
+        Ezz = numpy.sum(phi.integrate('xx'), axis=0)
+        Ezx_d = numpy.einsum('ab,ac->bc', Ez, X - self.d)
+        UU = numpy.einsum('ab,cb->bac', self.U, self.U)
+        intD_inv_zx_d = numpy.einsum('abc,bd->adc', intD_inv_z, X - self.d)
+        
+        def Q_C_func(params: numpy.ndarray) -> (float, numpy.ndarray):
+            C = numpy.reshape(params, (self.Dx, self.Dz))
+            tr_CEzx_d = numpy.trace(numpy.dot(C, Ezx_d))
+            tr_CC_Ezz = numpy.trace(numpy.dot(numpy.dot(C.T, C), Ezz))
+            tr_uu_CC_Dinv_zx_d = numpy.sum(numpy.trace(numpy.einsum('abc,acd->abd', UU, numpy.einsum('ab,cdb->cad', C, intD_inv_zx_d)), axis1=1, axis2=2))
+            CD_inv_zz = numpy.einsum('ab,cbd->cad', C, intD_inv_zz)
+            CD_inv_zzC = numpy.einsum('abc,dc->abd', CD_inv_zz, C)
+            uCD_inv_zzCu = numpy.sum(numpy.einsum('ab,ba->b',self.U, numpy.einsum('abc,ca->ab', CD_inv_zzC, self.U)))
+            Q_C = 2 * tr_CEzx_d - tr_CC_Ezz - 2 * tr_uu_CC_Dinv_zx_d + uCD_inv_zzCu #- 2 * tr_uu_CC_Dinv_zx_d + uCD_inv_zzCu
+            Q_C /= 2 * self.sigma_x ** 2
+            C_Ezz = numpy.dot(C, Ezz)
+            UU_C_Dinv_zz = numpy.sum(numpy.einsum('abc,abd->acd', UU, CD_inv_zz), axis=0)
+            UU_Dinv_zx_d = numpy.sum(numpy.einsum('abc,abd->acd', UU, intD_inv_zx_d), axis=0)
+            dQ_C = Ezx_d.T - UU_Dinv_zx_d + UU_C_Dinv_zz - C_Ezz #- UU_Dinv_zx_d + UU_C_Dinv_zz
+            dQ_C /= self.sigma_x ** 2
+            return -Q_C, -dQ_C.flatten() 
+        
+        x0 = self.C.flatten()
+        result = minimize(Q_C_func, x0, method='L-BFGS-B', jac=True)
+        if not result.success:
+            print(result)
+            print('C did not converge!! Falling back to old C.')
+            self.C = C_old
+        else:
+            self.C = result.x.reshape(self.Dx, self.Dz)
+    
+    def update_d(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        T = X.shape[0]
+        phi = smoothing_density.slice(range(1,T+1))
+        intD_inv, intD_inv_z = numpy.zeros((self.Du, T)), numpy.zeros((self.Du, T, self.Dz))
+        for iu in range(self.Du):
+            intD_inv_i, intD_inv_z_i = self.get_lb_i(iu, phi, X, update='d')
+            intD_inv[iu] = intD_inv_i
+            intD_inv_z[iu] += intD_inv_z_i
+        Ez = phi.integrate('x')
+        CEz = numpy.dot(self.C, numpy.sum(Ez,axis=0))
+        UU = numpy.einsum('ab,cb->bac', self.U, self.U)
+        A = numpy.eye(self.Dx) * T - numpy.sum(numpy.sum(intD_inv, axis=1)[:,None,None] * UU, axis=0)
+        sum_X = numpy.sum(X, axis=0)
+        intDinv_X_UU = numpy.sum(numpy.einsum('ab,abc->ac', numpy.einsum('ab,bc->ac',intD_inv[:,], X), UU), axis=0)
+        UU_C_intDinv_z = numpy.sum(numpy.einsum('abc,ac->ab', UU, numpy.einsum('ab,cb->ca', self.C, numpy.sum(intD_inv_z,axis=1))), axis=0)
+        b = sum_X - intDinv_X_UU - CEz + UU_C_intDinv_z
+        self.d = numpy.linalg.solve(A,b)
+        
+    def update_U(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        converged = False
+        T = X.shape[0]
+        phi = smoothing_density.slice(range(1,T+1))
+        R = numpy.empty([self.Du, self.Dx, self.Dx])
+        for iu in range(self.Du):
+            R[iu] = self.get_lb_i(iu, phi, X, update='U')
+            R[iu] /= numpy.amax(R[iu])
+        num_iter = 0
+        Q_u = numpy.sum(numpy.einsum('ab,ba->a', self.U, numpy.einsum('abc,ca->ab', R, self.U)))
+        while not converged and num_iter < 50:
+            #print(Q_u)
+            U_old = numpy.copy(self.U)
+            for iu in range(self.Du):
+                U_not_i = numpy.delete(self.U, [iu], axis=1)
+                V = self.partial_gs(U_not_i)
+                #A = numpy.hstack([U_not_i, numpy.eye(self.Dx)[:,-self.Du-1:]])
+                #V_full = numpy.linalg.qr(A)[0]
+                #print(numpy.dot(V_full[:,:-self.Du-1].T, U_not_i))
+                #V = V_full[:,-self.Du-1:]
+                VRV = numpy.dot(numpy.dot(V.T, R[iu]), V)
+                VRV /= numpy.amax(VRV)
+                #alpha = scipy.linalg.eigh(VRV, eigvals=(VRV.shape[0]-1,VRV.shape[0]-1))[1]
+                alpha = numpy.linalg.eig(VRV)[1][:,:1]
+                u_new = numpy.dot(V, alpha)[:,0]
+                U_new = numpy.copy(self.U)
+                U_new[:,iu] = u_new
+                if numpy.allclose(numpy.dot(U_new.T, U_new), numpy.eye(self.Du)):
+                    self.U[:,iu] = u_new
+                else:
+                    print('Warning: U not orthonormal')
+            Q_u_old = Q_u
+            Q_u = numpy.sum(numpy.einsum('ab,ba->a', self.U, numpy.einsum('abc,ca->ab', R, self.U)))
+            converged = (Q_u - Q_u_old) < 1e-4
+            num_iter += 1
+        if (Q_u - Q_u_old) < 0:
+            self.U = U_old
+            
+    @staticmethod
+    def gen_lin_ind_vecs(U):
+        N, M = U.shape
+        rand_vecs = numpy.random.rand(N, N - M)
+        V_fixed = numpy.hstack([U, rand_vecs])
+        V = numpy.copy(V_fixed)
+        for m in range(N - M):
+            v = rand_vecs[:,m]
+            V[:,M+m] -= numpy.dot(V_fixed.T, v) / numpy.sqrt(numpy.sum(v ** 2))
+        return V[:,M:]
+    
+    @staticmethod
+    def proj(U, v):
+        return numpy.dot(numpy.dot(v, U) / numpy.linalg.norm(U, axis=0), U.T)
+
+    def partial_gs(self, U):
+        """ Partial Gram-Schmidt process, to generate 
+        """
+        N, M = U.shape
+        V = numpy.empty((N, N - M))
+        #I = self.gen_lin_ind_vecs(U)#numpy.random.randn(N,N-M)
+        I = numpy.eye(N)[:,M:]
+        #I[-1,0] = 1
+        for d in range(N - M):
+            v = I[:,d]
+            V[:,d] = v - self.proj(U, v) - self.proj(V[:,:d], v)
+            V[:,d] /= numpy.sqrt(numpy.sum(V[:,d] ** 2))  
+        return V
+    
+    ###### Functions for bounds #####
+    def f(self, h, beta):
+        return 2 * beta * numpy.cosh(h)
+    
+    def f_prime(self, h, beta):
+        return 2 * beta * numpy.sinh(h)
+    
+    def g(self, omega, beta):
+        return self.f_prime(omega, beta) / (self.sigma_x ** 2 + self.f(omega, beta)) / numpy.abs(omega)
+                                      
+    def k(self, h, omega):
+        return numpy.log(self.sigma_x ** 2 + self.f(omega)) + .5 * self.g(omega) * (h ** 2 - omega ** 2)
+        
+    def get_lb_i(self, iu: int, phi: densities.GaussianDensity, X: numpy.ndarray, conv_crit: float=1e-4, update: str=None):
+        T = X.shape[0]
+        w_i = self.W[iu:iu+1,1:]
+        v = numpy.tile(w_i, (T, 1))
+        b_i = self.W[iu:iu+1,0]
+        u_i = self.U[:,iu:iu+1]
+        beta = self.beta[iu:iu+1]
+        uC = numpy.dot(u_i.T, -self.C)
+        ux_d = numpy.dot(u_i.T, X.T-self.d[:,None])
+        # Lower bound for E[ln (sigma_x^2 + f(h))]
+        omega_dagger = numpy.sqrt(phi.integrate('Ax_aBx_b_inner', A_mat=w_i, a_vec=b_i,
+                                                                  B_mat=w_i, b_vec=b_i))
+        f_omega_dagger = self.f(omega_dagger, beta)
+        log_lb = numpy.log(self.sigma_x ** 2 + f_omega_dagger)
+        # Lower bound for E[f(h) / (sigma_x^2 + f(h)) * (u'epsilon(z))^2]
+        omega_star = numpy.ones(T)
+        converged = False
+        num_iter = 0
+        while not converged and num_iter < 50:
+            # From the lower bound term
+            g_omega = self.g(omega_star, beta)
+            nu_plus = (1. - g_omega[:,None] * b_i) * w_i
+            nu_minus = (-1. - g_omega[:,None] * b_i) * w_i
+            ln_beta = - numpy.log(self.sigma_x ** 2 + self.f(omega_star, beta)) - .5 * g_omega * (b_i ** 2 - omega_star ** 2) + numpy.log(beta)
+            ln_beta_plus = ln_beta + b_i
+            ln_beta_minus = ln_beta - b_i
+            # Create OneRankFactors
+            exp_factor_plus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus)
+            exp_factor_minus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus)
+            # Create the two measures
+            exp_phi_plus = phi.hadamard(exp_factor_plus)
+            exp_phi_minus = phi.hadamard(exp_factor_minus)
+            # Fourth order integrals E[h^2 (x-Cz-d)^2]
+            mat1 = uC
+            vec1 = ux_d.T
+            mat2 = w_i
+            vec2 = b_i
+            quart_int_plus = exp_phi_plus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1, 
+                                                                              C_mat=mat2, c_vec=vec2, D_mat=mat2, d_vec=vec2)
+            quart_int_minus = exp_phi_minus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1, 
+                                                                              C_mat=mat2, c_vec=vec2, D_mat=mat2, d_vec=vec2)
+            quart_int = quart_int_plus + quart_int_minus
+            # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
+            quad_int_plus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
+            quad_int_minus = exp_phi_minus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
+            quad_int = quad_int_plus + quad_int_minus
+            omega_old = omega_star
+            #omega_star = numpy.amin([numpy.amax([numpy.sqrt(quart_int / quad_int), 1e-10]), 1e2])
+            #quad_int[quad_int < 1e-10] = 1e-10
+            omega_star = numpy.sqrt(numpy.abs(quart_int / quad_int))
+            # For numerical stability
+            #omega_star[omega_star < 1e-10] = 1e-10
+            #omega_star[omega_star > 30] = 30
+            #print(numpy.amax(numpy.abs(omega_star - omega_old)))
+            converged = numpy.amax(numpy.abs(omega_star - omega_old)) < conv_crit
+            num_iter += 1
+        #print(numpy.amax(numpy.abs(omega_star - omega_old)))
+        mat1 = -self.C
+        vec1 = X - self.d[None]
+        R_plus = exp_phi_plus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
+        R_minus = exp_phi_minus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
+        R = R_plus + R_minus
+        uRu = numpy.sum(u_i * numpy.dot(numpy.sum(R, axis=0), u_i))
+        log_lb_sum = numpy.sum(log_lb)
+        if update == 'gradients':
+            uRu = numpy.sum(u_i * numpy.dot(numpy.sum(R, axis=0), u_i))
+            ##### w_i gradiend ######################################################################
+            # E[f'(h)exp(-k(h,omega^*)) dh/dw (u'epsilon(z))^2]
+            # Matrix and vector for dh/dw
+            dW = numpy.zeros((self.Dz + 1, self.Dz))
+            dW[1:] = numpy.eye(self.Dz)
+            db = numpy.zeros(self.Dz + 1)
+            db[0] = 1
+            dw_i = numpy.sum(exp_phi_plus.integrate('Ax_aBx_bCx_c_outer', A_mat=uC, a_vec=ux_d.T,
+                                                    B_mat=uC, b_vec=ux_d.T, C_mat=dW, c_vec=db), axis=0)
+            dw_i -= numpy.sum(exp_phi_minus.integrate('Ax_aBx_bCx_c_outer', A_mat=uC, a_vec=ux_d.T, 
+                                                      B_mat=uC, b_vec=ux_d.T, C_mat=dW, c_vec=db), axis=0)
+            # -g(omega) * E[f(h)exp(-k(h,omega^*)) h dh/dw (u'epsilon(z))^2]
+            dw_i -= numpy.einsum('a,ab->b', g_omega, exp_phi_plus.integrate('Ax_aBx_bCx_cDx_d_outer', A_mat=w_i, a_vec=b_i,
+                                                                            B_mat=uC, b_vec=ux_d.T, C_mat=uC, c_vec=ux_d.T,
+                                                                            D_mat=dW, d_vec=db)[:,0])
+            dw_i -= numpy.einsum('a,ab->b', g_omega, exp_phi_minus.integrate('Ax_aBx_bCx_cDx_d_outer', A_mat=w_i, a_vec=b_i,
+                                                                             B_mat=uC, b_vec=ux_d.T, C_mat=uC, c_vec=ux_d.T,
+                                                                             D_mat=dW, d_vec=db)[:,0])
+            dw_i /= self.sigma_x ** 2
+            # g(omega^+)E[h dh/dw]
+            dw_i -= numpy.einsum('a,ab->b', self.g(omega_dagger, beta), phi.integrate('Ax_aBx_b_outer', A_mat=w_i, a_vec=b_i, 
+                                                                                      B_mat=dW, b_vec=db)[:,0])
+            dw_i /= 2.
+            ###########################################################################################
+            ##### beta_i gradient #####################################################################
+            weighted_R = numpy.einsum('abc,a->bc', R, 1. / (self.sigma_x ** 2 + self.f(omega_star, beta))) 
+            #  u'R u / (sigma_x^2 + f(omega^*))
+            dln_beta_i = numpy.sum(u_i * numpy.dot(weighted_R, u_i))
+            dln_beta_i -= numpy.sum(f_omega_dagger / (self.sigma_x ** 2 + f_omega_dagger))
+            dln_beta_i /= 2.
+            ##### sigma_x ** 2 gradient ###############################################################
+            dlnsigma2 =  - uRu / self.sigma_x ** 2
+            dlnsigma2 -= numpy.sum(u_i * numpy.dot(weighted_R, u_i))
+            dlnsigma2 -= numpy.sum(self.sigma_x ** 2 / (self.sigma_x ** 2 + f_omega_dagger))
+            dlnsigma2 /= 2.
+            return uRu, log_lb_sum, dw_i, dln_beta_i, dlnsigma2
+        elif update == 'C':
+            intD_inv_zz_plus = exp_phi_plus.integrate('xx')
+            intD_inv_zz_minus = exp_phi_minus.integrate('xx')
+            intD_inv_zz = intD_inv_zz_plus + intD_inv_zz_minus
+            intD_inv_z_plus = exp_phi_plus.integrate('x')
+            intD_inv_z_minus = exp_phi_minus.integrate('x')
+            intD_inv_z = intD_inv_z_plus + intD_inv_z_minus
+            return intD_inv_z, intD_inv_zz
+        elif update == 'd':
+            intD_inv_z_plus = exp_phi_plus.integrate('x')
+            intD_inv_z_minus = exp_phi_minus.integrate('x')
+            intD_inv_z = intD_inv_z_plus + intD_inv_z_minus
+            intD_inv_plus = exp_phi_plus.integrate()
+            intD_inv_minus = exp_phi_minus.integrate()
+            intD_inv = intD_inv_plus + intD_inv_minus
+            return intD_inv, intD_inv_z
+        elif update == 'U':
+            return numpy.sum(R, axis=0)
+        else:
+            return uRu, log_lb_sum
+        
+        
+    def update_emission_density(self):
+        """ Updates the emission density.
+        """
+        self.emission_density = conditionals.HCCovGaussianConditional(M = numpy.array([self.C]), 
+                                                                      b = numpy.array([self.d]), 
+                                                                      sigma_x = self.sigma_x,
+                                                                      U = self.U,
+                                                                      W = self.W,
+                                                                      beta = self.beta)
+        
