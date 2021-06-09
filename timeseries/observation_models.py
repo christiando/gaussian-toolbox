@@ -81,6 +81,15 @@ class LinearObservationModel(ObservationModel):
         self.Qx_inv, self.ln_det_Qx = self.emission_density.Lambda[0], self.emission_density.ln_det_Sigma[0]
         
     def pca_init(self, X: numpy.ndarray, smooth_window: int=10):
+        """ Sets the model parameters to an educated initial guess, based on principal component analysis.
+            More specifically `d` is set to the mean of the data and `C` to the first principal components 
+            of the (smoothed) data. The covariance `Qx` is set to the empirical covariance of the residuals.
+        
+        :param X: numpy.ndarray [T, Dx]
+            Data.
+        :param smoothed_window: int
+            Width of the box car filter data are smoothed with. (Default=10)
+        """
         self.d = numpy.mean(X, axis=0)
         T = X.shape[0]
         X_smoothed = numpy.empty(X.shape)
@@ -240,13 +249,16 @@ class LinearObservationModel(ObservationModel):
         self.Qx_inv, self.ln_det_Qx = self.emission_density.Lambda[0], self.emission_density.ln_det_Sigma[0]
         
         
-    def evaluate_llk(self, p_z: 'GaussianDensity', X: numpy.ndarray) -> numpy.ndarray:
+    def evaluate_llk(self, p_z: 'GaussianDensity', X: numpy.ndarray) -> float:
         """ Computes the log likelihood of data given distribution over latent variables.
         
         :param p_z: GaussianDensity
             Density over latent variables.
         :param X: numpy.ndarray [T, Dx]
             Observations.
+            
+        :return: float
+            Log likelihood.
         """
         T = X.shape[0]
         llk = 0
@@ -298,6 +310,17 @@ class HCCovObservationModel(LinearObservationModel):
         
         
     def pca_init(self, X: numpy.ndarray, smooth_window: int=10):
+        """ Sets the model parameters to an educated initial guess, based on principal component analysis.
+            More specifically `d` is set to the mean of the data and `C` to the first principal components 
+            of the (smoothed) data. 
+            Then `U` is initialized with the first pricinpal components of the empirical covariance of the 
+            residuals.
+        
+        :param X: numpy.ndarray [T, Dx]
+            Data.
+        :param smoothed_window: int
+            Width of the box car filter data are smoothed with. (Default=10)
+        """
         self.d = numpy.mean(X, axis=0)
         T = X.shape[0]
         X_smoothed = numpy.empty(X.shape)
@@ -335,59 +358,24 @@ class HCCovObservationModel(LinearObservationModel):
         self.update_U(smoothing_density, X)
         self.update_emission_density()
         
-    def update_parameters_sigma_beta_W(self, params):
-        self.sigma_x = numpy.exp(.5 * params[0])
-        self.beta = numpy.exp(params[1:self.Du + 1])
-        self.W = params[self.Du + 1:].reshape((self.Du, self.Dz + 1))
-        
-    def parameter_optimization_sigma_beta_W(self, params: numpy.ndarray, 
-                                          smoothing_density: 'GaussianDensity', 
-                                          X: numpy.ndarray):
-        T = X.shape[0]
-        self.update_parameters_sigma_beta_W(params)
-        dW = numpy.zeros(self.W.shape)
-        dln_beta = numpy.zeros(self.Du)
-        dlnsigma2_x = numpy.zeros(1)
-        phi = smoothing_density.slice(range(1,T+1))
-        # E[epsilon(z)^2]
-        mat = -self.C
-        vec = X - self.d
-        E_epsilon2 = numpy.sum(phi.integrate('Ax_aBx_b_inner', A_mat=mat, a_vec=vec, B_mat=mat, b_vec=vec), axis=0)
-        dlnsigma2_x += .5 * E_epsilon2 / self.sigma_x ** 2
-        # E[D_inv epsilon(z)^2(z)] & E[log(sigma^2 + f(h))]
-        E_D_inv_epsilon2 = 0
-        E_ln_sigma2_f = 0
-        for iu in range(self.Du):
-            uRu_i, log_lb_sum_i, dw_i, dln_beta_i, dlnsigma2_i  = self.get_lb_i(iu, phi, X, update='gradients')
-            E_D_inv_epsilon2 += uRu_i
-            E_ln_sigma2_f += log_lb_sum_i
-            dW[iu] = dw_i
-            dln_beta[iu] = dln_beta_i
-            dlnsigma2_x += dlnsigma2_i
-        # data part
-        Qm = -.5 * (E_epsilon2 - E_D_inv_epsilon2) / self.sigma_x ** 2
-        # determinant part
-        Qm -= .5 * E_ln_sigma2_f + .5 * T * (self.Dx - self.Du) * numpy.log(self.sigma_x ** 2)
-        # constant part
-        Qm -= T * self.Dx * numpy.log(2 * numpy.pi)
-        dlnsigma2_x -= .5 * T * (self.Dx - self.Du) #/ self.sigma_x ** 2
-        #print(numpy.array([dlnsigma2_x]).shape, dln_beta.shape)
-        gradients = numpy.concatenate([dlnsigma2_x, dln_beta, dW.flatten()])
-        return -Qm, -gradients
-        
-    def update_sigma_beta_W(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
-        x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
-        bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
-        objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds)
-        #print(result)
-        #if not result.success:
-        #    raise RuntimeError('Sigma, beta, W did not converge!!')
-        self.sigma_x = numpy.exp(.5*result.x[0])
-        self.beta = numpy.exp(result.x[1:self.Du + 1])
-        self.W = result.x[self.Du + 1:].reshape((self.Du, self.Dz+1))
+    def update_emission_density(self):
+        """ Updates the emission density.
+        """
+        self.emission_density = conditionals.HCCovGaussianConditional(M = numpy.array([self.C]), 
+                                                                      b = numpy.array([self.d]), 
+                                                                      sigma_x = self.sigma_x,
+                                                                      U = self.U,
+                                                                      W = self.W,
+                                                                      beta = self.beta)
         
     def update_C(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        """ Updates the `C` by maximizing the Q-function numerically (by L-BFGS-B).
+        
+        :param smoothing_density: GaussianDensity
+            The smoothing density obtained in the E-step.
+        :param X: numpy.ndarray [T, Dx]
+            Data.
+        """
         T = X.shape[0]
         C_old = numpy.copy(self.C)
         phi = smoothing_density.slice(range(1,T+1))
@@ -403,6 +391,8 @@ class HCCovObservationModel(LinearObservationModel):
         intD_inv_zx_d = numpy.einsum('abc,bd->adc', intD_inv_z, X - self.d)
         
         def Q_C_func(params: numpy.ndarray) -> (float, numpy.ndarray):
+            """ Function computing the terms of the (negative) Q-function that depend on `C` and the gradients.
+            """
             C = numpy.reshape(params, (self.Dx, self.Dz))
             tr_CEzx_d = numpy.trace(numpy.dot(C, Ezx_d))
             tr_CC_Ezz = numpy.trace(numpy.dot(numpy.dot(C.T, C), Ezz))
@@ -427,8 +417,15 @@ class HCCovObservationModel(LinearObservationModel):
             self.C = C_old
         else:
             self.C = result.x.reshape(self.Dx, self.Dz)
-    
+            
     def update_d(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        """ Updates the `d` by maximizing the Q-function analytically.
+        
+        :param smoothing_density: GaussianDensity
+            The smoothing density obtained in the E-step.
+        :param X: numpy.ndarray [T, Dx]
+            Data.
+        """
         T = X.shape[0]
         phi = smoothing_density.slice(range(1,T+1))
         intD_inv, intD_inv_z = numpy.zeros((self.Du, T)), numpy.zeros((self.Du, T, self.Dz))
@@ -445,8 +442,35 @@ class HCCovObservationModel(LinearObservationModel):
         UU_C_intDinv_z = numpy.sum(numpy.einsum('abc,ac->ab', UU, numpy.einsum('ab,cb->ca', self.C, numpy.sum(intD_inv_z,axis=1))), axis=0)
         b = sum_X - intDinv_X_UU - CEz + UU_C_intDinv_z
         self.d = numpy.linalg.solve(A,b)
+    
+        
+    def update_sigma_beta_W(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        """ Updates the `sigma_x`, `beta`, and `W` by maximizing the Q-function numerically (by L-BFGS-B).
+        
+        :param smoothing_density: GaussianDensity
+            The smoothing density obtained in the E-step.
+        :param X: numpy.ndarray [T, Dx]
+            Data.
+        """
+        x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
+        bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
+        objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds)
+        #print(result)
+        #if not result.success:
+        #    raise RuntimeError('Sigma, beta, W did not converge!!')
+        self.sigma_x = numpy.exp(.5*result.x[0])
+        self.beta = numpy.exp(result.x[1:self.Du + 1])
+        self.W = result.x[self.Du + 1:].reshape((self.Du, self.Dz+1))
         
     def update_U(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        """ Updates the `U` by maximizing the Q-function. One component at a time is updated analytically.
+        
+        :param smoothing_density: GaussianDensity
+            The smoothing density obtained in the E-step.
+        :param X: numpy.ndarray [T, Dx]
+            Data.
+        """
         converged = False
         T = X.shape[0]
         phi = smoothing_density.slice(range(1,T+1))
@@ -483,9 +507,77 @@ class HCCovObservationModel(LinearObservationModel):
             num_iter += 1
         if (Q_u - Q_u_old) < 0:
             self.U = U_old
+        
+    ####################### FUNCTIONS FOR OPTIMIZING sigma_x, beta, and W ################################################
+    def update_parameters_sigma_beta_W(self, params):
+        """ Mapping function from scipy-vector to model fields.
+        
+        :param params: numpy.ndarray [1+Du+Du*(Dz + 1)]
+            Parameters in vector form. (log(sigma_x), log(beta), W)
+        """
+        self.sigma_x = numpy.exp(.5 * params[0])
+        self.beta = numpy.exp(params[1:self.Du + 1])
+        self.W = params[self.Du + 1:].reshape((self.Du, self.Dz + 1))
+        
+    def parameter_optimization_sigma_beta_W(self, params: numpy.ndarray, 
+                                          smoothing_density: 'GaussianDensity', 
+                                          X: numpy.ndarray):
+        """ Computes (negative) Q-function (only terms depending on `sigma_x`, `beta`, and `W`) and the 
+        corresponding gradients.
+        
+        :param params: numpy.ndarray [1+Du+Du*(Dz + 1)]
+            Parameters in vector form. (log(sigma_x), log(beta), W)
+        :param smoothing_density: GaussianDensity
+            The smoothing density obtained in the E-step.
+        :param X: numpy.ndarray [T, Dx]
+            Data.
             
+        :return: (float, numpy.ndarray [1+Du+Du*(Dz + 1)])
+            Negative Q-function and gradients.
+        """
+        T = X.shape[0]
+        self.update_parameters_sigma_beta_W(params)
+        dW = numpy.zeros(self.W.shape)
+        dln_beta = numpy.zeros(self.Du)
+        dlnsigma2_x = numpy.zeros(1)
+        phi = smoothing_density.slice(range(1,T+1))
+        # E[epsilon(z)^2]
+        mat = -self.C
+        vec = X - self.d
+        E_epsilon2 = numpy.sum(phi.integrate('Ax_aBx_b_inner', A_mat=mat, a_vec=vec, B_mat=mat, b_vec=vec), axis=0)
+        dlnsigma2_x += .5 * E_epsilon2 / self.sigma_x ** 2
+        # E[D_inv epsilon(z)^2(z)] & E[log(sigma^2 + f(h))]
+        E_D_inv_epsilon2 = 0
+        E_ln_sigma2_f = 0
+        for iu in range(self.Du):
+            uRu_i, log_lb_sum_i, dw_i, dln_beta_i, dlnsigma2_i  = self.get_lb_i(iu, phi, X, update='sigma_beta_W')
+            E_D_inv_epsilon2 += uRu_i
+            E_ln_sigma2_f += log_lb_sum_i
+            dW[iu] = dw_i
+            dln_beta[iu] = dln_beta_i
+            dlnsigma2_x += dlnsigma2_i
+        # data part
+        Qm = -.5 * (E_epsilon2 - E_D_inv_epsilon2) / self.sigma_x ** 2
+        # determinant part
+        Qm -= .5 * E_ln_sigma2_f + .5 * T * (self.Dx - self.Du) * numpy.log(self.sigma_x ** 2)
+        # constant part
+        Qm -= T * self.Dx * numpy.log(2 * numpy.pi)
+        dlnsigma2_x -= .5 * T * (self.Dx - self.Du) #/ self.sigma_x ** 2
+        #print(numpy.array([dlnsigma2_x]).shape, dln_beta.shape)
+        gradients = numpy.concatenate([dlnsigma2_x, dln_beta, dW.flatten()])
+        return -Qm, -gradients
+        
+    ####################### FUNCTIONS FOR OPTIMIZING U ################################################        
     @staticmethod
     def gen_lin_ind_vecs(U):
+        """ Generates linearly independent vectors from U.
+        
+        :param U: numpy.ndarray [N,M]
+            Set of M vectors.
+        
+        :return: numpy.ndarray [N,N-M]
+            return N-M linear inpendent vectors.
+        """
         N, M = U.shape
         rand_vecs = numpy.random.rand(N, N - M)
         V_fixed = numpy.hstack([U, rand_vecs])
@@ -497,10 +589,28 @@ class HCCovObservationModel(LinearObservationModel):
     
     @staticmethod
     def proj(U, v):
+        """ Projects v on U.
+        
+            proj_U(v) = (vU)/|U| U'
+            
+        :param U: numpy.ndarray [N,M]
+            Set of M vectors.
+        :param v: numpy.ndarray [N]
+            Vector U is projected on.
+        
+        :return: numpy.ndarray [N]
+            Projection of v on U.
+        """
         return numpy.dot(numpy.dot(v, U) / numpy.linalg.norm(U, axis=0), U.T)
 
     def partial_gs(self, U):
-        """ Partial Gram-Schmidt process, to generate 
+        """ Partial Gram-Schmidt process, which generates orthonormal vectors (also to U).
+        
+        :param U: numpy.ndarray [N,M]
+            Set of M orthonormal vectors.
+            
+        :return: numpy.ndarray [N,N-M]
+            Orthonormal vectors (orthonormal to itself and U).
         """
         N, M = U.shape
         V = numpy.empty((N, N - M))
@@ -513,20 +623,69 @@ class HCCovObservationModel(LinearObservationModel):
             V[:,d] /= numpy.sqrt(numpy.sum(V[:,d] ** 2))  
         return V
     
-    ###### Functions for bounds #####
+    ####################### Functions for bounds of non tractable terms in the Q-function ################################################  
     def f(self, h, beta):
+        """ Computes the function
+            
+            f(h) = 2 * beta * cosh(h)
+            
+        :param h: numpy.ndarray
+            Activation functions.
+        :param beta: numpy.ndarray
+            Scaling factor.
+        
+        :return: numpy.ndarray
+            Evaluated functions.
+        """
         return 2 * beta * numpy.cosh(h)
     
     def f_prime(self, h, beta):
+        """ Computes the derivative of f
+            
+            f'(h) = 2 * beta * sinh(h)
+            
+        :param h: numpy.ndarray
+            Activation functions.
+        :param beta: numpy.ndarray
+            Scaling factor.
+        :return: numpy.ndarray
+            Evaluated derivative functions.
+        """
         return 2 * beta * numpy.sinh(h)
     
     def g(self, omega, beta):
+        """ Computes the function
+        
+            g(omega) = f'(omega) / (sigma_x^2 + f(omega)) / |omega|
+            
+            for the variational boind
+            
+        :param omega: numpy.ndarray
+            Free variational parameter.
+        :param beta: numpy.ndarray
+            Scaling factor.
+        """
         return self.f_prime(omega, beta) / (self.sigma_x ** 2 + self.f(omega, beta)) / numpy.abs(omega)
-                                      
-    def k(self, h, omega):
-        return numpy.log(self.sigma_x ** 2 + self.f(omega)) + .5 * self.g(omega) * (h ** 2 - omega ** 2)
         
     def get_lb_i(self, iu: int, phi: densities.GaussianDensity, X: numpy.ndarray, conv_crit: float=1e-4, update: str=None):
+        """ Computes the variational lower bounds for the log determinant and inverse term. In addition it provides terms, 
+        that are needed for updating different model parameters.
+        
+        :param iu: int
+            Index of the component the bound should be computed for.
+        :param phi: GaussianDensity
+            Density over latent variables.
+        :param X: numpy.ndarray [T, Dx]
+            Data.
+        :param conv_crit: float
+            When bounds are considered to be converged (max. change in omega, Default=1e-4).
+        :param update: str
+            Determines which additional terms should be provided. If None only the lower bounds for the inverse term and the log determinant are provided. If
+            `sigma_beta_W`, `C`, `d`, `U` terms that are required for updating the corresponding model parameters are provided. (Default=None)
+            
+        :return: tuple
+            Returns terms for lower bound or for its gradients.
+        """
         T = X.shape[0]
         w_i = self.W[iu:iu+1,1:]
         v = numpy.tile(w_i, (T, 1))
@@ -590,7 +749,7 @@ class HCCovObservationModel(LinearObservationModel):
         R = R_plus + R_minus
         uRu = numpy.sum(u_i * numpy.dot(numpy.sum(R, axis=0), u_i))
         log_lb_sum = numpy.sum(log_lb)
-        if update == 'gradients':
+        if update == 'sigma_beta_W':
             uRu = numpy.sum(u_i * numpy.dot(numpy.sum(R, axis=0), u_i))
             ##### w_i gradiend ######################################################################
             # E[f'(h)exp(-k(h,omega^*)) dh/dw (u'epsilon(z))^2]
@@ -648,15 +807,4 @@ class HCCovObservationModel(LinearObservationModel):
             return numpy.sum(R, axis=0)
         else:
             return uRu, log_lb_sum
-        
-        
-    def update_emission_density(self):
-        """ Updates the emission density.
-        """
-        self.emission_density = conditionals.HCCovGaussianConditional(M = numpy.array([self.C]), 
-                                                                      b = numpy.array([self.d]), 
-                                                                      sigma_x = self.sigma_x,
-                                                                      U = self.U,
-                                                                      W = self.W,
-                                                                      beta = self.beta)
         
