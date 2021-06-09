@@ -377,9 +377,12 @@ class LSEMStateModel(LinearStateModel):
         Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
         AEffA = numpy.dot(numpy.dot(self.A, Eff), self.A.T)
         self.Qz = (Ezz_sum - EzfA - EzfA.T + AEffA - Ezb - Ezb.T + AEfb + AEfb.T + T * self.b[:,None] * self.b[None]) / T
-        # To make it stable
-        self.Qz += 1e-4 * numpy.eye(self.Dz)
-        
+        # To make it stable (TO CHECK!!!)
+        eigvals, eigvecs = numpy.linalg.eig(self.Qz)
+        if any(eigvals <= 0):
+            print('Warning: Qz not positive definite. Negative eigenvalues are set to small positive ones!')
+        eigvals[eigvals < 0] = 1e-10
+        self.Qz = numpy.dot(eigvecs, numpy.dot(numpy.diag(eigvals), numpy.linalg.inv(eigvecs)))
     
     def _Wfunc(self, W, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity') -> (float, numpy.ndarray):
         """ Computes the parts of the (negative) Q-fub
