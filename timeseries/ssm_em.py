@@ -1,3 +1,14 @@
+##################################################################################################
+# This file is part of the Gaussian Toolbox,                                                     #
+#                                                                                                #
+# It contains the class to fit state space models (SSMs) with the expectation-maximization       #
+# algorithm.                                                                                     #
+#                                                                                                #
+# Author: Christian Donner                                                                       #
+##################################################################################################
+
+__author__ = "Christian Donner"
+
 from autograd import numpy
 import observation_models, state_models
 import sys

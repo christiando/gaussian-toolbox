@@ -1,3 +1,23 @@
+##################################################################################################
+# This file is part of the Gaussian Toolbox.                                                     #
+#                                                                                                #
+# It contains the class to fit observation models that can be incroporated in the SSM-framwork.  #
+#                                                                                                #
+# Implemented so far:                                                                            #
+#       + LinearObservationModel (Gaussian Emission)                                             #
+#       + HCCovObservationModel (Gaussian Emission with state dependent covariance)              #
+# Yet to be implemented:                                                                         #
+#       - LSEMObservationModel (Gaussian Emission with non linear mean)                          #
+#       - HCCovLSEMObservationModel (Gaussian Emission with non linear mean and state dependent  #
+#                                    covariance)                                                 #
+#       - BernoulliObservationModel (Emissions for binary data)                                  #
+#       - PoissonObservationModel (Emissions for count data)                                     #
+#                                                                                                #
+# Author: Christian Donner                                                                       #
+##################################################################################################
+
+__author__ = "Christian Donner"
+
 import scipy
 from scipy.optimize import minimize
 from autograd import numpy

@@ -1,3 +1,20 @@
+##################################################################################################
+# This file is part of the Gaussian Toolbox.                                                     #
+#                                                                                                #
+# It contains the class to fit state models that can be incroporated in the SSM-framwork.        #
+#                                                                                                #
+# Implemented so far:                                                                            #
+#       + LinearStateModel (Gaussian Transition)                                                 #
+#       + LSEMStateModel (Gaussian Transition with non linear mean)                              #
+# Yet to be implemented:                                                                         #
+#       - ControlledLinearStateModel (Gaussian Transition, with mean and covariance dependent on #
+#                                     control variables)                                         #
+#                                                                                                #
+# Author: Christian Donner                                                                       #
+##################################################################################################
+
+__author__ = "Christian Donner"
+
 from autograd import numpy
 from autograd import value_and_grad
 from scipy.optimize import minimize
