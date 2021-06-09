@@ -377,6 +377,8 @@ class LSEMStateModel(LinearStateModel):
         Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
         AEffA = numpy.dot(numpy.dot(self.A, Eff), self.A.T)
         self.Qz = (Ezz_sum - EzfA - EzfA.T + AEffA - Ezb - Ezb.T + AEfb + AEfb.T + T * self.b[:,None] * self.b[None]) / T
+        # To make it stable
+        self.Qz += 1e-4 * numpy.eye(self.Dz)
         
     
     def _Wfunc(self, W, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity') -> (float, numpy.ndarray):
