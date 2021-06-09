@@ -41,6 +41,18 @@ class ObservationModel:
             The observations.
         """  
         raise NotImplementedError('Hyperparameter updates for observation model not implemented.')
+        
+    
+    def evalutate_llk(self, p_z: 'GaussianDensity', X: numpy.ndarray) -> numpy.ndarray:
+        """ Computes the log likelihood of data given distribution over latent variables.
+        
+        :param p_z: GaussianDensity
+            Density over latent variables.
+        :param X: numpy.ndarray [T, Dx]
+            Observations.
+        """
+        raise NotImplementedError('Log likelihood not implemented for observation model.')
+        
 
 class LinearObservationModel(ObservationModel):
     
@@ -92,7 +104,7 @@ class LinearObservationModel(ObservationModel):
         :param prediction_density: GaussianDensity
             Prediction density p(z_t|x_{1:t-1}).
         :param x_t: numpy.ndarray [1, Dx]
-        
+            Observation.
         :return: GaussianDensity
             Filter density p(z_t|x_{1:t}).
         """
@@ -101,6 +113,67 @@ class LinearObservationModel(ObservationModel):
         # Condition on x_t
         cur_filter_density = p_z_given_x.condition_on_x(x_t)
         return cur_filter_density
+    
+    def gappy_filtering(self, prediction_density: 'GaussianDensity', x_t: numpy.ndarray) -> 'GaussianDensity':
+        """ Here the filtering density is calculated for incomplete data. Not observed values should be nans.
+        
+        p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
+        
+        :param prediction_density: GaussianDensity
+            Prediction density p(z_t|x_{1:t-1}).
+        :param x_t: numpy.ndarray [1, Dx]
+            Observation, where unobserved dimensions are filled with NANs.
+        :return: GaussianDensity
+            Filter density p(z_t|x_{1:t}).
+        """
+        # In case all data are unobserved
+        if numpy.alltrue(numpy.isnan(x_t[0])):
+            return prediction_density
+        # In case all data are observed
+        elif numpy.alltrue(numpy.logical_not(numpy.isnan(x_t[0]))):
+            cur_filter_density = self.filtering(prediction_density, x_t)
+            return cur_filter_density
+        # In case we have only partial observations
+        else:
+            observed_dims = numpy.where(numpy.logical_not(numpy.isnan(x_t[0])))[0]
+            # p(z_t, x_t| x_{1:t-1})
+            p_zx = self.emission_density.affine_joint_transformation(prediction_density)
+            # p(z_t, x_t (observed) | x_{1:t-1})
+            marginal_dims = numpy.concatenate([numpy.arange(self.Dz), self.Dz + observed_dims])
+            p_zx_observed = p_zx.get_marginal(marginal_dims)
+            # p(z_t | x_t (observed), x_{1:t-1})
+            conditional_dims = numpy.arange(self.Dz,self.Dz + len(observed_dims))
+            p_z_given_x_observed = p_zx_observed.condition_on(conditional_dims)
+            cur_filter_density = p_z_given_x_observed.condition_on_x(x_t[:,observed_dims])
+            return cur_filter_density
+        
+    def gappy_data_density(self, p_z: 'GaussianDensity', x_t: numpy.ndarray):
+        """ Here the data density is calculated for incomplete data. Not observed values should be nans.
+        
+         p(x_t) = p(x_t|z_t)p(z_t) dz_t
+        
+        :param prediction_density: GaussianDensity
+            Prediction density p(z_t|x_{1:t-1}).
+        :param x_t: numpy.ndarray [1, Dx]
+            Observation, where unobserved dimensions are filled with NANs.
+        :return: (numpy.ndarray, numpy.ndarray)
+            Mean and variance of unobserved entries.
+        """
+        # In case all data are unobserved
+        if numpy.alltrue(numpy.isnan(x_t[0])):
+            p_x = self.emission_density.affine_marginal_transformation(p_z)
+            return p_x.mu[0], numpy.sqrt(p_x.Sigma[0].diagonal(axis1=-1, axis2=-2))
+        # In case all data are observed
+        elif numpy.alltrue(numpy.logical_not(numpy.isnan(x_t[0]))):
+            return numpy.array([]), numpy.array([])
+        # In case we have only partial observations
+        else:
+            observed_dims = numpy.where(numpy.logical_not(numpy.isnan(x_t[0])))[0]
+            # Density over unobserved variables
+            p_x = self.emission_density.affine_marginal_transformation(p_z)
+            p_ux_given_ox = p_x.condition_on(observed_dims)
+            p_ux = p_ux_given_ox.condition_on_x(x_t[:,observed_dims])
+            return p_ux.mu[0], numpy.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))
     
     def update_hyperparameters(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
         """ This procedure updates the hyperparameters of the observation model.
@@ -165,6 +238,23 @@ class LinearObservationModel(ObservationModel):
                                                                         numpy.array([self.d]),
                                                                         numpy.array([self.Qx]))
         self.Qx_inv, self.ln_det_Qx = self.emission_density.Lambda[0], self.emission_density.ln_det_Sigma[0]
+        
+        
+    def evaluate_llk(self, p_z: 'GaussianDensity', X: numpy.ndarray) -> numpy.ndarray:
+        """ Computes the log likelihood of data given distribution over latent variables.
+        
+        :param p_z: GaussianDensity
+            Density over latent variables.
+        :param X: numpy.ndarray [T, Dx]
+            Observations.
+        """
+        T = X.shape[0]
+        llk = 0
+        p_x = self.emission_density.affine_marginal_transformation(p_z)
+        for t in range(1,T):
+            cur_p_x = p_x.slice([t-1])
+            llk += cur_p_x.evaluate_ln(X[t:t+1])[0,0]
+        return llk
         
         
         

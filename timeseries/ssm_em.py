@@ -9,6 +9,19 @@ class StateSpaceEM:
     
     def __init__(self, X: numpy.ndarray, observation_model: observation_models.ObservationModel, 
                  state_model: state_models.StateModel, max_iter: int=100, conv_crit: float=1e-4):
+        """ Class to fit a state space model with the expectation-maximization procedure.
+        
+        :param X: numpy.ndarray [T, Dx]
+            Training data.
+        :param observation_model: ObservationModel
+            The observation model of the data.
+        :param state_model: StateModel
+            The state model for the latent variables.
+        :param max_iter: int
+            Maximal number of EM iteration performed. (Default=100)
+        :param conv_crit: float
+            Convergence criterion for the EM procedure.
+        """
         self.X = X
         self.T, self.Dx = self.X.shape
         self.Dz = state_model.Dz
@@ -21,24 +34,29 @@ class StateSpaceEM:
         self.iteration = 0
         self.llk_list = []
         # Setup densities
-        self.prediction_density = self._setup_density()
-        self.filter_density = self._setup_density()
-        self.smoothing_density = self._setup_density()
-        self.twostep_smoothing_density = self._setup_density(D= int(2*self.Dz))
-        self.twostep_smoothing_density = self.twostep_smoothing_density.slice(range(self.T))
+        self.prediction_density = self._setup_density(T=self.T + 1)
+        self.filter_density = self._setup_density(T=self.T + 1)
+        self.smoothing_density = self._setup_density(T=self.T + 1)
+        self.twostep_smoothing_density = self._setup_density(D=int(2*self.Dz))
+        #self.twostep_smoothing_density = self.twostep_smoothing_density.slice(range(self.T))
         
-    def _setup_density(self, D: int=None) -> densities.GaussianDensity:
+    def _setup_density(self, D: int=None, T: int=None) -> densities.GaussianDensity:
         """ Initializes a density object (with uniform densities).
         """
         if D is None:
             D = self.Dz
-        Sigma = numpy.tile(numpy.eye(D)[None], (self.T+1,1,1))
-        Lambda = numpy.tile(numpy.eye(D)[None], (self.T+1,1,1))
-        mu = numpy.zeros((self.T + 1, D))
-        ln_det_Sigma = D * numpy.log(numpy.ones(self.T+1))
+        if T is None:
+            T = self.T
+        Sigma = numpy.tile(numpy.eye(D)[None], (T,1,1))
+        Lambda = numpy.tile(numpy.eye(D)[None], (T,1,1))
+        mu = numpy.zeros((T, D))
+        ln_det_Sigma = D * numpy.log(numpy.ones(T))
         return densities.GaussianDensity(Sigma, mu, Lambda, ln_det_Sigma)
         
     def run(self):
+        """ Runs the expectation-maximization algorithm, until converged 
+            or maximal number of iterations is reached.
+        """
         converged = False
         while self.iteration < self.max_iter and not converged:
             self.estep()
@@ -106,14 +124,102 @@ class StateSpaceEM:
         $$
         \ell = \sum_t \ln p(x_t|x_{1:t-1}).
         $$
+        
+        :return: float
+            Data log likelihood.
         """
-        llk = 0
-        px = self.om.emission_density.affine_marginal_transformation(self.prediction_density)
-        for t in range(1,self.T+1):
-            cur_px = px.slice([t])
-            llk += cur_px.evaluate_ln(self.X[t-1:t])[0,0]
-        return llk
+        p_z = self.prediction_density.slice(range(1,self.T+1))
+        return self.om.evaluate_llk(p_z, self.X)
     
+    def compute_predictive_log_likelihood(self, X: numpy.ndarray, p0: 'GaussianDensity'=None):
+        """ Computes the likelihood for given data X.
+        
+        :param X: numpy.ndarray [T, Dx]
+            Data for which likelihood is computed.
+        :param p0: GaussianDensity
+            Density for the initial latent state. If None, the initial density 
+            of the training data is taken. (Default=None)
+            
+        :return: float
+            Data log likelihood.
+        """
+        T = X.shape[0]
+        if p0 is None:
+            p0 = self.filter_density.slice([0])
+        prediction_density = self._setup_density(T=T+1)
+        filter_density = self._setup_density(T=T+1)
+        filter_density.update([0], p0)
+        for t in range(1, T+1):
+            # Filter
+            pre_filter_density = filter_density.slice([t-1])
+            cur_prediction_density = self.sm.prediction(pre_filter_density)
+            prediction_density.update([t], cur_prediction_density)
+            cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t])
+        p_z = prediction_density.slice(range(1,self.T+1))
+        return self.om.evaluate_llk(p_z, X)
+    
+    def predict(self, X:numpy.ndarray, p0: 'GaussianDensity'=None, smoothed:bool=False):
+        """ Obtains predictions for data.
+        
+        :param X: numpy.ndarray [T, Dx]
+            Data for which predictions are computed. Non observed values are NaN.
+        :param p0: GaussianDensity
+            Density for the initial latent state. If None, the initial density 
+            of the training data is taken. (Default=None)
+        :param smoothed: bool
+            Uses the smoothed density for prediction. (Default=False)
+        
+        :return: (GaussianDensity, numpy.ndarray [T, Dx], numpy.ndarray [T, Dx])
+            Filter/smoothed density, mean, and standard deviation of predictions. Mean 
+            is equal to the data and std equal to 0 for entries, where data is observed.
+        """
+        T = X.shape[0]
+        if p0 is None:
+            p0 = self.filter_density.slice([0])
+        prediction_density = self._setup_density(T=T+1)
+        filter_density = self._setup_density(T=T+1)
+        filter_density.update([0], p0)
+        mu_unobserved = numpy.copy(X)
+        std_unobserved = numpy.zeros(X.shape)
+        # Filtering
+        for t in range(1, T+1):
+            # Filter
+            pre_filter_density = filter_density.slice([t-1])
+            cur_prediction_density = self.sm.prediction(pre_filter_density)
+            prediction_density.update([t], cur_prediction_density)
+            cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t-1:t])
+            filter_density.update([t], cur_filter_density)
+            # Get density of unobserved data
+            if not smoothed:
+                mu_ux, std_ux = self.om.gappy_data_density(cur_prediction_density, X[t-1:t])
+                mu_unobserved[t-1, numpy.isnan(X[t-1])] = mu_ux
+                std_unobserved[t-1, numpy.isnan(X[t-1])] = std_ux
+        if not smoothed:
+            return filter_density, mu_unobserved, std_unobserved
+        # Smoothing
+        else:
+            # Initialize smoothing
+            smoothing_density = self._setup_density(T=T+1)
+            smoothing_density.update([T], filter_density.slice([T]))
+            for t in numpy.arange(self.T-1,-1,-1):
+                # Smoothing step
+                cur_filter_density = filter_density.slice([t])
+                post_smoothing_density = smoothing_density.slice([t+1])
+                cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(cur_filter_density, 
+                                                                                          post_smoothing_density)
+                smoothing_density.update([t], cur_smoothing_density)
+                # Get density of unobserved data
+                mu_ux, std_ux = self.om.gappy_data_density(cur_smoothing_density, X[t:t+1])
+                mu_unobserved[t, numpy.isnan(X[t])] = mu_ux
+                std_unobserved[t, numpy.isnan(X[t])] = std_ux
+            return smoothing_density, mu_unobserved, std_unobserved
+            
+            
     def compute_data_density(self) -> densities.GaussianDensity:
+        """ Computes the data density for the training data, given the prediction density.
+        
+        :return: GaussianDensity
+            Data density.
+        """
         px = self.om.emission_density.affine_marginal_transformation(self.prediction_density)
         return px.slice(numpy.arange(1, self.T+1))
