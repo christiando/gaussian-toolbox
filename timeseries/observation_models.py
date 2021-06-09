@@ -1,7 +1,6 @@
-#import numpy, scipy
 import scipy
 from scipy.optimize import minimize
-import autograd.numpy as numpy
+from autograd import numpy
 import sys
 sys.path.append('../src/')
 import densities, conditionals, factors

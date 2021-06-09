@@ -11,7 +11,7 @@ __author__ = "Christian Donner"
 
 #import numpy
 #from densities import GaussianDensity
-import autograd.numpy as numpy
+from autograd import numpy
 import factors
 
 class ConditionalGaussianDensity:

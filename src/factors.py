@@ -8,8 +8,7 @@
 ##################################################################################################
 __author__ = "Christian Donner"
 
-#import numpy
-import autograd.numpy as numpy
+from autograd import numpy
 
 class ConjugateFactor:
     

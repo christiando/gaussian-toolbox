@@ -1,6 +1,5 @@
-import autograd.numpy as numpy
+from autograd import numpy
 from autograd import value_and_grad
-#import numpy
 from scipy.optimize import minimize
 import sys
 sys.path.append('../src/')

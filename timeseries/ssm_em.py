@@ -1,5 +1,4 @@
-#import numpy
-import autograd.numpy as numpy
+from autograd import numpy
 import observation_models, state_models
 import sys
 sys.path.append('../src/')

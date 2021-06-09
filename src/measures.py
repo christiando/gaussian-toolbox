@@ -8,10 +8,8 @@
 
 __author__ = "Christian Donner"
 
-#import numpy
-import autograd.numpy as numpy
+from autograd import numpy
 import factors
-#from scipy.special import logsumexp
 from autograd.scipy.special import logsumexp
 
 class GaussianMixtureMeasure:
