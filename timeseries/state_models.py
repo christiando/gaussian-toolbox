@@ -217,6 +217,10 @@ class LinearStateModel(StateModel):
         AEzzA = numpy.sum(numpy.einsum('abc,cd->abd', numpy.einsum('ab,cbd->cad', self.A, 
                                                                    Ezz[:-1]), self.A.T), axis=0)
         self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T) / T
+        eigvals, eigvecs = numpy.linalg.eig(self.Qz)
+        if any(eigvals <= 0):
+            print('Warning: Qz not positive definite. Small diagonal is added!')
+            self.Qz += 1e-4 * numpy.eye(self.Dz) 
         
     def update_state_density(self):
         """ Updates the state density.
