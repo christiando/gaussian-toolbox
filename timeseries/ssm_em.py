@@ -165,6 +165,7 @@ class StateSpaceEM:
             cur_prediction_density = self.sm.prediction(pre_filter_density)
             prediction_density.update([t], cur_prediction_density)
             cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t])
+            filter_density.update([t], cur_filter_density)
         p_z = prediction_density.slice(range(1,self.T+1))
         return self.om.evaluate_llk(p_z, X)
     
