@@ -123,6 +123,10 @@ class LinearObservationModel(ObservationModel):
         z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
         self.Qx = numpy.dot(delta_X.T, delta_X)
+        self.emission_density = conditionals.ConditionalGaussianDensity(numpy.array([self.C]), 
+                                                                        numpy.array([self.d]), 
+                                                                        numpy.array([self.Qx]))
+        self.Qx_inv, self.ln_det_Qx = self.emission_density.Lambda[0], self.emission_density.ln_det_Sigma[0]
         
     def filtering(self, prediction_density: 'GaussianDensity', x_t: numpy.ndarray) -> 'GaussianDensity':
         """ Here the filtering density is calculated.
