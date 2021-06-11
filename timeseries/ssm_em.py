@@ -212,7 +212,7 @@ class StateSpaceEM:
             # Initialize smoothing
             smoothing_density = self._setup_density(T=T+1)
             smoothing_density.update([T], filter_density.slice([T]))
-            for t in numpy.arange(self.T-1,-1,-1):
+            for t in numpy.arange(T-1,-1,-1):
                 # Smoothing step
                 cur_filter_density = filter_density.slice([t])
                 post_smoothing_density = smoothing_density.slice([t+1])
