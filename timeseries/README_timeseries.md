@@ -2,7 +2,7 @@
 
 ## State-space models
 
-State space models (SSMs) are latent variable models for time-series data, where the latent space is continuous and dictates the dynamics of the observation. Here, we consider some (not exhaustive) SSMs, where the latent variables follow a first order Markov process. A state-space model always consists of a _state model_ determining the stochastic dynamics in the latent space $\mathbf{z}_t\in \mathbb{R}^{D_z}$, and an _observation model_, dictating the conditional distribution of the observation the observation $\mathbf{x}_t$, i.e. $p(\mathbf{x}_t\vert\mathbf{z}_t)$. Implementations can be found in `state_model.py` and `observation_models.py`, respectively. With one instance of each, the Expectation-Maximization (EM) algorithm in `ssm_em.py` can be invoked, to infer the model parameters given timeseries data.
+State space models (SSMs) are latent variable models for time-series data, where the latent space is continuous and dictates the dynamics of the observation. Here, we consider some (not exhaustive) SSMs, where the latent variables follow a first order Markov process. A state-space model always consists of a _state model_ determining the stochastic dynamics in the latent space $\mathbf{z}_t\in \mathbb{R}^{D_z}$, and an _observation model_, dictating the conditional distribution of the observation the observation $\mathbf{x}_t$, i.e. $p(\mathbf{x}_t\vert\mathbf{z}_t)$. Implementations can be found in `state_model.py` and `observation_models.py`, respectively. With one instance of each, the Expectation-Maximization (EM) algorithm in [`ssm_em.py`](ssm_em.py) can be invoked, to infer the model parameters given timeseries data.
 
 ### State models
 
@@ -40,9 +40,8 @@ with $zeta_t ~ N(0,\Sigma_z)$. The feature function is
 f(\mathbf{z}) = (z_0, z_1,...,z_m, k(h_1(\mathbf{z}))),...,k(h_n(\mathbf{z}))).
 ```
 The kernel and linear activation function are given by
-```math
-k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
-```
+$k(h) = exp(-h^2 / 2)$ and $h_i(x) = w_i'x + w_{i,0}$.
+
 The parameters that need to be inferred are $A, b, \Sigma_z, W$, where $W$ are all the kernel weights.
 
 ### Observation models
