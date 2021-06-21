@@ -25,9 +25,9 @@ This is a dummy class, to show what functions a state model needs to provide, su
 
 This is a linear state transition model   
 ```math
-\mathbf{z}_t = A \mathbf{z}_{t-1} + \mathbf{b} + zeta_t,
+\mathbf{z}_t = A \mathbf{z}_{t-1} + \mathbf{b} + \zeta_t,
 ```
-with $`zeta_t ~ N(0,\Sigma_z)`$. The parameters that need to be inferred are $`A, b, \Sigma_z`$.
+with $`\zeta_t \sim N(0,\Sigma_z)`$. The parameters that need to be inferred are $`A, b, \Sigma_z`$.
 
 #### `LSEMStateModel`
 
@@ -35,7 +35,7 @@ This implements a linear+squared exponential mean (LSEM) state model
 ```math
 \mathbf{z}_t = A f(\mathbf{z}_{t-1}) + b + zeta_t,
 ```
-with $`zeta_t ~ N(0,\Sigma_z)`$. The feature function is 
+with $`zeta_t \sim N(0,\Sigma_z)`$. The feature function is 
 ```math
 f(\mathbf{z}) = (z_0, z_1,...,z_m, k(h_1(\mathbf{z}))),...,k(h_n(\mathbf{z}))).
 ```
@@ -57,7 +57,7 @@ This class is a linear observation model, where the observations are generated a
 ```math
 \mathbf{x}_t = C \mathbf{z}_t + \mathbf{d} + \xi_t 
 ```
-with $`\xi_t ~ N(0,\Sigma_x)`$. Parameters to be inferred are $`C, \mathbf{d}, \Sigma_x`$.
+with $`\xi_t \sim N(0,\Sigma_x)`$. Parameters to be inferred are $`C, \mathbf{d}, \Sigma_x`$.
 
 #### `HCCovObservationModel`
 
@@ -66,12 +66,12 @@ This class is a heteroscedastic observation model, where the observations are ge
 ```math
 \mathbf{x}_t = C \mathbf{z}_t + \mathbf{d} + \xi_t.
 ```
-with  $`\xi_t ~ N(0,\Sigma_x(\mathbf{z}_t))`$. The covariance observationsmatrix is given by
+with  $`\xi_t \sim N(0,\Sigma_x(\mathbf{z}_t))`$. The covariance observationsmatrix is given by
 ```math
 \Sigma_x(\mathbf{z}) = sigma_x^2 I + \sum_i U_i D_i(z) U_i',
 ```
 with $`D_i(z) = 2 * beta_i * cosh(h_i(z))`$ and $`h_i(z) = w_i'z + b_i`$. Furthermore, $`U_i^\top U_j=\delta_{ij}`$.
-Parameters to be inferred are $??C, \mathbf{d}, \sigma_x, U, \beta, W, b`$.
+Parameters to be inferred are $`C, \mathbf{d}, \sigma_x, U, \beta, W, b`$.
 
 ## Hidden Markov models
 
