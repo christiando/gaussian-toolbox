@@ -70,7 +70,7 @@ with  $`\xi_t \sim N(0,\Sigma_x(\mathbf{z}_t))`$. The covariance observationsmat
 ```math
 \Sigma_x(\mathbf{z}) = \sigma_x^2 I + \sum_i U_i D_i(z) U_i',
 ```
-with $`D_i(z) = 2 * beta_i * \cosh(h_i(z))`$ and $`h_i(z) = w_i'z + b_i`$. Furthermore, $`U_i^\top U_j=\delta_{ij}`$.
+with $`D_i(z) = 2 * \beta_i * \cosh(h_i(z))`$ and $`h_i(z) = w_i'z + b_i`$. Furthermore, $`U_i^\top U_j=\delta_{ij}`$.
 Parameters to be inferred are $`C, \mathbf{d}, \sigma_x, U, \beta, W, b`$.
 
 ### Example
@@ -104,7 +104,7 @@ ssm_em = StateSpaceEM(X, observation_model=om, state_model=sm)
 ssm_em.run()
 ```
 
-For and example notebook check [here](../notebooks/timeseries/SSMExamples.ipynb)
+For an example notebook check [here](../notebooks/timeseries/SSMExamples.ipynb).
 
 ## Hidden Markov models
 
