@@ -68,10 +68,43 @@ This class is a heteroscedastic observation model, where the observations are ge
 ```
 with  $`\xi_t \sim N(0,\Sigma_x(\mathbf{z}_t))`$. The covariance observationsmatrix is given by
 ```math
-\Sigma_x(\mathbf{z}) = sigma_x^2 I + \sum_i U_i D_i(z) U_i',
+\Sigma_x(\mathbf{z}) = \sigma_x^2 I + \sum_i U_i D_i(z) U_i',
 ```
 with $`D_i(z) = 2 * beta_i * \cosh(h_i(z))`$ and $`h_i(z) = w_i'z + b_i`$. Furthermore, $`U_i^\top U_j=\delta_{ij}`$.
 Parameters to be inferred are $`C, \mathbf{d}, \sigma_x, U, \beta, W, b`$.
+
+### Example
+
+```python
+import numpy
+import observation_models
+import state_models
+from ssm_em import StateSpaceEM
+
+# Generate or load some timeseries data
+T = 1000
+trange = numpy.arange(T)
+Dx = 3
+Dz = 3
+X = numpy.empty((T,Dx))
+X[:,0] = numpy.sin(trange / 20)
+X[:,1] = numpy.sin(trange / 10)
+X[:,2] = numpy.sin(trange / 5)
+noise_x = .2
+noise_z = .1
+X += noise_x * numpy.random.randn(*X.shape)
+
+# Instantiate a state model
+sm = state_models.LinearStateModel(Dz, noise_z)
+# Instantiate an observation model and initialize paramters
+om = observation_models.LinearObservationModel(Dx, Dz, noise_x)
+om.pca_init(X)
+# Create SSM object and run em.
+ssm_em = StateSpaceEM(X, observation_model=om, state_model=sm)
+ssm_em.run()
+```
+
+For and example notebook check [here](../notebooks/timeseries/SSMExamples.ipynb)
 
 ## Hidden Markov models
 
