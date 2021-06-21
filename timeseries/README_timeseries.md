@@ -11,7 +11,7 @@ The state models that are considered here, have the form
 ```math
 \mathbf{z}_t = f_t(\mathbf{z}_{t-1}) + \zeta_t,
 ```
-where $`\zeta_t ~ N(0,\Sigma_z(t))`$, i.e. the transition probability is normal
+where $`\zeta_t \sim N(0,\Sigma_z(t))`$, i.e. the transition probability is normal
 
 ```math
 p(\mathbf{z}_t\vert \mathbf{z}_{t-1}) = N(f_t(\mathbf{z}_{t-1}),\Sigma_z(t)).
@@ -33,14 +33,14 @@ with $`\zeta_t \sim N(0,\Sigma_z)`$. The parameters that need to be inferred are
 
 This implements a linear+squared exponential mean (LSEM) state model     
 ```math
-\mathbf{z}_t = A f(\mathbf{z}_{t-1}) + b + zeta_t,
+\mathbf{z}_t = A f(\mathbf{z}_{t-1}) + b + \zeta_t,
 ```
 with $`zeta_t \sim N(0,\Sigma_z)`$. The feature function is 
 ```math
 f(\mathbf{z}) = (z_0, z_1,...,z_m, k(h_1(\mathbf{z}))),...,k(h_n(\mathbf{z}))).
 ```
 The kernel and linear activation function are given by
-$`k(h) = exp(-h^2 / 2)`$ and $`h_i(x) = w_i'x + w_{i,0}`$.
+$`k(h) = \exp(-h^2 / 2)`$ and $`h_i(x) = w_i'x + w_{i,0}`$.
 
 The parameters that need to be inferred are $`A, b, \Sigma_z, W`$, where $`W`$ are all the kernel weights.
 
@@ -70,7 +70,7 @@ with  $`\xi_t \sim N(0,\Sigma_x(\mathbf{z}_t))`$. The covariance observationsmat
 ```math
 \Sigma_x(\mathbf{z}) = sigma_x^2 I + \sum_i U_i D_i(z) U_i',
 ```
-with $`D_i(z) = 2 * beta_i * cosh(h_i(z))`$ and $`h_i(z) = w_i'z + b_i`$. Furthermore, $`U_i^\top U_j=\delta_{ij}`$.
+with $`D_i(z) = 2 * beta_i * \cosh(h_i(z))`$ and $`h_i(z) = w_i'z + b_i`$. Furthermore, $`U_i^\top U_j=\delta_{ij}`$.
 Parameters to be inferred are $`C, \mathbf{d}, \sigma_x, U, \beta, W, b`$.
 
 ## Hidden Markov models
