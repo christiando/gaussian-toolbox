@@ -18,7 +18,8 @@ import densities
 class StateSpaceEM:
     
     def __init__(self, X: numpy.ndarray, observation_model: observation_models.ObservationModel, 
-                 state_model: state_models.StateModel, max_iter: int=100, conv_crit: float=1e-4):
+                 state_model: state_models.StateModel, max_iter: int=100, conv_crit: float=1e-4,
+                 u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
         """ Class to fit a state space model with the expectation-maximization procedure.
         
         :param X: numpy.ndarray [T, Dx]
@@ -34,6 +35,7 @@ class StateSpaceEM:
         """
         self.X = X
         self.T, self.Dx = self.X.shape
+        self.u_x, self.u_z = u_x, u_z
         self.Dz = state_model.Dz
         # observation model
         self.om = observation_model
@@ -109,9 +111,17 @@ class StateSpaceEM:
         """
         for t in range(1, self.T+1):
             pre_filter_density = self.filter_density.slice([t-1])
-            cur_prediction_density = self.sm.prediction(pre_filter_density)
+            if self.u_z is not None:
+                uz_t = self.u_z[t-1:t]
+            else:
+                uz_t = None
+            cur_prediction_density = self.sm.prediction(pre_filter_density, u_t=uz_t)
             self.prediction_density.update([t], cur_prediction_density)
-            cur_filter_density = self.om.filtering(cur_prediction_density, self.X[t-1:t])
+            if self.u_x is not None:
+                ux_t = self.u_x[t-1:t]
+            else:
+                ux_t = None
+            cur_filter_density = self.om.filtering(cur_prediction_density, self.X[t-1:t], u_t=ux_t)
             self.filter_density.update([t], cur_filter_density)
         
     def backward_path(self):
@@ -123,14 +133,19 @@ class StateSpaceEM:
         for t in numpy.arange(self.T-1,-1,-1):
             cur_filter_density = self.filter_density.slice([t])
             post_smoothing_density = self.smoothing_density.slice([t+1])
-            cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(cur_filter_density, 
-                                                                                   post_smoothing_density)
+            if self.u_z is not None:
+                uz_t = self.u_z[t-1:t]
+            else:
+                uz_t = None
+            cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(cur_filter_density,
+                                                                                      post_smoothing_density,
+                                                                                      u_t=uz_t)
             self.smoothing_density.update([t], cur_smoothing_density)
             self.twostep_smoothing_density.update([t], cur_two_step_smoothing_density)
             
     def compute_log_likelihood(self) -> float:
         """ Computes the log-likelihood of the model, given by
-        
+    
         $$
         \ell = \sum_t \ln p(x_t|x_{1:t-1}).
         $$
@@ -139,9 +154,10 @@ class StateSpaceEM:
             Data log likelihood.
         """
         p_z = self.prediction_density.slice(range(1,self.T+1))
-        return self.om.evaluate_llk(p_z, self.X)
+        return self.om.evaluate_llk(p_z, self.X, u=self.u_x)
     
-    def compute_predictive_log_likelihood(self, X: numpy.ndarray, p0: 'GaussianDensity'=None):
+    def compute_predictive_log_likelihood(self, X: numpy.ndarray, p0: 'GaussianDensity'=None, 
+                                          u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
         """ Computes the likelihood for given data X.
         
         :param X: numpy.ndarray [T, Dx]
@@ -149,6 +165,10 @@ class StateSpaceEM:
         :param p0: GaussianDensity
             Density for the initial latent state. If None, the initial density 
             of the training data is taken. (Default=None)
+        :param u_x: numpy.ndarray [T, ...]
+            Control parameters for observation model. (Default=None)
+        :param u_z: numpy.ndarray [T, ...]
+            Control parameters for state model. (Default=None)
             
         :return: float
             Data log likelihood.
@@ -162,14 +182,23 @@ class StateSpaceEM:
         for t in range(1, T+1):
             # Filter
             pre_filter_density = filter_density.slice([t-1])
-            cur_prediction_density = self.sm.prediction(pre_filter_density)
+            if u_z is not None:
+                uz_t = u_z[t-1:t]
+            else:
+                uz_t = None
+            cur_prediction_density = self.sm.prediction(pre_filter_density, u_t=uz_t)
             prediction_density.update([t], cur_prediction_density)
-            cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t])
+            if u_x is not None:
+                ux_t = u_x[t-1:t]
+            else:
+                ux_t = None
+            cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t], u_t=ux_t)
             filter_density.update([t], cur_filter_density)
         p_z = prediction_density.slice(range(1,self.T+1))
-        return self.om.evaluate_llk(p_z, X)
+        return self.om.evaluate_llk(p_z, X, self.u_x)
     
-    def predict(self, X:numpy.ndarray, p0: 'GaussianDensity'=None, smoothed:bool=False):
+    def predict(self, X:numpy.ndarray, p0: 'GaussianDensity'=None, smoothed:bool=False, 
+                u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
         """ Obtains predictions for data.
         
         :param X: numpy.ndarray [T, Dx]
@@ -196,13 +225,21 @@ class StateSpaceEM:
         for t in range(1, T+1):
             # Filter
             pre_filter_density = filter_density.slice([t-1])
-            cur_prediction_density = self.sm.prediction(pre_filter_density)
+            if u_z is not None:
+                uz_t = u_z[t-1:t]
+            else:
+                uz_t = None
+            cur_prediction_density = self.sm.prediction(pre_filter_density, u_t=uz_t)
             prediction_density.update([t], cur_prediction_density)
-            cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t-1:t])
+            if u_x is not None:
+                ux_t = u_x[t-1:t]
+            else:
+                ux_t = None
+            cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t-1:t], u_t=ux_t)
             filter_density.update([t], cur_filter_density)
             # Get density of unobserved data
             if not smoothed:
-                mu_ux, std_ux = self.om.gappy_data_density(cur_prediction_density, X[t-1:t])
+                mu_ux, std_ux = self.om.gappy_data_density(cur_prediction_density, X[t-1:t], u_t=ux_t)
                 mu_unobserved[t-1, numpy.isnan(X[t-1])] = mu_ux
                 std_unobserved[t-1, numpy.isnan(X[t-1])] = std_ux
         if not smoothed:
@@ -216,15 +253,25 @@ class StateSpaceEM:
                 # Smoothing step
                 cur_filter_density = filter_density.slice([t])
                 post_smoothing_density = smoothing_density.slice([t+1])
+                if u_z is not None:
+                    uz_t = u_z[t-1:t]
+                else:
+                    uz_t = None
                 cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(cur_filter_density, 
-                                                                                          post_smoothing_density)
+                                                                                          post_smoothing_density,
+                                                                                          u_t=uz_t)
                 smoothing_density.update([t], cur_smoothing_density)
                 # Get density of unobserved data
-                mu_ux, std_ux = self.om.gappy_data_density(cur_smoothing_density, X[t:t+1])
+                if u_x is not None:
+                    ux_t = u_x[t-1:t]
+                else:
+                    ux_t = None
+                mu_ux, std_ux = self.om.gappy_data_density(cur_smoothing_density, X[t:t+1], u_t=ux_t)
                 mu_unobserved[t, numpy.isnan(X[t])] = mu_ux
                 std_unobserved[t, numpy.isnan(X[t])] = std_ux
             return smoothing_density, mu_unobserved, std_unobserved
-            
+        
+                
             
     def compute_data_density(self) -> densities.GaussianDensity:
         """ Computes the data density for the training data, given the prediction density.

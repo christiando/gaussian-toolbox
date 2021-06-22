@@ -35,7 +35,7 @@ class StateModel:
         """
         self.emission_density = None
         
-    def prediction(self, pre_filter_density: 'GaussianDensity') -> 'GaussianDensity':
+    def prediction(self, pre_filter_density: 'GaussianDensity', **kwargs) -> 'GaussianDensity':
         """ Here the prediction density is calculated.
         
         p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1
@@ -49,7 +49,7 @@ class StateModel:
         raise NotImplementedError('Prediction for state model not implemented.')
         
     def smoothing(self, cur_filter_density: 'GaussianDensity', 
-                  post_smoothing_density: 'GaussianDensity') -> 'GaussianDensity':
+                  post_smoothing_density: 'GaussianDensity', **kwargs) -> 'GaussianDensity':
         """ Here we do the smoothing step to acquire p(z_{t} | x_{1:T}), 
         given p(z_{t+1} | x_{1:T}) and p(z_{t} | x_{1:t}).
         
@@ -64,7 +64,7 @@ class StateModel:
         raise NotImplementedError('Smoothing for state model not implemented.')
         
     def update_hyperparameters(self, smoothing_density: 'GaussianDensity', 
-                               two_step_smoothing_density: 'GaussianDensity'):
+                               two_step_smoothing_density: 'GaussianDensity', **kwargs):
         """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
         
@@ -75,7 +75,7 @@ class StateModel:
         """
         raise NotImplementedError('Hyperparamers for state model not implemented.')
         
-    def update_init_density(self, init_smooth_density: 'GaussianDensity') -> 'GaussianDensity':
+    def update_init_density(self, init_smooth_density: 'GaussianDensity', **kwargs) -> 'GaussianDensity':
         """ Finds the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
         
@@ -108,7 +108,7 @@ class LinearStateModel(StateModel):
                                                                      numpy.array([self.Qz]))
         self.Qz_inv, self.ln_det_Qz = self.state_density.Lambda[0], self.state_density.ln_det_Sigma[0]
         
-    def prediction(self, pre_filter_density: 'GaussianDensity') -> 'GaussianDensity':
+    def prediction(self, pre_filter_density: 'GaussianDensity', **kwargs) -> 'GaussianDensity':
         """ Here the prediction density is calculated.
         
         p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1
@@ -123,7 +123,7 @@ class LinearStateModel(StateModel):
         return self.state_density.affine_marginal_transformation(pre_filter_density)
     
     def smoothing(self, cur_filter_density: 'GaussianDensity', 
-                  post_smoothing_density: 'GaussianDensity') -> 'GaussianDensity':
+                  post_smoothing_density: 'GaussianDensity', **kwargs) -> 'GaussianDensity':
         """ Here we do the smoothing step.
         
         First we calculate the backward density
@@ -156,7 +156,7 @@ class LinearStateModel(StateModel):
         return cur_smoothing_density, cur_two_step_smoothing_density
     
     def update_hyperparameters(self, smoothing_density: 'GaussianDensity', 
-                               two_step_smoothing_density: 'GaussianDensity'):
+                               two_step_smoothing_density: 'GaussianDensity', **kwargs):
         """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
         
@@ -218,9 +218,7 @@ class LinearStateModel(StateModel):
                                                                    Ezz[:-1]), self.A.T), axis=0)
         self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T) / T
         eigvals, eigvecs = numpy.linalg.eig(self.Qz)
-        if any(eigvals <= 0):
-            print('Warning: Qz not positive definite. Small diagonal is added!')
-            self.Qz += 1e-4 * numpy.eye(self.Dz) 
+        self.Qz += 1e-4 * numpy.eye(self.Dz) 
         
     def update_state_density(self):
         """ Updates the state density.
@@ -230,7 +228,7 @@ class LinearStateModel(StateModel):
                                                                      numpy.array([self.Qz]))
         self.Qz_inv, self.ln_det_Qz = self.state_density.Lambda[0], self.state_density.ln_det_Sigma[0]
         
-    def update_init_density(self, init_smooth_density: 'GaussianDensity') -> 'GaussianDensity':
+    def update_init_density(self, init_smooth_density: 'GaussianDensity', **kwargs) -> 'GaussianDensity':
         """ Finds the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
         
@@ -285,7 +283,7 @@ class LSEMStateModel(LinearStateModel):
         self.Qz_inv, self.ln_det_Qz = self.state_density.Lambda[0], self.state_density.ln_det_Sigma[0]
         
     def update_hyperparameters(self, smoothing_density: 'GaussianDensity', 
-                               two_step_smoothing_density: 'GaussianDensity'):
+                               two_step_smoothing_density: 'GaussianDensity', **kwargs):
         """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms).
         
