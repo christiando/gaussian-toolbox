@@ -32,6 +32,10 @@ class StateSpaceEM:
             Maximal number of EM iteration performed. (Default=100)
         :param conv_crit: float
             Convergence criterion for the EM procedure.
+        :param u_x: numpy.ndarray [T,...]
+            Control variables for observation model. (Default=None)
+        :param u_z: numpy.ndarray [T,...]
+            Control variables for state model. (Default=None)   
         """
         self.X = X
         self.T, self.Dx = self.X.shape
@@ -208,6 +212,10 @@ class StateSpaceEM:
             of the training data is taken. (Default=None)
         :param smoothed: bool
             Uses the smoothed density for prediction. (Default=False)
+        :param u_x: numpy.ndarray [T,...]
+            Control variables for observation model. (Default=None)
+        :param u_z: numpy.ndarray [T,...]
+            Control variables for state model. (Default=None)
         
         :return: (GaussianDensity, numpy.ndarray [T, Dx], numpy.ndarray [T, Dx])
             Filter/smoothed density, mean, and standard deviation of predictions. Mean 
