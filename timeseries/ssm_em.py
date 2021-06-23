@@ -102,13 +102,13 @@ class StateSpaceEM:
         """ Performs the maximization step, i.e. the updates of model parameters.
         """
         # Update parameters of state model
-        self.sm.update_hyperparameters(self.smoothing_density, self.twostep_smoothing_density)
+        self.sm.update_hyperparameters(self.smoothing_density, self.twostep_smoothing_density, u_z=self.u_z)
         # Update initial latent density.
         init_smooth_density = self.smoothing_density.slice([0])
         opt_init_density = self.sm.update_init_density(init_smooth_density)
         self.filter_density.update([0], opt_init_density)
         # Update parameters of observation model
-        self.om.update_hyperparameters(self.smoothing_density, self.X)
+        self.om.update_hyperparameters(self.smoothing_density, self.X, u_x=self.u_x)
         
     def forward_path(self):
         """ Iterates forward, alternately doing prediction and filtering step.
@@ -119,13 +119,13 @@ class StateSpaceEM:
                 uz_t = self.u_z[t-1:t]
             else:
                 uz_t = None
-            cur_prediction_density = self.sm.prediction(pre_filter_density, u_t=uz_t)
+            cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
             self.prediction_density.update([t], cur_prediction_density)
             if self.u_x is not None:
                 ux_t = self.u_x[t-1:t]
             else:
                 ux_t = None
-            cur_filter_density = self.om.filtering(cur_prediction_density, self.X[t-1:t], u_t=ux_t)
+            cur_filter_density = self.om.filtering(cur_prediction_density, self.X[t-1:t], ux_t=ux_t)
             self.filter_density.update([t], cur_filter_density)
         
     def backward_path(self):
@@ -143,7 +143,7 @@ class StateSpaceEM:
                 uz_t = None
             cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(cur_filter_density,
                                                                                       post_smoothing_density,
-                                                                                      u_t=uz_t)
+                                                                                      uz_t=uz_t)
             self.smoothing_density.update([t], cur_smoothing_density)
             self.twostep_smoothing_density.update([t], cur_two_step_smoothing_density)
             
@@ -190,13 +190,13 @@ class StateSpaceEM:
                 uz_t = u_z[t-1:t]
             else:
                 uz_t = None
-            cur_prediction_density = self.sm.prediction(pre_filter_density, u_t=uz_t)
+            cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
             prediction_density.update([t], cur_prediction_density)
             if u_x is not None:
                 ux_t = u_x[t-1:t]
             else:
                 ux_t = None
-            cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t], u_t=ux_t)
+            cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
             filter_density.update([t], cur_filter_density)
         p_z = prediction_density.slice(range(1,self.T+1))
         return self.om.evaluate_llk(p_z, X, self.u_x)
@@ -237,17 +237,17 @@ class StateSpaceEM:
                 uz_t = u_z[t-1:t]
             else:
                 uz_t = None
-            cur_prediction_density = self.sm.prediction(pre_filter_density, u_t=uz_t)
+            cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
             prediction_density.update([t], cur_prediction_density)
             if u_x is not None:
                 ux_t = u_x[t-1:t]
             else:
                 ux_t = None
-            cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t-1:t], u_t=ux_t)
+            cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
             filter_density.update([t], cur_filter_density)
             # Get density of unobserved data
             if not smoothed:
-                mu_ux, std_ux = self.om.gappy_data_density(cur_prediction_density, X[t-1:t], u_t=ux_t)
+                mu_ux, std_ux = self.om.gappy_data_density(cur_prediction_density, X[t-1:t], ux_t=ux_t)
                 mu_unobserved[t-1, numpy.isnan(X[t-1])] = mu_ux
                 std_unobserved[t-1, numpy.isnan(X[t-1])] = std_ux
         if not smoothed:
@@ -267,14 +267,14 @@ class StateSpaceEM:
                     uz_t = None
                 cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(cur_filter_density, 
                                                                                           post_smoothing_density,
-                                                                                          u_t=uz_t)
+                                                                                          uz_t=uz_t)
                 smoothing_density.update([t], cur_smoothing_density)
                 # Get density of unobserved data
                 if u_x is not None:
                     ux_t = u_x[t-1:t]
                 else:
                     ux_t = None
-                mu_ux, std_ux = self.om.gappy_data_density(cur_smoothing_density, X[t:t+1], u_t=ux_t)
+                mu_ux, std_ux = self.om.gappy_data_density(cur_smoothing_density, X[t:t+1], ux_t=ux_t)
                 mu_unobserved[t, numpy.isnan(X[t])] = mu_ux
                 std_unobserved[t, numpy.isnan(X[t])] = std_ux
             return smoothing_density, mu_unobserved, std_unobserved
