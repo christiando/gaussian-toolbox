@@ -216,8 +216,8 @@ class LinearStateModel(StateModel):
         mu_b = numpy.sum(Ez_b[1:], axis=0)
         AEzzA = numpy.sum(numpy.einsum('abc,cd->abd', numpy.einsum('ab,cbd->cad', self.A, 
                                                                    Ezz[:-1]), self.A.T), axis=0)
-        self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T) / T
-        eigvals, eigvecs = numpy.linalg.eig(self.Qz)
+        self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T + AEzzA) / T
+        #eigvals, eigvecs = numpy.linalg.eig(self.Qz)
         self.Qz += 1e-4 * numpy.eye(self.Dz) 
         
     def update_state_density(self):
