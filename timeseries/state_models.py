@@ -214,11 +214,11 @@ class LinearStateModel(StateModel):
         Az_b2 = numpy.sum(smoothing_density.integrate('Ax_aBx_b_outer', A_mat=self.A, a_vec=self.b, 
                                                       B_mat=self.A, b_vec=self.b)[:-1],axis=0)
         mu_b = numpy.sum(Ez_b[1:], axis=0)
-        AEzzA = numpy.sum(numpy.einsum('abc,cd->abd', numpy.einsum('ab,cbd->cad', self.A, 
-                                                                   Ezz[:-1]), self.A.T), axis=0)
-        self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T + AEzzA) / T
+        #AEzzA = numpy.einsum('ab,bc->ac', numpy.einsum('ab,bc->ac', self.A, numpy.sum(Ezz[:-1], axis=0)), self.A.T)
+        #print(AEzzA, numpy.sum(Ezz[:-1], axis=0).shape)
+        self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T) / T
         #eigvals, eigvecs = numpy.linalg.eig(self.Qz)
-        self.Qz += 1e-4 * numpy.eye(self.Dz) 
+        self.Qz += 1e-3 * numpy.eye(self.Dz) 
         
     def update_state_density(self):
         """ Updates the state density.

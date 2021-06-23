@@ -967,7 +967,7 @@ class BernoulliObservationModel(ObservationModel):
                 a_vec = a_vec + theta_ux
             Eh2 = sigma_density.integrate('Ax_aBx_b_inner', A_mat=A_mat, a_vec=a_vec, B_mat=A_mat, b_vec=a_vec)
             omega_star = numpy.sqrt(Eh2)
-            omega_star[omega_star < 1e-5] = 1e-5
+            omega_star[omega_star < 1e-10] = 1e-10
             converged = numpy.amax(numpy.abs(omega_star - omega_old)) < conv_crit
             omega_old = numpy.copy(omega_star)
         return omega_star
@@ -1011,7 +1011,7 @@ class BernoulliObservationModel(ObservationModel):
             a_vec = a_vec + theta_ux
         Eh2 = density.integrate('Ax_aBx_b_inner', A_mat=A_mat, a_vec=a_vec, B_mat=A_mat, b_vec=a_vec)
         omega_dagger = numpy.sqrt(Eh2)
-        omega_dagger[omega_dagger < 1e-5] = 1e-5
+        omega_dagger[omega_dagger < 1e-10] = 1e-10
         return omega_dagger
         
     def update_hyperparameters(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray, u_x: numpy.ndarray=None,**kwargs):
@@ -1057,9 +1057,10 @@ class BernoulliObservationModel(ObservationModel):
             nu = nu - self.Theta[:,1:self.Dz+1] * (g * theta_ux)[:, None]
             ln_beta = ln_beta + .5 * sign * theta_ux - g * (.5 * theta_ux ** 2 + self.Theta[:,0] * ux_t[0])
         sigma_lb = factors.OneRankFactor(v=v, g=g, nu=nu, ln_beta=ln_beta)
-        prob_lb = numpy.empty((1,self.Dx))
+        measure = density
         for idx in range(self.Dx):
-            prob_lb[:,idx] = density.hadamard(sigma_lb.slice([idx])).integrate()
+            measure = measure.hadamard(sigma_lb.slice([idx]))
+        prob_lb = measure.integrate()[0]
         return prob_lb
 
         
@@ -1083,5 +1084,5 @@ class BernoulliObservationModel(ObservationModel):
             else:
                 ux_t = None
             prob_lb = self.get_lb_sigma(p_z.slice([t]), X[t:t+1], ux_t=ux_t)
-            llk += numpy.sum(numpy.log(prob_lb))
+            llk += numpy.log(prob_lb)
         return llk
