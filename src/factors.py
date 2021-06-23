@@ -198,7 +198,7 @@ class OneRankFactor(LowRankFactor):
         :return: OneRankFactor
             The resulting OneRankFactor.
         """
-        v_new = self.v_new[indices]
+        v_new = self.v[indices]
         g_new = self.g[indices]
         nu_new = self.nu[indices]
         ln_beta_new = self.ln_beta[indices]
