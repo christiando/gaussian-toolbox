@@ -25,6 +25,13 @@ import sys
 sys.path.append('../src/')
 import densities, conditionals, factors
 
+    
+def logcosh(x):
+    # s always has real part >= 0
+    s = numpy.sign(x) * x
+    p = numpy.exp(-2 * s)
+    return s + numpy.log1p(p) - numpy.log(2)
+
 class ObservationModel:
     
     def __init__(self):
@@ -834,29 +841,139 @@ class HCCovObservationModel(LinearObservationModel):
 
 class BernoulliObservationModel(ObservationModel):
     
-    def __init__(self, Dx: int, Dz: int):
+    def __init__(self, Dx: int, Dz: int, Dphi_u: int=0):
         """ This class implements an observation model for Bernoulli data `x\in(0,1)`, where the observations 
         are generated as
         
-            x_t \sim \sigma(h_t).
+            x_{t,i} \sim \sigma(h_{t,i}).
             
-            with h_t = C z_t + d
+            with h_{t,i} = \theta_i' phi_i(z_t),
+            
+            phi_i(z) = (1,z,u_i)
             
         :param Dx: int
             Dimensionality of observations.
         :param Dz: int
             Dimensionality of latent space.
-        :param noise_x: float
-            Intial isoptropic std. on the observations.
+        :param Dphi_u: int
+            Dimensionality of control variable features. (Default=0)
         """
-        self.Dx, self.Dz, self.Du = Dx, Dz, Du
-        if Dx == Dz:
-            self.C = numpy.eye(Dx)
-        else:
-            self.C = numpy.random.randn(Dx, Dz)
-        self.d = numpy.zeros(Dx)
+        self.Dx, self.Dz, self.Dphi_u = Dx, Dz, Dphi_u
+        self.Dphi = Dphi_u + Dz + 1
+        self.Theta = numpy.random.randn(self.Dx, self.Dphi)
         
-    def filtering(self, prediction_density: 'GaussianDensity', x_t: numpy.ndarray, **kwargs) -> 'GaussianDensity':
+    def compute_feature_vector(self, z: numpy.ndarray, ux: numpy.ndarray=None) -> numpy.ndarray:
+        """ Constructs the feature vector
+        
+            phi_i(z) = (1,z,u_i)
+            
+        :param z: numpy.ndarray [T, Dz]
+            Instantiation of latent variables.
+        :param uz: numpy.ndarray [T, Dphi_u] or [T, Dphi_u, Dx]
+            Control variables. (Default=None)
+            
+        :return: numpy.ndarray [T, Dphi, Dx]
+            Feature vector.
+        """
+        T = z.shape[0]
+        phi = numpy.zeros((T, self.Dphi, self.Dx))
+        phi[:,0] = 1
+        phi[:,1:self.Dz+1] = z
+        if ux is not None:
+            phi[:,self.Dz+1:] = ux
+        return phi
+    
+    def compute_expected_feature_vector(self, density: 'GaussianDensity', ux: numpy.ndarray=None) -> numpy.ndarray:
+        """ Computes the expected feature vector
+        
+            E[phi_i(z)] = (1,E[z],u_i)
+            
+        :param density: GaussianDensity
+            Density over z.
+        :param uz: numpy.ndarray [T, Dphi_u] or [T, Dphi_u, Dx]
+            Control variables. (Default=None)
+            
+        :return: numpy.ndarray [T, Dx, Dphi]
+            Expected feature vector.
+        """
+        T = density.R
+        Ephi = numpy.zeros((T, self.Dx, self.Dphi))
+        Ephi[:,:,0] = 1 
+        Ephi[:,:,1:self.Dz+1] = density.integrate('x')[:,None]
+        if ux is not None:
+            Ephi[:,:,self.Dz+1:] = ux
+        return Ephi
+    
+    def compute_expected_feature_outer_product(self, density: 'GaussianDensity', ux: numpy.ndarray=None) -> numpy.ndarray:
+        """ Computes the expected feature vector
+        
+            E[phi_i(z) phi_i(z)'] = (1,    E[z'],   u_i',
+                                     E[z], E[zz'],  E[z]u_i',
+                                     u_i,  E[z]u_i, u_iu_i')
+            
+        :param density: GaussianDensity
+            Density over z.
+        :param ux: numpy.ndarray [T, Dx, Dphi_u] or [T, Dphi_u]
+            Control variables. (Default=None)
+            
+        :return: numpy.ndarray [T,  Dx, Dphi, Dphi]
+            Expected feature vector.
+        """
+        T = density.R
+        
+        Ez = density.integrate('x')
+        Ezz = density.integrate('xx')
+        
+        Ephi_outer = numpy.zeros((T, self.Dx, self.Dphi, self.Dphi))
+        Ephi_outer[:,:,0,0] = 1                                              # 1
+        Ephi_outer[:,:,1:self.Dz+1,0] = Ez                                   # E[z']
+        Ephi_outer[:,:,0,1:self.Dz+1] = Ez                                   # E[z]
+        Ephi_outer[:,:,1:self.Dz+1,1:self.Dz+1] = Ezz                        # E[zz']
+        if ux is not None:
+            if ux.ndim == 2:
+                ux = ux.reshape((uz.shape[0],1,uz.shape[1]))
+            Ez_ux = Ez[:,None,:,None] * ux[:,:,None]
+            uxux = ux[:,:,None] * ux[:,:,:,None]
+            Ephi_outer[:,:,self.Dz+1:,0] = ux                                # u'
+            Ephi_outer[:,:,0,self.Dz+1:] = ux                                # u
+            Ephi_outer[:,:,1:self.Dz+1,self.Dz+1:] = Ez_ux                   # E[z] u'
+            Ephi_outer[:,:,self.Dz+1:,1:self.Dz+1] = numpy.swapaxes(
+                Ez_ux, axis1=2, axis2=3)                                     # E[z'] u
+            Ephi_outer[:,:,self.Dz+1:,self.Dz+1:] = uxux                     # uu'
+        return Ephi_outer
+    
+    def get_omega_star(self, density: 'GaussianDensity', x_t: numpy.ndarray, ux_t: numpy.ndarray=None, conv_crit: float=1e-4) -> numpy.ndarray:
+        """ Gets the optimal variational parameter.
+        """
+        
+        omega_old = numpy.ones((self.Dx))
+        converged = False
+        v = self.Theta[:,1:self.Dz+1]
+        while not converged:
+            g = 1. / numpy.abs(omega_old) * numpy.tanh(.5 * omega_old)
+            sign = 2. * x_t[0] - 1.
+            nu = self.Theta[:,1:self.Dz+1] * (.5 * sign - g * self.Theta[:,0])[:,None]
+            #ln_beta = numpy.log(2 * numpy.cosh(.5 * omega_old)) + .5 * sign * self.Theta[:,0] - .5 * g * (self.Theta[:,0] ** 2 - omega_old ** 2)
+            if ux_t is not None:
+                theta_uz = numpy.einsum('ab,b->a', self.Theta[:,self.Dz + 1:], ux_t[0])
+                nu = nu - self.Theta[:,1:self.Dz+1] * (g * theta_ux)[:, None]
+                #ln_beta = ln_beta + .5 * sign * theta_uz - g * (.5 * theta_uz ** 2 + self.Theta[:,0] * ux_t[0])           
+                
+            sigma_lb = factors.OneRankFactor(v=v, g=g, nu=nu)
+            sigma_density = density.multiply(sigma_lb).get_density()
+            A_mat = self.Theta[:,1:self.Dz+1]
+            a_vec = self.Theta[:,0]
+            if ux_t is not None:
+                a_vec = a_vec + theta_ux
+            Eh2 = sigma_density.integrate('Ax_aBx_b_inner', A_mat=A_mat, a_vec=a_vec, B_mat=A_mat, b_vec=a_vec)
+            omega_star = numpy.sqrt(Eh2)
+            omega_star[omega_star < 1e-5] = 1e-5
+            converged = numpy.amax(numpy.abs(omega_star - omega_old)) < conv_crit
+            omega_old = numpy.copy(omega_star)
+        return omega_star
+    
+        
+    def filtering(self, prediction_density: 'GaussianDensity', x_t: numpy.ndarray, ux_t: numpy.ndarray=None,**kwargs) -> 'GaussianDensity':
         """ Here the variational approximation of filtering density is calculated.
         
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
@@ -868,11 +985,103 @@ class BernoulliObservationModel(ObservationModel):
         :return: GaussianDensity
             Filter density p(z_t|x_{1:t}).
         """
-        pass
+        omega_star = self.get_omega_star(prediction_density, x_t, ux_t)
+        v = self.Theta[:,1:self.Dz+1]
+        g = 1. / numpy.abs(omega_star) * numpy.tanh(.5 * omega_star)
+        sign = 2. * x_t[0] - 1.
+        nu = self.Theta[:,1:self.Dz+1] * (.5 * sign - g * self.Theta[:,0])[:,None]
+        if ux_t is not None:
+            theta_ux = numpy.einsum('ab,b->a', self.Theta[:,self.Dz + 1:], ux_t[0])
+            nu = nu - self.Theta[:,1:self.Dz+1] * (g * theta_ux)[:, None]
+        sigma_lb = factors.OneRankFactor(v=v, g=g, nu=nu)
+        filter_measure = prediction_density
+        for idx in range(self.Dx):
+            filter_measure = filter_measure.hadamard(sigma_lb.slice([idx]))
+        filter_density = filter_measure.get_density()
+        return filter_density
     
+    def get_omega_dagger(self, density: 'GaussianDensity', ux_t: numpy.ndarray=None, conv_crit: float=1e-4) -> numpy.ndarray:
+        """ Gets the optimal variational parameter.
+        """
     
+        A_mat = self.Theta[:,1:self.Dz+1]
+        a_vec = self.Theta[:,0]
+        if ux_t is not None:
+            theta_ux = numpy.einsum('ab,b->a', self.Theta[:,self.Dz + 1:], ux_t[0])
+            a_vec = a_vec + theta_ux
+        Eh2 = density.integrate('Ax_aBx_b_inner', A_mat=A_mat, a_vec=a_vec, B_mat=A_mat, b_vec=a_vec)
+        omega_dagger = numpy.sqrt(Eh2)
+        omega_dagger[omega_dagger < 1e-5] = 1e-5
+        return omega_dagger
         
+    def update_hyperparameters(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray, u_x: numpy.ndarray=None,**kwargs):
+        """ This procedure updates the hyperparameters of the observation model.
         
-    
-    
-    
+        :param smoothing_density: GaussianDensity
+            The smoothing density over the latent space.
+        :param X: numpy.ndarray [T, Dx]
+            The observations.
+        :param u_x: numpy.ndarray [T, ...]
+            Control parameters. (Default=None)
+        """ 
+        A_theta = numpy.zeros((self.Dx, self.Dphi, self.Dphi))
+        b_theta = numpy.zeros((self.Dx, self.Dphi))
+        T = X.shape[0]
+        for t in range(T):
+            density_t = smoothing_density.slice([t+1])
+            if u_x is not None:
+                ux_t = u_x[t:t+1]
+            else:
+                ux_t = None
+            omega_dagger = self.get_omega_dagger(density_t, ux_t=ux_t)
+            g = 1. / numpy.abs(omega_dagger) * numpy.tanh(.5 * omega_dagger)
+            Ephiphi = self.compute_expected_feature_outer_product(density_t, ux=ux_t)[0]
+            A_theta = A_theta + g[:,None,None] * Ephiphi
+            Ephi = self.compute_expected_feature_vector(density_t, ux=ux_t)[0]
+            sign = 2. * X[t] - 1.
+            b_theta = b_theta + .5 * sign[:,None] * Ephi
+        #A_theta += 1e-4 * numpy.eye(self.Dphi)[None]
+        self.Theta = numpy.linalg.solve(A_theta, b_theta)
+        
+    def get_lb_sigma(self, density: 'GaussianDensity', x_t: numpy.ndarray, ux_t: numpy.ndarray=None) -> numpy.ndarray:
+        """ Computes the lower bounds for the data probability.
+        """
+        omega_star = self.get_omega_star(density, x_t, ux_t)
+        v = self.Theta[:,1:self.Dz+1]
+        g = 1. / numpy.abs(omega_star) * numpy.tanh(.5 * omega_star)
+        sign = 2. * x_t[0] - 1.
+        nu = self.Theta[:,1:self.Dz+1] * (.5 * sign - g * self.Theta[:,0])[:,None]
+        ln_beta = - numpy.log(2) -  logcosh(.5 * omega_star) + .5 * sign * self.Theta[:,0] - .5 * g * (self.Theta[:,0] ** 2 - omega_star ** 2)
+        if ux_t is not None:
+            theta_ux = numpy.einsum('ab,b->a', self.Theta[:,self.Dz + 1:], ux_t[0])
+            nu = nu - self.Theta[:,1:self.Dz+1] * (g * theta_ux)[:, None]
+            ln_beta = ln_beta + .5 * sign * theta_ux - g * (.5 * theta_ux ** 2 + self.Theta[:,0] * ux_t[0])
+        sigma_lb = factors.OneRankFactor(v=v, g=g, nu=nu, ln_beta=ln_beta)
+        prob_lb = numpy.empty((1,self.Dx))
+        for idx in range(self.Dx):
+            prob_lb[:,idx] = density.hadamard(sigma_lb.slice([idx])).integrate()
+        return prob_lb
+
+        
+    def evaluate_llk(self, p_z: 'GaussianDensity', X: numpy.ndarray, u_x: numpy.ndarray=None,**kwargs) -> float:
+        """ Computes the lower bound of log likelihood of data given distribution over latent variables.
+        
+        :param p_z: GaussianDensity
+            Density over latent variables.
+        :param X: numpy.ndarray [T, Dx]
+            Observations.
+            
+        :return: float
+            Log likelihood lower bound.
+        """
+        T = X.shape[0]
+        llk = 0
+        #p_x = self.emission_density.affine_marginal_transformation(p_z)
+        for t in range(0,T):
+            if u_x is not None:
+                ux_t = u_x[t:t+1]
+            else:
+                ux_t = None
+            prob_lb = self.get_lb_sigma(p_z.slice([t]), X[t:t+1], ux_t=ux_t)
+            llk += numpy.sum(numpy.log(prob_lb))
+        return llk
