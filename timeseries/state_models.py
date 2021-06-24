@@ -185,7 +185,8 @@ class LinearStateModel(StateModel):
         Ezz_two_step = two_step_smoothing_density.integrate('xx')
         Ezz = Ezz_two_step[:,self.Dz:,self.Dz:]
         Ezz_cross = Ezz_two_step[:,self.Dz:,:self.Dz]
-        self.A = numpy.linalg.solve(numpy.sum(Ezz[:-1], axis=0), numpy.sum(Ezz_cross -  mu_b, axis=0)).T
+        A = numpy.mean(Ezz[:-1], axis=0) + 1e-2 * numpy.eye(self.Dz)
+        self.A = numpy.linalg.solve(A, numpy.mean(Ezz_cross -  mu_b, axis=0)).T
         
     def update_b(self, smoothing_density: 'GaussianDensity'):
         """ The transition offset is updated here, where the the densities p(z_t|x_{1:T}) is provided.
@@ -218,7 +219,7 @@ class LinearStateModel(StateModel):
         #print(AEzzA, numpy.sum(Ezz[:-1], axis=0).shape)
         self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T) / T
         #eigvals, eigvecs = numpy.linalg.eig(self.Qz)
-        self.Qz += 1e-3 * numpy.eye(self.Dz) 
+        #self.Qz += 1e-3 * numpy.eye(self.Dz) 
         
     def update_state_density(self):
         """ Updates the state density.
@@ -272,10 +273,10 @@ class LSEMStateModel(LinearStateModel):
         self.Dz, self.Dk = Dz, Dk
         self.Dphi = self.Dk + self.Dz
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
-        self.A = numpy.zeros((self.Dz, self.Dphi))
+        self.A = 1e-4 * numpy.random.randn(self.Dz, self.Dphi)
         self.A[:,:self.Dz] = numpy.eye(self.Dz)
         self.b = numpy.zeros((self.Dz,))
-        self.W = 1e-2 * numpy.random.randn(self.Dk, self.Dz + 1)
+        self.W = numpy.random.randn(self.Dk, self.Dz + 1)
         self.state_density = conditionals.LSEMGaussianConditional(M=numpy.array([self.A]), 
                                                                   b=numpy.array([self.b]), 
                                                                   W=self.W, 
@@ -340,8 +341,8 @@ class LSEMStateModel(LinearStateModel):
                                                                                                  (2*self.Dz)))[:,:,:self.Dz], axis=0).T
         Ezf = numpy.concatenate([Ezz_cross, Ezk], axis=1)
         # This is added for stability. Could defined as prior. Check!
-        Eff += 1e-6 * numpy.eye(self.Dphi)
-        self.A = numpy.linalg.solve(Eff, (Ezf -  Ebf).T).T
+        Eff += 1e-4 * T * numpy.eye(self.Dphi)
+        self.A = numpy.linalg.solve(Eff/T, (Ezf -  Ebf).T / T).T
         
     def update_b(self, smoothing_density: 'GaussianDensity'):
         """ The transition offset is updated here, where the the densities p(z_t|x_{1:T}) is provided.
@@ -397,9 +398,9 @@ class LSEMStateModel(LinearStateModel):
         self.Qz = (Ezz_sum - EzfA - EzfA.T + AEffA - Ezb - Ezb.T + AEfb + AEfb.T + T * self.b[:,None] * self.b[None]) / T
         # To make it stable (TO CHECK!!!)
         eigvals, eigvecs = numpy.linalg.eig(self.Qz)
-        if any(eigvals <= 0):
-            print('Warning: Qz not positive definite. Negative eigenvalues are set to small positive ones!')
-        eigvals[eigvals < 0] = 1e-10
+        #if any(eigvals <= 0):
+        #    print('Warning: Qz not positive definite. Negative eigenvalues are set to small positive ones!')
+        #eigvals[eigvals < 0] = 1e-10
         self.Qz = numpy.dot(eigvecs, numpy.dot(numpy.diag(eigvals), numpy.linalg.inv(eigvecs)))
     
     def _Wfunc(self, W, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity') -> (float, numpy.ndarray):
@@ -450,7 +451,7 @@ class LSEMStateModel(LinearStateModel):
         AEffA = numpy.dot(numpy.dot(self.A, Eff), self.A.T)
         Qfunc_W = .5 * numpy.trace(numpy.dot(self.Qz_inv, 
                                                    - EzfA - EzfA.T + AEffA + AEfb + 
-                                                   AEfb.T))
+                                                   AEfb.T)) / T
     
         return Qfunc_W
         
