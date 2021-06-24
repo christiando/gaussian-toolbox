@@ -185,7 +185,7 @@ class LinearStateModel(StateModel):
         Ezz_two_step = two_step_smoothing_density.integrate('xx')
         Ezz = Ezz_two_step[:,self.Dz:,self.Dz:]
         Ezz_cross = Ezz_two_step[:,self.Dz:,:self.Dz]
-        A = numpy.mean(Ezz[:-1], axis=0) + 1e-2 * numpy.eye(self.Dz)
+        A = numpy.mean(Ezz[:-1], axis=0) #+ 1e-2 * numpy.eye(self.Dz)
         self.A = numpy.linalg.solve(A, numpy.mean(Ezz_cross -  mu_b, axis=0)).T
         
     def update_b(self, smoothing_density: 'GaussianDensity'):
@@ -219,7 +219,7 @@ class LinearStateModel(StateModel):
         #print(AEzzA, numpy.sum(Ezz[:-1], axis=0).shape)
         self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T) / T
         #eigvals, eigvecs = numpy.linalg.eig(self.Qz)
-        #self.Qz += 1e-3 * numpy.eye(self.Dz) 
+        #self.Qz += 1e-4 * numpy.eye(self.Dz) 
         
     def update_state_density(self):
         """ Updates the state density.
@@ -276,7 +276,7 @@ class LSEMStateModel(LinearStateModel):
         self.A = 1e-4 * numpy.random.randn(self.Dz, self.Dphi)
         self.A[:,:self.Dz] = numpy.eye(self.Dz)
         self.b = numpy.zeros((self.Dz,))
-        self.W = numpy.random.randn(self.Dk, self.Dz + 1)
+        self.W = 1e-2 * numpy.random.randn(self.Dk, self.Dz + 1)
         self.state_density = conditionals.LSEMGaussianConditional(M=numpy.array([self.A]), 
                                                                   b=numpy.array([self.b]), 
                                                                   W=self.W, 
