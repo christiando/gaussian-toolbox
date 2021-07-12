@@ -198,8 +198,8 @@ class StateSpaceEM:
                 ux_t = None
             cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
             filter_density.update([t], cur_filter_density)
-        p_z = prediction_density.slice(range(1,self.T+1))
-        return self.om.evaluate_llk(p_z, X, self.u_x)
+        p_z = prediction_density.slice(range(1,T+1))
+        return self.om.evaluate_llk(p_z, X, u_x=self.u_x)
     
     def predict(self, X:numpy.ndarray, p0: 'GaussianDensity'=None, smoothed:bool=False, 
                 u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
