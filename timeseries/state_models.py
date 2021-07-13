@@ -185,7 +185,7 @@ class LinearStateModel(StateModel):
         Ezz_two_step = two_step_smoothing_density.integrate('xx')
         Ezz = Ezz_two_step[:,self.Dz:,self.Dz:]
         Ezz_cross = Ezz_two_step[:,self.Dz:,:self.Dz]
-        A = numpy.mean(Ezz[:-1], axis=0) #+ 1e-2 * numpy.eye(self.Dz)
+        A = numpy.mean(Ezz, axis=0) #+ 1e-2 * numpy.eye(self.Dz)
         self.A = numpy.linalg.solve(A, numpy.mean(Ezz_cross -  mu_b, axis=0)).T
         
     def update_b(self, smoothing_density: 'GaussianDensity'):
