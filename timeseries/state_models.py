@@ -205,21 +205,14 @@ class LinearStateModel(StateModel):
         :param two_step_smoothing_density: Gaussian Density
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
-        T = two_step_smoothing_density.R
-        Ezz_two_step = two_step_smoothing_density.integrate('xx')
-        Ezz = Ezz_two_step[:,self.Dz:,self.Dz:]
-        Ezz_cross = Ezz_two_step[:,self.Dz:,:self.Dz]
-        AEzz_cross = numpy.sum(numpy.einsum('ab,cbd->cad', self.A, Ezz_cross), axis=0)
-        Ez_b = smoothing_density.mu[:,None] * self.b[None,:,None]
-        AEz_b = numpy.sum(numpy.einsum('ab,cbd->cad', self.A, Ez_b[:-1]), axis=0)
-        Az_b2 = numpy.sum(smoothing_density.integrate('Ax_aBx_b_outer', A_mat=self.A, a_vec=self.b, 
-                                                      B_mat=self.A, b_vec=self.b)[:-1],axis=0)
-        mu_b = numpy.sum(Ez_b[1:], axis=0)
-        #AEzzA = numpy.einsum('ab,bc->ac', numpy.einsum('ab,bc->ac', self.A, numpy.sum(Ezz[:-1], axis=0)), self.A.T)
-        #print(AEzzA, numpy.sum(Ezz[:-1], axis=0).shape)
-        self.Qz = (numpy.sum(Ezz[1:], axis=0) + Az_b2 - mu_b - mu_b.T - AEzz_cross - AEzz_cross.T) / T
-        #eigvals, eigvecs = numpy.linalg.eig(self.Qz)
-        #self.Qz += 1e-4 * numpy.eye(self.Dz) 
+        A_tilde = numpy.eye(2*self.Dz, self.Dz)
+        A_tilde[self.Dz:] = -self.A
+        b_tilde = -self.b
+        self.Qz = numpy.mean(two_step_smoothing_density.integrate('Ax_aBx_b_outer', 
+                                                                  A_mat=A_tilde.T, 
+                                                                  a_vec=b_tilde, 
+                                                                  B_mat=A_tilde.T, 
+                                                                  b_vec=b_tilde), axis=0)
         
     def update_state_density(self):
         """ Updates the state density.
