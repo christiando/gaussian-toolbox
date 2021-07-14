@@ -206,7 +206,7 @@ class LinearStateModel(StateModel):
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
         A_tilde = numpy.eye(2*self.Dz, self.Dz)
-        A_tilde[self.Dz:] = -self.A
+        A_tilde[self.Dz:] = -self.A.T
         b_tilde = -self.b
         self.Qz = numpy.mean(two_step_smoothing_density.integrate('Ax_aBx_b_outer', 
                                                                   A_mat=A_tilde.T, 
