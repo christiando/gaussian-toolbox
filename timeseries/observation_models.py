@@ -266,9 +266,8 @@ class LinearObservationModel(ObservationModel):
             The smoothing density over the latent space.
         :param X: numpy.ndarray [T, Dx]
             The observations.
-        """  
-        Ez = smoothing_density.integrate('x')[1:]
-        self.d = numpy.mean(X - numpy.dot(self.C, Ez.T).T, axis=0)
+        """
+        self.d = numpy.mean(X - numpy.dot(smoothing_density.mu[1:], self.C.T), axis=0)
         
     def update_emission_density(self):
         """ Updates the emission density.
