@@ -82,9 +82,9 @@ class StateSpaceEM:
                 conv = (self.llk_list[-1] - self.llk_list[-2]) / numpy.amax([1, 
                                                                              numpy.abs(self.llk_list[-1]), 
                                                                              numpy.abs(self.llk_list[-2])])
-                converged = conv < self.conv_crit
+                converged = numpy.abs(conv) < self.conv_crit
             self.iteration += 1
-            if self.iteration % 10 == 0:
+            if self.iteration % 2 == 0:
                 print('Iteration %d - llk=%.1f' %(self.iteration, self.llk_list[-1]))
         if not converged:
             print('EM reached the maximal number of iterations.')

@@ -82,7 +82,7 @@ class ObservationModel:
 
 class LinearObservationModel(ObservationModel):
     
-    def __init__(self, Dx: int, Dz: int, noise_x: float=1e-1):
+    def __init__(self, Dx: int, Dz: int, noise_x: float=1.):
         """ This class implements a linear observation model, where the observations are generated as
         
             x_t = C z_t + d + xi_t     with      xi_t ~ N(0,Qx).
@@ -292,8 +292,8 @@ class LinearObservationModel(ObservationModel):
         T = X.shape[0]
         llk = 0
         p_x = self.emission_density.affine_marginal_transformation(p_z)
-        for t in range(1,T):
-            cur_p_x = p_x.slice([t-1])
+        for t in range(0,T):
+            cur_p_x = p_x.slice([t])
             llk += cur_p_x.evaluate_ln(X[t:t+1])[0,0]
         return llk
         
@@ -302,7 +302,7 @@ class LinearObservationModel(ObservationModel):
 class HCCovObservationModel(LinearObservationModel):
     
     
-    def __init__(self, Dx: int, Dz: int, Du: int, noise_x: float=1e-1):
+    def __init__(self, Dx: int, Dz: int, Du: int, noise_x: float=1.):
         """ This class implements a linear observation model, where the observations are generated as
         
             x_t = C z_t + d + xi_t     with      xi_t ~ N(0,Qx(z_t)),

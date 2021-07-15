@@ -90,7 +90,7 @@ class StateModel:
         
 class LinearStateModel(StateModel):
     
-    def __init__(self, Dz: int, noise_z: float=1e-1):
+    def __init__(self, Dz: int, noise_z: float=1.):
         """ This implements a linear state transition model
         
             z_t = A z_{t-1} + b + zeta_t     with      zeta_t ~ N(0,Qz).
@@ -241,7 +241,7 @@ class LinearStateModel(StateModel):
         
 class LSEMStateModel(LinearStateModel):
     
-    def __init__(self, Dz: int, Dk: int, noise_z: float=1e-1):
+    def __init__(self, Dz: int, Dk: int, noise_z: float=1.):
         """ This implements a linear+squared exponential mean (LSEM) state model
         
             z_t = A phi(z_{t-1}) + b + zeta_t     with      zeta_t ~ N(0,Qz).
@@ -266,7 +266,7 @@ class LSEMStateModel(LinearStateModel):
         self.Dz, self.Dk = Dz, Dk
         self.Dphi = self.Dk + self.Dz
         self.Qz = noise_z ** 2 * numpy.eye(self.Dz)
-        self.A = 1e-4 * numpy.random.randn(self.Dz, self.Dphi)
+        self.A = 0 * numpy.random.randn(self.Dz, self.Dphi)
         self.A[:,:self.Dz] = numpy.eye(self.Dz)
         self.b = numpy.zeros((self.Dz,))
         self.W = 1e-2 * numpy.random.randn(self.Dk, self.Dz + 1)
@@ -286,10 +286,12 @@ class LSEMStateModel(LinearStateModel):
         :param two_step_smoothing_density: Gaussian Density
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
+        self.update_Qz(smoothing_density, two_step_smoothing_density)
+        self.update_state_density()
+        self.update_W(smoothing_density, two_step_smoothing_density)
+        self.update_state_density()
         self.update_A(smoothing_density, two_step_smoothing_density)
         self.update_b(smoothing_density)
-        self.update_Qz(smoothing_density, two_step_smoothing_density)
-        self.update_W(smoothing_density, two_step_smoothing_density)
         self.update_state_density()
         
     def update_A(self, smoothing_density: 'GaussianDensity', 
@@ -313,13 +315,13 @@ class LSEMStateModel(LinearStateModel):
                                                                               self.Dk, 
                                                                               self.Dz))
         Eff = numpy.empty((self.Dphi, self.Dphi))
-        Eff[:self.Dz,:self.Dz] = numpy.sum(phi.integrate('xx'), axis=0)
-        Eff[self.Dz:,self.Dz:] = numpy.sum(Ekk, axis=0)
-        Eff[self.Dz:,:self.Dz] = numpy.sum(Ekz, axis=0)
+        Eff[:self.Dz,:self.Dz] = numpy.mean(phi.integrate('xx'), axis=0)
+        Eff[self.Dz:,self.Dz:] = numpy.mean(Ekk, axis=0)
+        Eff[self.Dz:,:self.Dz] = numpy.mean(Ekz, axis=0)
         Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
         # E[f(z)] b'
-        Ez = numpy.sum(phi.integrate('x'), axis=0)
-        Ek = numpy.sum(phi.multiply(self.state_density.k_func).integrate().reshape((T,self.Dk)), axis=0)
+        Ez = numpy.mean(phi.integrate('x'), axis=0)
+        Ek = numpy.mean(phi.multiply(self.state_density.k_func).integrate().reshape((T,self.Dk)), axis=0)
         Ef = numpy.concatenate([Ez, Ek])
         Ebf = Ef[None] * self.b[:,None]
         # E[z f(z)']
@@ -329,12 +331,10 @@ class LSEMStateModel(LinearStateModel):
         nu_joint[:,self.Dz:] = self.state_density.k_func.nu
         ln_beta = self.state_density.k_func.ln_beta
         joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=ln_beta)
-        Ezz_cross = numpy.sum(two_step_smoothing_density.integrate('xx')[:,self.Dz:,:self.Dz], axis=0)
-        Ezk = numpy.sum(two_step_smoothing_density.multiply(joint_k_func).integrate('x').reshape((T, self.Dk, 
+        Ezz_cross = numpy.mean(two_step_smoothing_density.integrate('xx')[:,self.Dz:,:self.Dz], axis=0)
+        Ezk = numpy.mean(two_step_smoothing_density.multiply(joint_k_func).integrate('x').reshape((T, self.Dk, 
                                                                                                  (2*self.Dz)))[:,:,:self.Dz], axis=0).T
-        Ezf = numpy.concatenate([Ezz_cross, Ezk], axis=1)
-        # This is added for stability. Could defined as prior. Check!
-        Eff += 1e-4 * T * numpy.eye(self.Dphi)
+        Ezf = numpy.concatenate([Ezz_cross.T, Ezk], axis=1)
         self.A = numpy.linalg.solve(Eff/T, (Ezf -  Ebf).T / T).T
         
     def update_b(self, smoothing_density: 'GaussianDensity'):
@@ -359,42 +359,29 @@ class LSEMStateModel(LinearStateModel):
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
         T = smoothing_density.R - 1
-        Ezz = smoothing_density.integrate('xx')
-        # E[zz']
-        Ezz_sum = numpy.sum(Ezz[1:], axis=0)
-        # E[z f(z)'] A'
+        A_tilde = numpy.eye(2*self.Dz, self.Dz)
+        A_tilde[self.Dz:] = -self.A[:,:self.Dz].T
+        b_tilde = -self.b
+        Qz_lin = numpy.mean(two_step_smoothing_density.integrate('Ax_aBx_b_outer', 
+                                                                  A_mat=A_tilde.T, 
+                                                                  a_vec=b_tilde, 
+                                                                  B_mat=A_tilde.T, 
+                                                                  b_vec=b_tilde), axis=0)
         v_joint = numpy.zeros([self.Dk, int(2 * self.Dz)])
         v_joint[:,self.Dz:] = self.state_density.k_func.v
         nu_joint = numpy.zeros([self.Dk, int(2 * self.Dz)])
         nu_joint[:,self.Dz:] = self.state_density.k_func.nu
         joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta)
-        Ezz_cross = two_step_smoothing_density.integrate('xx')[:,self.Dz:,:self.Dz]
-        Ekz = two_step_smoothing_density.multiply(joint_k_func).integrate('x').reshape((T,self.Dk,int(2*self.Dz)))[:,:,:self.Dz]
-        Ezf = numpy.concatenate([Ezz_cross, numpy.swapaxes(Ekz,1,2)], axis=2)
-        EzfA = numpy.einsum('abc,dc->bd', Ezf, self.A)
-        # E[z]b'
-        Ezb = numpy.sum(smoothing_density.integrate('x')[1:,None] * self.b[None,:,None], axis=0)
-        # A E[f(z)] b'
-        Ez = numpy.sum(smoothing_density.integrate('x')[:-1], axis=0)
-        Ek = numpy.sum(smoothing_density.multiply(self.state_density.k_func).integrate().reshape((T+1,self.Dk))[:-1], axis=0)
-        Ef = numpy.concatenate([Ez, Ek])
-        AEfb = numpy.dot(self.A, Ef)[:,None] * self.b[None]
-        # A E[f(z)f(z)'] A'
+        two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func)
+        Ekz = numpy.mean(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2*self.Dz)), axis=0)
+        #Ek = numpy.mean(two_step_k_measure.integrate().reshape((T, self.Dk)), axis=0)
+        Ek = numpy.mean(smoothing_density.multiply(
+            self.state_density.k_func).integrate().reshape((T+1, self.Dk))[:-1], axis=0)
+        Qz_k_lin_err = numpy.dot(self.A[:,self.Dz:], 
+                  (Ekz[:,:self.Dz] - numpy.dot(self.A[:,:self.Dz], Ekz[:,self.Dz:].T).T - Ek[:,None] * self.b[None]))
         Ekk = smoothing_density.multiply(self.state_density.k_func).multiply(self.state_density.k_func).integrate().reshape((T+1, self.Dk, self.Dk))
-        Ekz = smoothing_density.multiply(self.state_density.k_func).integrate('x').reshape((T+1, self.Dk, self.Dz))
-        Eff = numpy.empty((self.Dphi, self.Dphi))
-        Eff[:self.Dz,:self.Dz] = numpy.sum(Ezz[:-1], axis=0)
-        Eff[self.Dz:,self.Dz:] = numpy.sum(Ekk[:-1], axis=0)
-        Eff[self.Dz:,:self.Dz] = numpy.sum(Ekz[:-1], axis=0)
-        Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
-        AEffA = numpy.dot(numpy.dot(self.A, Eff), self.A.T)
-        self.Qz = (Ezz_sum - EzfA - EzfA.T + AEffA - Ezb - Ezb.T + AEfb + AEfb.T + T * self.b[:,None] * self.b[None]) / T
-        # To make it stable (TO CHECK!!!)
-        eigvals, eigvecs = numpy.linalg.eig(self.Qz)
-        #if any(eigvals <= 0):
-        #    print('Warning: Qz not positive definite. Negative eigenvalues are set to small positive ones!')
-        #eigvals[eigvals < 0] = 1e-10
-        self.Qz = numpy.dot(eigvecs, numpy.dot(numpy.diag(eigvals), numpy.linalg.inv(eigvecs)))
+        Qz_kk = numpy.dot(numpy.dot(self.A[:,self.Dz:], numpy.mean(Ekk[:-1], axis=0)), self.A[:,self.Dz:].T)
+        self.Qz = Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
     
     def _Wfunc(self, W, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity') -> (float, numpy.ndarray):
         """ Computes the parts of the (negative) Q-fub
@@ -414,37 +401,32 @@ class LSEMStateModel(LinearStateModel):
         self.state_density.W = self.W[:,1:]
         self.state_density.update_phi()
         T = smoothing_density.R - 1
-        Ezz = smoothing_density.integrate('xx')
         # E[z f(z)'] A'
+        
+        A_tilde = numpy.eye(2*self.Dz, self.Dz)
+        A_tilde[self.Dz:] = -self.A[:,:self.Dz].T
+        b_tilde = -self.b
+        Qz_lin = numpy.mean(two_step_smoothing_density.integrate('Ax_aBx_b_outer', 
+                                                                  A_mat=A_tilde.T, 
+                                                                  a_vec=b_tilde, 
+                                                                  B_mat=A_tilde.T, 
+                                                                  b_vec=b_tilde), axis=0)
         v_joint = numpy.zeros([self.Dk, self.Dz])
         v_joint = numpy.concatenate([v_joint, self.state_density.k_func.v], axis=1)
         nu_joint = numpy.zeros([self.Dk, self.Dz])
         nu_joint = numpy.concatenate([nu_joint, self.state_density.k_func.nu], axis=1)
         joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta)
-        Ezz_cross = two_step_smoothing_density.integrate('xx')[:,self.Dz:,:self.Dz]
-        Ekz = two_step_smoothing_density.multiply(joint_k_func).integrate('x').reshape((T,self.Dk,int(2*self.Dz)))[:,:,:self.Dz]
-        Ezf = numpy.concatenate([Ezz_cross, numpy.swapaxes(Ekz,1,2)], axis=2)
-        EzfA = numpy.einsum('abc,dc->bd', Ezf, self.A)
-        # A E[f(z)] b'
-        Ez = numpy.sum(smoothing_density.integrate('x')[:-1], axis=0)
-        Ek = numpy.sum(smoothing_density.multiply(self.state_density.k_func).integrate().reshape((T+1,self.Dk))[:-1], axis=0)
-        Ef = numpy.concatenate([Ez, Ek])
-        AEfb = numpy.dot(self.A, Ef)[:,None] * self.b[None]
-        # A E[f(z)f(z)'] A'
+        two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func)
+        Ekz = numpy.mean(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2*self.Dz)), axis=0)
+        #Ek = numpy.mean(two_step_k_measure.integrate().reshape((T, self.Dk)), axis=0)
+        Ek = numpy.mean(smoothing_density.multiply(
+            self.state_density.k_func).integrate().reshape((T+1, self.Dk))[:-1], axis=0)
+        Qz_k_lin_err = numpy.dot(self.A[:,self.Dz:], 
+                  (Ekz[:,:self.Dz] - numpy.dot(self.A[:,:self.Dz], Ekz[:,self.Dz:].T).T - Ek[:,None] * self.b[None]))
         Ekk = smoothing_density.multiply(self.state_density.k_func).multiply(self.state_density.k_func).integrate().reshape((T+1, self.Dk, self.Dk))
-        Ekz = smoothing_density.multiply(self.state_density.k_func).integrate('x').reshape((T+1, self.Dk, self.Dz))
-        #Eff = numpy.empty((self.Dphi, self.Dphi))
-        #Eff[:self.Dz,:self.Dz] = numpy.sum(Ezz[:-1], axis=0)
-        #Eff[self.Dz:,self.Dz:] = numpy.sum(Ekk[:-1], axis=0)
-        #Eff[self.Dz:,:self.Dz] = numpy.sum(Ekz[:-1], axis=0)
-        #Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
-        Eff1 = numpy.concatenate([numpy.sum(Ezz[:-1], axis=0), numpy.sum(Ekz[:-1], axis=0)], axis=0)
-        Eff2 = numpy.concatenate([numpy.sum(Ekz[:-1], axis=0).T, numpy.sum(Ekk[:-1], axis=0)], axis=0)
-        Eff = numpy.concatenate([Eff1, Eff2], axis=1)
-        AEffA = numpy.dot(numpy.dot(self.A, Eff), self.A.T)
-        Qfunc_W = .5 * numpy.trace(numpy.dot(self.Qz_inv, 
-                                                   - EzfA - EzfA.T + AEffA + AEfb + 
-                                                   AEfb.T)) / T
+        Qz_kk = numpy.dot(numpy.dot(self.A[:,self.Dz:], numpy.mean(Ekk[:-1], axis=0)), self.A[:,self.Dz:].T)
+        
+        Qfunc_W = .5 * numpy.trace(numpy.dot(self.Qz_inv, Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T))
     
         return Qfunc_W
         
@@ -459,7 +441,7 @@ class LSEMStateModel(LinearStateModel):
         """
         objective = lambda W: self._Wfunc(W, smoothing_density, two_step_smoothing_density)
         result = minimize(value_and_grad(objective), self.W.flatten(),
-                          method='L-BFGS-B', jac=True, options={'disp': True})
+                          method='L-BFGS-B', jac=True, options={'disp': True, 'maxiter': 10})
         self.W = result.x.reshape((self.Dk, self.Dz + 1))
         
     def update_state_density(self):
