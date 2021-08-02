@@ -1,0 +1,3 @@
+data/ms033mpt006/ms033mpt006_pressure.mat filter=lfs diff=lfs merge=lfs -text
+data/ms033mpt006/ms033mpt006_C1C2.mat filter=lfs diff=lfs merge=lfs -text
+data/ms033mpt006/mpt006_stgdata.csv filter=lfs diff=lfs merge=lfs -text
