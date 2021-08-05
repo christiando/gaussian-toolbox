@@ -21,6 +21,7 @@ __author__ = "Christian Donner"
 import scipy
 from scipy.optimize import minimize
 from autograd import numpy
+from autograd import value_and_grad
 import sys
 sys.path.append('../src/')
 import densities, conditionals, factors
@@ -327,8 +328,8 @@ class HCCovObservationModel(LinearObservationModel):
             self.C = numpy.random.randn(Dx, Dz)
         self.d = numpy.zeros(Dx)
         self.U = numpy.eye(Dx)[:,:Du]
-        self.W = 1e-10 * numpy.random.randn(self.Du, self.Dz + 1)
-        self.beta = 1e-5 * numpy.ones(self.Du)
+        self.W = 1e-4 * numpy.random.randn(self.Du, self.Dz + 1)
+        self.beta = numpy.ones(self.Du)
         self.sigma_x = noise_x
         self.emission_density = conditionals.HCCovGaussianConditional(M = numpy.array([self.C]), 
                                                                       b = numpy.array([self.d]), 
@@ -383,8 +384,8 @@ class HCCovObservationModel(LinearObservationModel):
         """  
         self.update_C(smoothing_density, X)
         self.update_d(smoothing_density, X)
-        self.update_sigma_beta_W(smoothing_density, X)
         self.update_U(smoothing_density, X)
+        self.update_sigma_beta_W(smoothing_density, X)
         self.update_emission_density()
         
     def update_emission_density(self):
@@ -484,7 +485,7 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
         bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds)
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 100})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
@@ -492,7 +493,32 @@ class HCCovObservationModel(LinearObservationModel):
         self.beta = numpy.exp(result.x[1:self.Du + 1])
         self.W = result.x[self.Du + 1:].reshape((self.Du, self.Dz+1))
         
+    def _U_lagrange_func(self, x, R):
+        
+        U = x[:self.Du * self.Dx].reshape((self.Dx, self.Du))
+        lagrange_multipliers = x[self.Du * self.Dx:].reshape((self.Du, self.Du))
+        dL_dU = -numpy.einsum('abc,ca->ab', R, self.U) + numpy.dot(U, lagrange_multipliers).T
+        dL_dmultipliers = numpy.dot(U.T, U) - numpy.eye(self.Du)
+        objective = numpy.sum(dL_dU ** 2) + numpy.sum(dL_dmultipliers ** 2)
+        return objective
+        
+        
     def update_U(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
+        T = X.shape[0]
+        x0 = numpy.zeros(self.Du * self.Dx + self.Du * self.Du)
+        x0[:self.Du * self.Dx] = self.U.flatten()
+        R = numpy.empty([self.Du, self.Dx, self.Dx])
+        phi = smoothing_density.slice(range(1,T+1))
+        for iu in range(self.Du):
+            R[iu] = self.get_lb_i(iu, phi, X, update='U')
+            R[iu] /= numpy.amax(R[iu])
+        objective = lambda x: self._U_lagrange_func(x, R)
+        result = minimize(value_and_grad(objective), x0,
+                          method='L-BFGS-B', jac=True, options={'disp': True})
+        self.U = result.x[:self.Du * self.Dx].reshape((self.Dx, self.Du))
+        
+        
+    def update_U2(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
         """ Updates the `U` by maximizing the Q-function. One component at a time is updated analytically.
         
         :param smoothing_density: GaussianDensity
