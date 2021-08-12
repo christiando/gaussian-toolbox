@@ -1,4 +1,46 @@
-- '@id': https://limited.renku.ch/datasets/f94fe614-62cc-453a-abf2-c02d06e6c746
+- '@id': https://limited.renku.ch/blob/cfef12533ba9c72a6ce666f8ef8e1168c9ce0d69/data/opsd/time_series_60min_singleindex_filtered.csv
+  '@type':
+  - http://purl.org/wf4ever/wfprov#Artifact
+  - http://schema.org/DigitalDocument
+  - http://www.w3.org/ns/prov#Entity
+  http://schema.org/dateCreated:
+  - '@value': '2021-08-12T12:39:15.514444+00:00'
+  http://schema.org/isPartOf:
+  - '@id': https://limited.renku.ch/projects/chdonner/gaussian-toolbox
+  http://schema.org/name:
+  - '@value': time_series_60min_singleindex_filtered.csv
+  http://schema.org/url:
+  - '@value': https://limited.renku.ch/projects/chdonner/gaussian-toolbox/files/blob/data/opsd/time_series_60min_singleindex_filtered.csv
+  http://www.w3.org/2000/01/rdf-schema#label:
+  - '@value': data/opsd/time_series_60min_singleindex_filtered.csv@cfef12533ba9c72a6ce666f8ef8e1168c9ce0d69
+  http://www.w3.org/ns/prov#atLocation:
+  - '@value': data/opsd/time_series_60min_singleindex_filtered.csv
+  https://swissdatasciencecenter.github.io/renku-ontology#external:
+  - '@value': false
+  https://swissdatasciencecenter.github.io/renku-ontology#source:
+  - '@value': data/opsd/time_series_60min_singleindex_filtered.csv
+- '@id': https://limited.renku.ch/blob/cfef12533ba9c72a6ce666f8ef8e1168c9ce0d69/data/opsd/weather_data_filtered.csv
+  '@type':
+  - http://purl.org/wf4ever/wfprov#Artifact
+  - http://schema.org/DigitalDocument
+  - http://www.w3.org/ns/prov#Entity
+  http://schema.org/dateCreated:
+  - '@value': '2021-08-12T12:39:15.525670+00:00'
+  http://schema.org/isPartOf:
+  - '@id': https://limited.renku.ch/projects/chdonner/gaussian-toolbox
+  http://schema.org/name:
+  - '@value': weather_data_filtered.csv
+  http://schema.org/url:
+  - '@value': https://limited.renku.ch/projects/chdonner/gaussian-toolbox/files/blob/data/opsd/weather_data_filtered.csv
+  http://www.w3.org/2000/01/rdf-schema#label:
+  - '@value': data/opsd/weather_data_filtered.csv@cfef12533ba9c72a6ce666f8ef8e1168c9ce0d69
+  http://www.w3.org/ns/prov#atLocation:
+  - '@value': data/opsd/weather_data_filtered.csv
+  https://swissdatasciencecenter.github.io/renku-ontology#external:
+  - '@value': false
+  https://swissdatasciencecenter.github.io/renku-ontology#source:
+  - '@value': data/opsd/weather_data_filtered.csv
+- '@id': https://limited.renku.ch/datasets/92a6cd27-d6c8-44a8-8caa-a295cf1f32db
   '@type':
   - http://purl.org/wf4ever/wfprov#Artifact
   - http://schema.org/Dataset
@@ -8,10 +50,12 @@
   http://schema.org/creator:
   - '@id': mailto:chdonner@ethz.ch
   http://schema.org/dateCreated:
-  - '@value': '2021-08-12T12:38:46.171878+00:00'
-  http://schema.org/hasPart: []
+  - '@value': '2021-08-12T12:39:15.527076+00:00'
+  http://schema.org/hasPart:
+  - '@id': https://limited.renku.ch/blob/cfef12533ba9c72a6ce666f8ef8e1168c9ce0d69/data/opsd/time_series_60min_singleindex_filtered.csv
+  - '@id': https://limited.renku.ch/blob/cfef12533ba9c72a6ce666f8ef8e1168c9ce0d69/data/opsd/weather_data_filtered.csv
   http://schema.org/identifier:
-  - '@value': f94fe614-62cc-453a-abf2-c02d06e6c746
+  - '@value': 92a6cd27-d6c8-44a8-8caa-a295cf1f32db
   http://schema.org/isPartOf:
   - '@id': https://limited.renku.ch/projects/chdonner/gaussian-toolbox
   http://schema.org/keywords: []
@@ -19,11 +63,13 @@
   - '@value': opsd
   http://schema.org/subjectOf: []
   http://schema.org/url:
-  - '@value': https://limited.renku.ch/datasets/f94fe614-62cc-453a-abf2-c02d06e6c746
+  - '@value': https://limited.renku.ch/datasets/92a6cd27-d6c8-44a8-8caa-a295cf1f32db
   http://www.w3.org/2000/01/rdf-schema#label:
-  - '@value': f94fe614-62cc-453a-abf2-c02d06e6c746
+  - '@value': 92a6cd27-d6c8-44a8-8caa-a295cf1f32db
   http://www.w3.org/ns/prov#atLocation:
   - '@value': .renku/datasets/f94fe614-62cc-453a-abf2-c02d06e6c746
+  http://www.w3.org/ns/prov#wasDerivedFrom:
+  - '@id': https://localhost/urls/%2F%2Flimited.renku.ch%2Fdatasets%2Ff94fe614-62cc-453a-abf2-c02d06e6c746
 - '@id': https://limited.renku.ch/projects/chdonner/gaussian-toolbox
   '@type':
   - http://schema.org/Project
@@ -56,6 +102,11 @@
   - '@value': https://github.com/SwissDataScienceCenter/renku-project-template
   https://swissdatasciencecenter.github.io/renku-ontology#templateVersion:
   - '@value': 817b03c0f434a79eb54473688c1f897a66228b3d
+- '@id': https://localhost/urls/%2F%2Flimited.renku.ch%2Fdatasets%2Ff94fe614-62cc-453a-abf2-c02d06e6c746
+  '@type':
+  - http://schema.org/URL
+  http://schema.org/url:
+  - '@id': https://limited.renku.ch/datasets/f94fe614-62cc-453a-abf2-c02d06e6c746
 - '@id': mailto:chdonner@ethz.ch
   '@type':
   - http://schema.org/Person
