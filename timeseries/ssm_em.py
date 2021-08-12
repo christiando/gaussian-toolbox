@@ -102,13 +102,13 @@ class StateSpaceEM:
         """ Performs the maximization step, i.e. the updates of model parameters.
         """
         # Update parameters of state model
-        self.sm.update_hyperparameters(self.smoothing_density, self.twostep_smoothing_density, u_z=self.u_z)
+        self.sm.update_hyperparameters(self.smoothing_density, self.twostep_smoothing_density, u_z=self.u_z, iteration=self.iteration)
         # Update initial latent density.
         init_smooth_density = self.smoothing_density.slice([0])
         opt_init_density = self.sm.update_init_density(init_smooth_density)
         self.filter_density.update([0], opt_init_density)
         # Update parameters of observation model
-        self.om.update_hyperparameters(self.smoothing_density, self.X, u_x=self.u_x)
+        self.om.update_hyperparameters(self.smoothing_density, self.X, u_x=self.u_x, iteration=self.iteration)
         
     def forward_path(self):
         """ Iterates forward, alternately doing prediction and filtering step.
