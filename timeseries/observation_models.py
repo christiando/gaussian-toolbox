@@ -386,7 +386,8 @@ class HCCovObservationModel(LinearObservationModel):
         
         self.update_C(smoothing_density, X)
         self.update_d(smoothing_density, X)
-        self.update_U(smoothing_density, X)
+        if self.Dx > 1:
+            self.update_U(smoothing_density, X)
         self.update_sigma_beta_W(smoothing_density, X)
         self.update_emission_density()
         
