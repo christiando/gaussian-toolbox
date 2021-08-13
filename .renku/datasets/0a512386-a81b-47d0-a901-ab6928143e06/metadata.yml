@@ -1,4 +1,25 @@
-- '@id': https://limited.renku.ch/datasets/0a512386-a81b-47d0-a901-ab6928143e06
+- '@id': https://limited.renku.ch/blob/4bf6d08d30f1ac7f008cd78d4f5f1a3b63d8b318/data/sunspots/monthly-sunspots.csv
+  '@type':
+  - http://purl.org/wf4ever/wfprov#Artifact
+  - http://schema.org/DigitalDocument
+  - http://www.w3.org/ns/prov#Entity
+  http://schema.org/dateCreated:
+  - '@value': '2021-08-13T08:41:40.724469+00:00'
+  http://schema.org/isPartOf:
+  - '@id': https://limited.renku.ch/projects/chdonner/gaussian-toolbox
+  http://schema.org/name:
+  - '@value': monthly-sunspots.csv
+  http://schema.org/url:
+  - '@value': https://limited.renku.ch/projects/chdonner/gaussian-toolbox/files/blob/data/sunspots/monthly-sunspots.csv
+  http://www.w3.org/2000/01/rdf-schema#label:
+  - '@value': data/sunspots/monthly-sunspots.csv@4bf6d08d30f1ac7f008cd78d4f5f1a3b63d8b318
+  http://www.w3.org/ns/prov#atLocation:
+  - '@value': data/sunspots/monthly-sunspots.csv
+  https://swissdatasciencecenter.github.io/renku-ontology#external:
+  - '@value': false
+  https://swissdatasciencecenter.github.io/renku-ontology#source:
+  - '@value': https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-sunspots.csv
+- '@id': https://limited.renku.ch/datasets/052552ee-f9b1-4aa9-a3fb-78eb798559e6
   '@type':
   - http://purl.org/wf4ever/wfprov#Artifact
   - http://schema.org/Dataset
@@ -8,10 +29,11 @@
   http://schema.org/creator:
   - '@id': mailto:chdonner@ethz.ch
   http://schema.org/dateCreated:
-  - '@value': '2021-08-13T08:40:07.290887+00:00'
-  http://schema.org/hasPart: []
+  - '@value': '2021-08-13T08:41:40.725913+00:00'
+  http://schema.org/hasPart:
+  - '@id': https://limited.renku.ch/blob/4bf6d08d30f1ac7f008cd78d4f5f1a3b63d8b318/data/sunspots/monthly-sunspots.csv
   http://schema.org/identifier:
-  - '@value': 0a512386-a81b-47d0-a901-ab6928143e06
+  - '@value': 052552ee-f9b1-4aa9-a3fb-78eb798559e6
   http://schema.org/isPartOf:
   - '@id': https://limited.renku.ch/projects/chdonner/gaussian-toolbox
   http://schema.org/keywords: []
@@ -19,11 +41,13 @@
   - '@value': sunspots
   http://schema.org/subjectOf: []
   http://schema.org/url:
-  - '@value': https://limited.renku.ch/datasets/0a512386-a81b-47d0-a901-ab6928143e06
+  - '@value': https://limited.renku.ch/datasets/052552ee-f9b1-4aa9-a3fb-78eb798559e6
   http://www.w3.org/2000/01/rdf-schema#label:
-  - '@value': 0a512386-a81b-47d0-a901-ab6928143e06
+  - '@value': 052552ee-f9b1-4aa9-a3fb-78eb798559e6
   http://www.w3.org/ns/prov#atLocation:
   - '@value': .renku/datasets/0a512386-a81b-47d0-a901-ab6928143e06
+  http://www.w3.org/ns/prov#wasDerivedFrom:
+  - '@id': https://localhost/urls/%2F%2Flimited.renku.ch%2Fdatasets%2F0a512386-a81b-47d0-a901-ab6928143e06
 - '@id': https://limited.renku.ch/projects/chdonner/gaussian-toolbox
   '@type':
   - http://schema.org/Project
@@ -56,6 +80,11 @@
   - '@value': https://github.com/SwissDataScienceCenter/renku-project-template
   https://swissdatasciencecenter.github.io/renku-ontology#templateVersion:
   - '@value': 817b03c0f434a79eb54473688c1f897a66228b3d
+- '@id': https://localhost/urls/%2F%2Flimited.renku.ch%2Fdatasets%2F0a512386-a81b-47d0-a901-ab6928143e06
+  '@type':
+  - http://schema.org/URL
+  http://schema.org/url:
+  - '@id': https://limited.renku.ch/datasets/0a512386-a81b-47d0-a901-ab6928143e06
 - '@id': mailto:chdonner@ethz.ch
   '@type':
   - http://schema.org/Person
