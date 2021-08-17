@@ -52,7 +52,8 @@ def _generate_heteroscedastic_data(T, Dx, Dz, Du, sigma_z = .02, sigma_x = .02):
         x[:,t] = mu_x[:,t] + numpy.dot(L_x, noise_x[:,t])
     return x.T, z.T, params_dict
 
-def load_synthetic_data(Dz:int = 2, Dx:int = 7, Du:int = 3, T:int = 4000, sigma_x: float=.01):
+def load_synthetic_data(Dz:int = 2, Dx:int = 7, Du:int = 3, T:int = 4000, sigma_x: float=.01, seed=1):
+    numpy.random.seed(seed)
     var_names = ['x_%d' %i for i in range(Dx)]
     return pandas.DataFrame(data=_generate_heteroscedastic_data(T, Dx, Dz, Du, sigma_x=sigma_x)[0], columns=var_names)
 
@@ -105,14 +106,14 @@ def load_airfoil_data():
     sensor_names = ['Cp%d' %i for i in range(0,36,4)]
     target_names = ['Cl', 'Cm']
     var_names = sensor_names + target_names
-    return pressure_df[var_names][::8].to_numpy(), var_names
+    return pressure_df[var_names][::8]
 
 ################################### Sunspot data ###############################################
 
 def load_sunspot_data():
     df = pandas.read_csv('../../data/sunspots/monthly-sunspots.csv', parse_dates=True)
     var_names = ['monthly_sunspots']
-    return numpy.array([df['Sunspots'].to_numpy()]).T, var_names
+    return df['Sunspots']
 
 ################################### OPSD data ###############################################
 
@@ -126,4 +127,4 @@ def load_opsd_data():
     full_df = pandas.concat([de_energy_df[['DE_solar_generation_actual']], de_weather_df[['DE_temperature', 'DE_radiation_direct_horizontal', 'DE_radiation_diffuse_horizontal']]], axis=1)
     full_df = full_df.fillna(method='backfill')
     var_names = ['DE_solar_generation_actual'] + ['DE_temperature', 'DE_radiation_direct_horizontal', 'DE_radiation_diffuse_horizontal']
-    return full_df[1:-1].to_numpy(), var_names
+    return full_df[1:-1]
