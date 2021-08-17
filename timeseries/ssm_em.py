@@ -201,6 +201,50 @@ class StateSpaceEM:
         p_z = prediction_density.slice(range(1,T+1))
         return self.om.evaluate_llk(p_z, X, u_x=self.u_x)
     
+    def compute_predictive_density(self, X: numpy.ndarray, p0: 'GaussianDensity'=None, 
+                                          u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
+        """ Computes the likelihood for given data X.
+        
+        :param X: numpy.ndarray [T, Dx]
+            Data for which likelihood is computed.
+        :param p0: GaussianDensity
+            Density for the initial latent state. If None, the initial density 
+            of the training data is taken. (Default=None)
+        :param u_x: numpy.ndarray [T, ...]
+            Control parameters for observation model. (Default=None)
+        :param u_z: numpy.ndarray [T, ...]
+            Control parameters for state model. (Default=None)
+            
+        :return: float
+            Data log likelihood.
+        """
+        T = X.shape[0]
+        if p0 is None:
+            p0 = self.filter_density.slice([0])
+        prediction_density = self._setup_density(T=T+1)
+        filter_density = self._setup_density(T=T+1)
+        filter_density.update([0], p0)
+        for t in range(1, T+1):
+            # Filter
+            pre_filter_density = filter_density.slice([t-1])
+            if u_z is not None:
+                uz_t = u_z[t-1:t]
+            else:
+                uz_t = None
+            cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
+            prediction_density.update([t], cur_prediction_density)
+            if u_x is not None:
+                ux_t = u_x[t-1:t]
+            else:
+                ux_t = None
+            cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
+            filter_density.update([t], cur_filter_density)
+            
+        last_filter_density = self.filter_density.slice([self.T])
+        self.smoothing_density.update([self.T], last_filter_density)
+        px = self.om.emission_density.affine_marginal_transformation(prediction_density)
+        return px.slice(numpy.arange(1, self.T+1))
+    
     def predict(self, X:numpy.ndarray, p0: 'GaussianDensity'=None, smoothed:bool=False, 
                 u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
         """ Obtains predictions for data.

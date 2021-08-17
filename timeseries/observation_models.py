@@ -461,7 +461,7 @@ class HCCovObservationModel(LinearObservationModel):
         """
         x0 = self.C.flatten()
         objective = lambda x: self.parameter_optimization_C(x, smoothing_density, X)
-        result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', options={'disp': True, 'maxiter': 100})
+        result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', options={'disp': True, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
@@ -504,7 +504,7 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
         bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 100})
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
@@ -523,7 +523,7 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
         bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
-        result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 100})
+        result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
