@@ -12,3 +12,5 @@ plotly
 jupyter
 ipywidgets
 h5py
+jax
+jaxlib

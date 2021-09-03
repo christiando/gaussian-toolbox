@@ -32,6 +32,13 @@ from darts.utils.likelihood_models import GaussianLikelihoodModel
 from darts.timeseries import TimeSeries
 from utils import load_sunspots, load_energy, load_synthetic, load_airfoil
 
+sys.path.insert(0, '../kalman-jax-master')
+from jax.experimental import optimizers
+from sde_gp import SDEGP
+import approximate_inference as approx_inf
+import priors
+import likelihoods
+from utils import softplus_list, plot
 
 def reset_seeds(seed):
     random.seed(seed)
@@ -162,6 +169,13 @@ class GaussianProcessFilter_ext(GaussianProcessFilter):
 
 
 def train_gp(x_tr):
+
+    gp_obj = GaussianProcessFilter_ext(x_tr)
+
+    return gp_obj
+
+
+def train_hkalmal(x_tr):
 
     gp_obj = GaussianProcessFilter_ext(x_tr)
 
