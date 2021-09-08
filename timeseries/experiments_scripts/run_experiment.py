@@ -30,16 +30,17 @@ from darts.models import TCNModel
 from darts.models import GaussianProcessFilter
 from darts.utils.likelihood_models import GaussianLikelihoodModel
 from darts.timeseries import TimeSeries
-from utils import load_sunspots, load_energy, load_synthetic, load_airfoil
+from exp_utils import load_sunspots, load_energy, load_synthetic, load_airfoil, load_sunspots_e1
 
-sys.path.insert(0, '../kalman-jax-master')
+'''
+sys.path.append('../../timeseries/kalman-jax-master')
 from jax.experimental import optimizers
-from sde_gp import SDEGP
+#from sde_gp import SDEGP
 import approximate_inference as approx_inf
 import priors
 import likelihoods
 from utils import softplus_list, plot
-
+'''
 def reset_seeds(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -197,7 +198,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--whiten', type=int, default=0)
     parser.add_argument('--train_ratio', type=float, default=0.5)
-    parser.add_argument('--dz', type=int, default=3)
+    parser.add_argument('--dz', type=int, default=2)
     parser.add_argument('--du', type=int, default=2)
     parser.add_argument('--dk', type=int, default=2)
     parser.add_argument('--init_with_pca', type=int, default=0)
@@ -212,7 +213,7 @@ if __name__ == "__main__":
     parser.add_argument('--d_base', type=int, default=2)
     parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--epochs', type=int, default=30)
-    parser.add_argument('--init_w_pca', type=int, default=1)
+    parser.add_argument('--init_w_pca', type=int, default=0)
     parser.add_argument('--results_file', type=str, default='first_results.txt')
     parser.add_argument('--gp_kernel_width', type=float, default='0.001')
     parser.add_argument('--gp_noise_dist', type=float, default='0.004')
@@ -227,7 +228,7 @@ if __name__ == "__main__":
 
     # load data
     if args.dataset == 'sunspots':
-        x_tr, x_va, x_te, s_tr_x = load_sunspots(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, s_tr_x = load_sunspots_e1(ts=args.ts, train_ratio=0.5)
     if args.dataset == 'energy':
         x_tr, x_va, x_te, s_tr_x = load_energy(ts=args.ts, train_ratio=0.5)
     if args.dataset == 'synthetic':
@@ -248,6 +249,7 @@ if __name__ == "__main__":
     if args.model_name == 'gp':
         model =  'gp'
     
+    print(x_tr)
     trained_model = eval('train_' + model)(x_tr)
         
     # make predictions
