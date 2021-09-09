@@ -240,10 +240,8 @@ class StateSpaceEM:
             cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
             filter_density.update([t], cur_filter_density)
             
-        last_filter_density = self.filter_density.slice([self.T])
-        self.smoothing_density.update([self.T], last_filter_density)
-        px = self.om.emission_density.affine_marginal_transformation(prediction_density)
-        return px.slice(numpy.arange(1, self.T+1))
+        px = self.om.emission_density.affine_marginal_transformation(prediction_density.slice(numpy.arange(1, T+1)))
+        return px
     
     def predict(self, X:numpy.ndarray, p0: 'GaussianDensity'=None, smoothed:bool=False, 
                 u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
@@ -331,5 +329,5 @@ class StateSpaceEM:
         :return: GaussianDensity
             Data density.
         """
-        px = self.om.emission_density.affine_marginal_transformation(self.prediction_density)
-        return px.slice(numpy.arange(1, self.T+1))
+        px = self.om.emission_density.affine_marginal_transformation(self.prediction_density.slice(range(1,self.T+1)))
+        return px
