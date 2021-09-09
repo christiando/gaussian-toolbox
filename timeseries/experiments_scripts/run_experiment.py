@@ -30,7 +30,7 @@ from darts.models import TCNModel
 from darts.models import GaussianProcessFilter
 from darts.utils.likelihood_models import GaussianLikelihoodModel
 from darts.timeseries import TimeSeries
-from exp_utils import load_sunspots, load_energy, load_synthetic, load_airfoil, load_sunspots_e1
+from exp_utils import *
 
 '''
 sys.path.append('../../timeseries/kalman-jax-master')
@@ -193,14 +193,14 @@ def compute_mape(s_true, s_pred):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default="airfoil")
+    parser.add_argument('--dataset', type=str, default="sunspots")
     parser.add_argument('--model_name', type=str, default="lin_ssm")
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--whiten', type=int, default=0)
     parser.add_argument('--train_ratio', type=float, default=0.5)
     parser.add_argument('--dz', type=int, default=2)
-    parser.add_argument('--du', type=int, default=2)
-    parser.add_argument('--dk', type=int, default=2)
+    parser.add_argument('--du', type=int, default=1)
+    parser.add_argument('--dk', type=int, default=1)
     parser.add_argument('--init_with_pca', type=int, default=0)
     parser.add_argument('--target', type=int, default=0)
     parser.add_argument('--n_epochs', type=int, default=2000)
@@ -217,6 +217,7 @@ if __name__ == "__main__":
     parser.add_argument('--results_file', type=str, default='first_results.txt')
     parser.add_argument('--gp_kernel_width', type=float, default='0.001')
     parser.add_argument('--gp_noise_dist', type=float, default='0.004')
+    parser.add_argument('--exp_num', type=str, default="1")
     args = parser.parse_args()
 
     reset_seeds(args.seed)
@@ -228,13 +229,13 @@ if __name__ == "__main__":
 
     # load data
     if args.dataset == 'sunspots':
-        x_tr, x_va, x_te, s_tr_x = load_sunspots_e1(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_sunspots_e' + args.exp_num)(ts=args.ts, train_ratio=0.5)
     if args.dataset == 'energy':
-        x_tr, x_va, x_te, s_tr_x = load_energy(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_energy_e' + args.exp_num)(ts=args.ts, train_ratio=0.5)
     if args.dataset == 'synthetic':
-        x_tr, x_va, x_te, s_tr_x = load_synthetic(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_synthetic_e' + args.exp_num)(ts=args.ts, train_ratio=0.5)
     if args.dataset == 'airfoil':
-        x_tr, x_va, x_te, s_tr_x = load_airfoil(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_airfoil_e' + args.exp_num)(ts=args.ts, train_ratio=0.5)
   
 
     # train model
@@ -249,7 +250,6 @@ if __name__ == "__main__":
     if args.model_name == 'gp':
         model =  'gp'
     
-    print(x_tr)
     trained_model = eval('train_' + model)(x_tr)
         
     # make predictions
@@ -257,10 +257,6 @@ if __name__ == "__main__":
     _, mu_pred_x_te, sigma_pred_x_te = trained_model.predict(x_te)
     _, mu_pred_x_va, sigma_pred_x_va = trained_model.predict(x_va)
     
-    # for debug; the folowing two had same values for ssm models
-    # print(mu_pred_x_tr.shape)
-    # print(x_tr.shape)
-   
     # compute metrics
     mape_tr = compute_mape(x_tr, mu_pred_x_tr)
     mape_va = compute_mape(x_va, mu_pred_x_va)
@@ -276,8 +272,8 @@ if __name__ == "__main__":
     # capture_te = (p_low_te.lt(y_te) * y_te.lt(p_high_te)).float().mean()
     
     # print and store results
-    print("{:<22} | {:<22} | {:.5f} {:.5f} {:.5f} |{:.5f} {:.5f} {:.5f} | {:<2} # {}".format(
-            args.model_name, args.dataset,
+    print("{:<22} | {:<22} | {:<5} | {:.5f} {:.5f} {:.5f} |{:.5f} {:.5f} {:.5f} | {:<2} # {}".format(
+            args.model_name, args.dataset, "exp_" + args.exp_num,
             pll_tr, pll_va, pll_te,
             mape_tr, mape_va, mape_te,
             args.seed, 
@@ -285,8 +281,8 @@ if __name__ == "__main__":
     
     
     text_file = open("./results/{}".format(args.results_file), "a+")
-    text_file.write("{:<22} | {:<22} | {:.5f} {:.5f} {:.5f} |{:.5f} {:.5f} {:.5f} | {:<2} # {}".format(
-            args.model_name, args.dataset,
+    text_file.write("{:<22} | {:<22} | {:<5} |{:.5f} {:.5f} {:.5f} |{:.5f} {:.5f} {:.5f} | {:<2} # {}".format(
+            args.model_name, args.dataset, "exp_" + args.exp_num,
             pll_tr, pll_va, pll_te,
             mape_tr, mape_va, mape_te,
             args.seed, 
