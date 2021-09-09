@@ -328,7 +328,7 @@ class HCCovObservationModel(LinearObservationModel):
             self.C = numpy.random.randn(Dx, Dz)
         self.d = numpy.zeros(Dx)
         self.U = numpy.eye(Dx)[:,:Du]
-        self.W = 1e-1 * numpy.random.randn(self.Du, self.Dz + 1)
+        self.W = 1e-3 * numpy.random.randn(self.Du, self.Dz + 1)
         self.beta = noise_x ** 2 * numpy.ones(self.Du)
         self.sigma_x = noise_x
         self.emission_density = conditionals.HCCovGaussianConditional(M = numpy.array([self.C]), 
