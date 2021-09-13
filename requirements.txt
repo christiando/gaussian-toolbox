@@ -4,10 +4,3 @@ scipy
 autograd
 pykalman
 scikit-learn
-darts
-plotly
-jupyter
-ipywidgets
-h5py
-jax
-jaxlib
