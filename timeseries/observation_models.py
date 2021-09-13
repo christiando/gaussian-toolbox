@@ -303,7 +303,7 @@ class LinearObservationModel(ObservationModel):
 class HCCovObservationModel(LinearObservationModel):
     
     
-    def __init__(self, Dx: int, Dz: int, Du: int, noise_x: float=1.):
+    def __init__(self, Dx: int, Dz: int, Du: int, noise_x: float=.1):
         """ This class implements a linear observation model, where the observations are generated as
         
             x_t = C z_t + d + xi_t     with      xi_t ~ N(0,Qx(z_t)),
@@ -328,8 +328,8 @@ class HCCovObservationModel(LinearObservationModel):
             self.C = numpy.random.randn(Dx, Dz)
         self.d = numpy.zeros(Dx)
         self.U = numpy.eye(Dx)[:,:Du]
-        self.W = 1e-4 * numpy.random.randn(self.Du, self.Dz + 1)
-        self.beta = 1e-4 * numpy.ones(self.Du)
+        self.W = 1e-3 * numpy.random.randn(self.Du, self.Dz + 1)
+        self.beta = noise_x ** 2 * numpy.ones(self.Du)
         self.sigma_x = noise_x
         self.emission_density = conditionals.HCCovGaussianConditional(M = numpy.array([self.C]), 
                                                                       b = numpy.array([self.d]), 
@@ -501,15 +501,15 @@ class HCCovObservationModel(LinearObservationModel):
         :param X: numpy.ndarray [T, Dx]
             Data.
         """
-        x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
-        bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
+        x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta) - numpy.log(self.sigma_x ** 2), self.W.flatten()])
+        bounds = [(None, 10)] + [(numpy.log(.25), 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
         result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
         self.sigma_x = numpy.exp(.5*result.x[0])
-        self.beta = numpy.exp(result.x[1:self.Du + 1])
+        self.beta = numpy.exp(result.x[1:self.Du + 1] + result.x[0])
         self.W = result.x[self.Du + 1:].reshape((self.Du, self.Dz+1))
         
     def update_sigma_beta_W(self, smoothing_density: 'GaussianDensity', X: numpy.ndarray):
@@ -520,15 +520,15 @@ class HCCovObservationModel(LinearObservationModel):
         :param X: numpy.ndarray [T, Dx]
             Data.
         """
-        x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta), self.W.flatten()])
-        bounds = [(None, 10)] + [(-10, 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
+        x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta) - numpy.log(self.sigma_x ** 2), self.W.flatten()])
+        bounds = [(None, 10)] + [(numpy.log(.25), 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
         result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
         self.sigma_x = numpy.exp(.5*result.x[0])
-        self.beta = numpy.exp(result.x[1:self.Du + 1])
+        self.beta = numpy.exp(result.x[1:self.Du + 1] + result.x[0])
         self.W = result.x[self.Du + 1:].reshape((self.Du, self.Dz+1))
         
     def _U_lagrange_func(self, x, R):
@@ -609,7 +609,7 @@ class HCCovObservationModel(LinearObservationModel):
             Parameters in vector form. (log(sigma_x), log(beta), W)
         """
         self.sigma_x = numpy.exp(.5 * params[0])
-        self.beta = numpy.exp(params[1:self.Du + 1])
+        self.beta = numpy.exp(params[1:self.Du + 1] + params[0])
         self.W = params[self.Du + 1:].reshape((self.Du, self.Dz + 1))
         
     def parameter_optimization_sigma_beta_W2(self, params: numpy.ndarray, 
