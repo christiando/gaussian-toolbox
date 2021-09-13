@@ -217,7 +217,7 @@ if __name__ == "__main__":
     parser.add_argument('--results_file', type=str, default='first_results.txt')
     parser.add_argument('--gp_kernel_width', type=float, default='0.001')
     parser.add_argument('--gp_noise_dist', type=float, default='0.004')
-    parser.add_argument('--exp_num', type=str, default="1")
+    parser.add_argument('--exp_num', type=str, default="2")
     args = parser.parse_args()
 
     reset_seeds(args.seed)
@@ -249,7 +249,6 @@ if __name__ == "__main__":
         model = 'deep_tcn'
     if args.model_name == 'gp':
         model =  'gp'
-    
     trained_model = eval('train_' + model)(x_tr)
         
     # make predictions
