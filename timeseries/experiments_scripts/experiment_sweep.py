@@ -39,7 +39,7 @@ def sweep():
         for method in parameters["method"]:
             for exp_num in parameters["exp_num"]:
                 for init_pca in parameters["init_w_pca"]:
-                    prefix = "python run_experiment.py --dataset {} --exp_num {} --method {}  --init_w_pca {}".format(dataset, exp_num, method, init_pca)
+                    prefix = "python run_experiment.py --dataset {} --exp_num {} --model_name {}  --init_w_pca {}".format(dataset, exp_num, method, init_pca)
                     if len(parameters["method"][method]) == 0:
                         commands.append(prefix)
                     else:

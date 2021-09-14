@@ -227,9 +227,9 @@ def load_energy_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
 
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:,  [1,3,4]] = np.asarray(x_al[:,  [1,3, 4]], dtype=np.float64)
+    x_al[:, [1,3,4]] = np.asarray(x_al[:,  [1,3, 4]], dtype=np.float64)
     
-    for c in [1, 3,4]:
+    for c in [1,3,4]:
         x_al[:,c] =  np.apply_along_axis(inv_softplus, 0, x_al[:,c])
 
     
