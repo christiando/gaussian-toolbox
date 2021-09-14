@@ -29,6 +29,20 @@ def softplus(x_):
             y_ = y_ + [np.log(1 + np.exp(-np.abs(x_[i]))) + np.maximum(x_[i], 0)]
     return y_
 
+def inv_softplus(x):
+    """
+    Softplus positiviy mapping, used for transforming parameters.
+    Loop over the elements of the paramter list so we can handle the special case
+    where an element is empty
+    """
+
+    y = np.empty(x.shape)
+    y[x > 10] = x[x > 10]
+    tmp = np.amax(np.stack([x[x <= 10], 1e-5 * np.ones(x[x<=10].shape)]), 0)
+    tmp = np.asarray(tmp, dtype=np.float64)
+    y[x <= 10] = np.log(np.exp(tmp) - 1)
+    return y
+
 
 def load_sunspots_e1(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     '''
@@ -40,8 +54,10 @@ def load_sunspots_e1(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
 
     df_dim = 2
     x_al = df.copy().reshape(-1, df_dim)
-    x_al[:, 1] = softplus(np.asarray(x_al[:, 1], dtype=np.float32))
-    x_al[:, 1] = np.asarray(x_al[:, 1], dtype=np.float64)
+    #x_al[:, 1] = inv_softplus(np.asarray(x_al[:, 1], dtype=np.float32))
+    x_al[:, 1] = inv_softplus(np.asarray(x_al[:, 1], dtype=np.float64))
+
+    #x_al[:, 1] = np.asarray(x_al[:, 1], dtype=np.float64)
     
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed,  shuffle=False)
@@ -83,12 +99,13 @@ def load_sunspots_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
 
     df_dim = 2
     x_al = df.copy().reshape(-1, df_dim)
-    
+    x_al[:, 1] = inv_softplus(np.asarray(x_al[:, 1], dtype=np.float64))
+
     # scale the whole dataset at once since we will remove points from the whole range
     s_x = StandardScaler().fit(x_al[:, 1].reshape(-1, 1))
     x_al[:, 1] = s_x.transform(x_al[:, 1].reshape(-1, 1)).reshape(-1)
-    x_al[:, 1] = softplus(np.asarray(x_al[:, 1], dtype=np.float32))
-
+    
+    
     # split in train test and prepare in ndarray and TimeSeries data format
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed,  shuffle=False)
@@ -118,7 +135,10 @@ def load_sunspots_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
         x_na = x_te.copy()
         x_na[to_del] = np.nan
         
-        return x_tr, x_va, x_te, x_na, s_x
+        return np.asarray(x_tr[:, 1:], dtype=np.float64),\
+               np.asarray(x_va[:, 1:], dtype=np.float64),\
+               np.asarray(x_te[:, 1:], dtype=np.float64), \
+               np.asarray(x_na[:, 1:], dtype=np.float64), s_x
     
 
 def load_energy_e1(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
@@ -145,8 +165,10 @@ def load_energy_e1(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
  
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = softplus(np.asarray(x_al[:, 1:], dtype=np.float32))
-    x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
+    x_al[:,  [1,3,4]] = np.asarray(x_al[:,  [1,3, 4]], dtype=np.float64)
+    
+    for c in [1, 3,4]:
+        x_al[:,c] =  np.apply_along_axis(inv_softplus, 0, x_al[:,c])
     
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed, shuffle=False)
@@ -205,17 +227,20 @@ def load_energy_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
 
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = softplus(np.asarray(x_al[:, 1:], dtype=np.float32))
-    x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
+    x_al[:,  [1,3,4]] = np.asarray(x_al[:,  [1,3, 4]], dtype=np.float64)
     
+    for c in [1, 3,4]:
+        x_al[:,c] =  np.apply_along_axis(inv_softplus, 0, x_al[:,c])
+
     
-    s_x = StandardScaler().fit(x_al[:, 1:])
-    x_al[:, 1:] = s_x.transform(x_al[:, 1:])
+    s_x = StandardScaler().fit(x_al[:, [1,3, 4]])
+    x_al[:, [1,3, 4]] = s_x.transform(x_al[:, [1,3, 4]])
     
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed,  shuffle=False)
     
-  
+
+
     df_tmp = pd.DataFrame(data = x_tr, columns=col_names)
     ts_tr = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='utc_timestamp')
         
@@ -258,9 +283,7 @@ def load_airfoil_e1(ts=False, train_ratio=0.5, seed=0):
  
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = softplus(np.asarray(x_al[:, 1:], dtype=np.float32))
-    x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
-    
+      
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed, shuffle=False)
 
@@ -301,7 +324,6 @@ def load_airfoil_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
     
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = softplus(np.asarray(x_al[:, 1:], dtype=np.float32))
     x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
     
     
@@ -311,7 +333,6 @@ def load_airfoil_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed,  shuffle=False)
     
-  
     df_tmp = pd.DataFrame(data = x_tr, columns=col_names)
     ts_tr = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
         
@@ -354,7 +375,6 @@ def load_synthetic_e1(ts=False, train_ratio=0.5, seed=0):
  
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = softplus(np.asarray(x_al[:, 1:], dtype=np.float32))
     x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
     
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
@@ -398,9 +418,6 @@ def load_synthetic_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
     
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = softplus(np.asarray(x_al[:, 1:], dtype=np.float32))
-    x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
-    
     
     s_x = StandardScaler().fit(x_al[:, 1:])
     x_al[:, 1:] = s_x.transform(x_al[:, 1:])
@@ -408,7 +425,6 @@ def load_synthetic_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed,  shuffle=False)
     
-  
     df_tmp = pd.DataFrame(data = x_tr, columns=col_names)
     ts_tr = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
         

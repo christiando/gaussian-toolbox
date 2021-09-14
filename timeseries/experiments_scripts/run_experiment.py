@@ -249,7 +249,6 @@ if __name__ == "__main__":
         model = 'deep_tcn'
     if args.model_name == 'gp':
         model =  'gp'
-    
     trained_model = eval('train_' + model)(x_tr)
         
     # make predictions
