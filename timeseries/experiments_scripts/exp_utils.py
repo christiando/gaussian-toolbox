@@ -35,17 +35,12 @@ def inv_softplus(x):
     Loop over the elements of the paramter list so we can handle the special case
     where an element is empty
     """
-    #y = np.empty(y_.shape)
-    #y[y_ > 10] = y_[y_ > 10]
-    #y[y_ <= 10] = np.log(np.exp(np.amax([y_[y_ <= 10], 1e-5]) - 1))
-    #x = x.reshape(-1)
+
     y = np.empty(x.shape)
     y[x > 10] = x[x > 10]
     tmp = np.amax(np.stack([x[x <= 10], 1e-5 * np.ones(x[x<=10].shape)]), 0)
-
     tmp = np.asarray(tmp, dtype=np.float64)
     y[x <= 10] = np.log(np.exp(tmp) - 1)
-    print(y)
     return y
 
 
@@ -170,8 +165,10 @@ def load_energy_e1(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
  
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = inv_softplus(np.asarray(x_al[:, 1:], dtype=np.float64))
-    #x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
+    x_al[:,  [1,3,4]] = np.asarray(x_al[:,  [1,3, 4]], dtype=np.float64)
+    
+    for c in [1, 3,4]:
+        x_al[:,c] =  np.apply_along_axis(inv_softplus, 0, x_al[:,c])
     
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed, shuffle=False)
@@ -230,10 +227,9 @@ def load_energy_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
 
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:,  [1,3, 4]] = np.asarray(x_al[:,  [1,3, 4]], dtype=np.float64)
-    #x_al[:, [1,3, 4]] = inv_softplus(np.asarray(x_al[:, [1,3, 4]]))
+    x_al[:,  [1,3,4]] = np.asarray(x_al[:,  [1,3, 4]], dtype=np.float64)
     
-    for c in [1, 3, 4]:
+    for c in [1, 3,4]:
         x_al[:,c] =  np.apply_along_axis(inv_softplus, 0, x_al[:,c])
 
     
@@ -287,9 +283,7 @@ def load_airfoil_e1(ts=False, train_ratio=0.5, seed=0):
  
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = inv_softplus(np.asarray(x_al[:, 1:], dtype=np.float32))
-    x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
-    
+      
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed, shuffle=False)
 
@@ -338,10 +332,7 @@ def load_airfoil_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed,  shuffle=False)
-    x_tr[:, 1:] = inv_softplus(np.asarray(x_tr[:, 1:], dtype=np.float))
-    x_va[:, 1:] = inv_softplus(np.asarray(x_va[:, 1:], dtype=np.float))
-    x_te[:, 1:] = inv_softplus(np.asarray(x_te[:, 1:], dtype=np.float))
-  
+    
     df_tmp = pd.DataFrame(data = x_tr, columns=col_names)
     ts_tr = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
         
@@ -384,7 +375,6 @@ def load_synthetic_e1(ts=False, train_ratio=0.5, seed=0):
  
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
-    x_al[:, 1:] = inv_softplus(np.asarray(x_al[:, 1:], dtype=np.float32))
     x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
     
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
@@ -434,10 +424,7 @@ def load_synthetic_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     
     x_tr, x_te, = train_test_split(x_al, test_size=0.1, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.01, random_state=seed,  shuffle=False)
-    x_tr[:, 1:] = inv_softplus(np.asarray(x_tr[:, 1:], dtype=np.float))
-    x_va[:, 1:] = inv_softplus(np.asarray(x_va[:, 1:], dtype=np.float))
-    x_te[:, 1:] = inv_softplus(np.asarray(x_te[:, 1:], dtype=np.float))
-  
+    
     df_tmp = pd.DataFrame(data = x_tr, columns=col_names)
     ts_tr = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
         
