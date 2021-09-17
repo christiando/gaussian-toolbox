@@ -201,7 +201,6 @@ if __name__ == "__main__":
     parser.add_argument('--dz', type=int, default=2)
     parser.add_argument('--du', type=int, default=1)
     parser.add_argument('--dk', type=int, default=1)
-    parser.add_argument('--init_with_pca', type=int, default=0)
     parser.add_argument('--target', type=int, default=0)
     parser.add_argument('--n_epochs', type=int, default=2000)
     parser.add_argument('--alpha', type=float, default=0.05)
@@ -251,10 +250,24 @@ if __name__ == "__main__":
         model =  'gp'
     trained_model = eval('train_' + model)(x_tr)
         
+    '''
     # make predictions
-    _, mu_pred_x_tr, sigma_pred_x_tr = trained_model.predict(x_tr)
-    _, mu_pred_x_te, sigma_pred_x_te = trained_model.predict(x_te)
-    _, mu_pred_x_va, sigma_pred_x_va = trained_model.predict(x_va)
+    _, mu_pred_x_tr, sigma_pred_x_tr = trained_model.predict(x_tr,smoothed=True)
+    _, mu_pred_x_te, sigma_pred_x_te = trained_model.predict(x_te,smoothed=True)
+    _, mu_pred_x_va, sigma_pred_x_va = trained_model.predict(x_va,smoothed=True)
+    '''
+    
+    pred_x_tr = trained_model.compute_predictive_density(x_tr)
+    pred_x_va = trained_model.compute_predictive_density(x_va)
+    pred_x_te = trained_model.compute_predictive_density(x_te)
+    
+    mu_pred_x_tr = pred_x_tr.mu
+    mu_pred_x_va = pred_x_va.mu
+    mu_pred_x_te = pred_x_te.mu
+    
+    sigma_pred_x_tr = pred_x_tr.Sigma
+    sigma_pred_x_va = pred_x_va.Sigma
+    sigma_pred_x_te = pred_x_te.Sigma
     
     # compute metrics
     mape_tr = compute_mape(x_tr, mu_pred_x_tr)
@@ -265,25 +278,75 @@ if __name__ == "__main__":
     pll_va = trained_model.compute_predictive_log_likelihood(x_va)
     pll_te = trained_model.compute_predictive_log_likelihood(x_te)
     
+    capture_tr_all_x = []
+    capture_va_all_x = []
+    capture_te_all_x = []
+    
+    width_tr_all_x = []
+    width_va_all_x = []
+    width_te_all_x = []
+    
+    for ix in range(x_tr.shape[1]):
+        #x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix]
+        #x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix]
+        
+        x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix, ix]
+        x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix, ix]
+        capture_tr_ix = np.mean((np.less(x_min, x_tr[:, ix]) * np.less(x_tr[:, ix], x_max)))
+        capture_tr_all_x.append(capture_tr_ix)
+        
+        x_tr_range = (x_tr[:, ix].max() - x_tr[:, ix].min())
+        width_tr = np.mean(np.abs(x_max - x_min)) / x_tr_range
+        width_tr_all_x.append(width_tr)
+        
+        x_min = mu_pred_x_va[:,ix] - 1.68 * sigma_pred_x_va[:,ix, ix]
+        x_max = mu_pred_x_va[:,ix] + 1.68 * sigma_pred_x_va[:,ix, ix]
+        capture_va_ix = np.mean((np.less(x_min, x_va[:, ix]) * np.less(x_va[:, ix], x_max)))
+        capture_va_all_x.append(capture_va_ix)
+        
+        x_va_range = (x_va[:, ix].max() - x_va[:, ix].min())
+        width_va = np.mean(np.abs(x_max - x_min)) / x_va_range
+        width_va_all_x.append(width_va)
+        
+        
+        x_min = mu_pred_x_te[:,ix] - 1.68 * np.sqrt(sigma_pred_x_te[:,ix, ix])
+        x_max = mu_pred_x_te[:,ix] + 1.68 * np.sqrt(sigma_pred_x_te[:,ix, ix])
+        capture_te_ix = np.mean((np.less(x_min, x_te[:, ix]) * np.less(x_te[:, ix], x_max)))
+        capture_te_all_x.append(capture_te_ix)
+        
+        x_te_range = (x_te[:, ix].max() - x_te[:, ix].min())
+        width_te = np.mean(np.abs(x_max - x_min)) / x_te_range
+        width_te_all_x.append(width_te)
+        
+    
     # percentage of captured points
-    # capture_tr = (p_low_tr.lt(y_tr) * y_tr.lt(p_high_tr)).float().mean()
-    # capture_va = (p_low_va.lt(y_va) * y_va.lt(p_high_va)).float().mean()
-    # capture_te = (p_low_te.lt(y_te) * y_te.lt(p_high_te)).float().mean()
+    capture_tr = np.mean(capture_tr_all_x)
+    capture_va = np.mean(capture_va_all_x)
+    capture_te = np.mean(capture_te_all_x)
+    
+    # width of intervals
+    width_tr = np.mean(width_tr_all_x)
+    width_va = np.mean(width_va_all_x)
+    width_te = np.mean(width_te_all_x)
     
     # print and store results
-    print("{:<22} | {:<22} | {:<5} | {:.5f} {:.5f} {:.5f} |{:.5f} {:.5f} {:.5f} | {:<2} # {}".format(
+    print("{:<22} | {:<22} | {:<5} | {:.5f} {:.5f} {:.5f} |{:.5f} {:.5f} {:.5f} | {:.5f} {:.5f} {:.5f} | {:.5f} {:.5f} {:.5f} | {:<2} # {}".format(
             args.model_name, args.dataset, "exp_" + args.exp_num,
             pll_tr, pll_va, pll_te,
             mape_tr, mape_va, mape_te,
+            capture_tr, capture_va, capture_te,
+            width_tr, width_va, width_te,
             args.seed, 
             str(vars(args))))
     
     
     text_file = open("./results/{}".format(args.results_file), "a+")
-    text_file.write("{:<22} | {:<22} | {:<5} |{:.5f} {:.5f} {:.5f} |{:.5f} {:.5f} {:.5f} | {:<2} # {}".format(
+    text_file.write("{:<22} | {:<22} | {:<5} |{:.5f} {:.5f} {:.5f} |{:.5f} {:.5f} {:.5f} | {:.5f} {:.5f} {:.5f} |  {:.5f} {:.5f} {:.5f} | {:<2} # {}".format(
             args.model_name, args.dataset, "exp_" + args.exp_num,
             pll_tr, pll_va, pll_te,
             mape_tr, mape_va, mape_te,
+            capture_tr, capture_va, capture_te,
+            width_tr, width_va, width_te,
             args.seed, 
             str(vars(args))))
     text_file.write('\n') 
