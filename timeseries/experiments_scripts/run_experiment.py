@@ -32,6 +32,9 @@ from darts.utils.likelihood_models import GaussianLikelihoodModel
 from darts.timeseries import TimeSeries
 from exp_utils import *
 
+import newt
+import objax
+
 '''
 sys.path.append('../../timeseries/kalman-jax-master')
 from jax.experimental import optimizers
@@ -41,6 +44,12 @@ import priors
 import likelihoods
 from utils import softplus_list, plot
 '''
+
+class PredictiveDensity:
+    def __init__(self, mu, sigma):
+        self.mu = np.array(mu)
+        self.sigma = np.array(sigma)
+        
 def reset_seeds(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -84,6 +93,89 @@ def train_nonlinear_SSM(x_tr, **kwargs):
     nonlin_model.run()
     
     return nonlin_model
+
+def train_jax_GaussianKF(x_tr, **kwargs):
+    
+
+
+class jax_Gaussian_model(object):
+    def __init__(self, x_tr):
+        self.x_tr = x_tr
+        self.t_tr = np.array([np.arange(x_tr.shape[0])]).T
+        self.model = self._train()
+        self.inf_args = {
+            "power": 0.5,  # the EP power
+        }
+        
+    def _train(self):
+        X = t_tr
+        Y = x_tr
+        N = X.shape[0]
+        batch_size = N  # 100
+
+        var_f1 = 1.  # GP variance
+        len_f1 = 1.  # GP lengthscale
+        var_f2 = 1.  # GP variance
+        len_f2 = 1.  # GP lengthscale
+
+        kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
+        kern2 = newt.kernels.Matern32(variance=var_f2, lengthscale=len_f2)
+        kern = newt.kernels.Independent([kern1, kern2])
+        #lik = newt.likelihoods.HeteroscedasticNoise()
+        lik = newt.likelihoods.Gaussian()
+        model = newt.models.MarkovVariationalGP(kernel=kern, likelihood=lik, X=X, Y=Y)
+
+        lr_adam = 0.01
+        lr_newton = 0.05
+        iters = 200
+        opt_hypers = objax.optimizer.Adam(model.vars())
+        energy = objax.GradValues(model.energy, model.vars())
+
+
+        @objax.Function.with_vars(model.vars() + opt_hypers.vars())
+        def train_op():
+            model.inference(lr=lr_newton, **self.inf_args)  # perform inference and update variational params
+            dE, E = energy(**self.inf_args)  # compute energy and its gradients w.r.t. hypers
+            opt_hypers(lr_adam, dE)
+            return E
+
+        train_op = objax.Jit(train_op)
+
+        t0 = time.time()
+        for i in range(1, iters + 1):
+            loss = train_op()
+        t1 = time.time()
+        return model
+    
+    def compute_predictive_log_likelihood(self, x_te):
+        t_te = numpy.array([np.arange(x_te.shape[0])]).T
+        model_te = self._train_test_model(x_te, t_te)
+        return float(model_te.compute_log_lik())
+    
+    def compute_predictive_density(self, x_te):
+        t_te = numpy.array([np.arange(x_te.shape[0])]).T
+        x_te_not_nan_idx = np.where([numpy.any(np.isnan(x_te), axis=1)])[0]
+        x_te_nan_idx = np.where([np.logical_not(numpy.any(np.isnan(x_te), axis=1))])[0]
+        model_te = self._train_test_model(x_te[x_te_not_nan_idx], t_te[x_te_not_nan_idx])
+        mean_te, std_te = model_te.predict_y(t_te)
+        return PredictiveDensity(mean_te, std_te)
+    
+    def _train_test_model(self, x_te, t_te):
+        var_f1 = self.model.kernel.kernel0.variance  # GP variance
+        len_f1 = self.model.kernel.kernel0.lengthscale  # GP lengthscale
+        var_f2 = self.model.kernel.kernel1.variance  # GP variance
+        len_f2 = self.model.kernel.kernel1.lengthscale  # GP lengthscale
+
+        kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
+        kern2 = newt.kernels.Matern32(variance=var_f2, lengthscale=len_f2)
+        kern = newt.kernels.Independent([kern1, kern2])
+        #lik = newt.likelihoods.HeteroscedasticNoise()
+        lik = newt.likelihoods.Gaussian()
+        lik.transformed_variance =  self.model.likelihood.transformed_variance
+        t_te = numpy.array([numpy.arange(x_te.shape[0])]).T
+        model_te = newt.models.MarkovVariationalGP(kernel=kern, likelihood=lik, X=t_te, Y=x_te)
+        _ = model_te.inference(lr=lr_newton, **self.inf_args)
+        return model_te
 
 
 class TCNModel_ext(TCNModel):
