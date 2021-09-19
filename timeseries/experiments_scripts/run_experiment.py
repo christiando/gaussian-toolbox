@@ -48,7 +48,7 @@ from utils import softplus_list, plot
 class PredictiveDensity:
     def __init__(self, mu, sigma):
         self.mu = np.array(mu)
-        self.sigma = np.array(sigma)
+        self.Sigma = np.array(sigma)
         
 def reset_seeds(seed):
     random.seed(seed)
@@ -94,22 +94,20 @@ def train_nonlinear_SSM(x_tr, **kwargs):
     
     return nonlin_model
 
-def train_jax_GaussianKF(x_tr, **kwargs):
-    
-
 
 class jax_Gaussian_model(object):
     def __init__(self, x_tr):
         self.x_tr = x_tr
         self.t_tr = np.array([np.arange(x_tr.shape[0])]).T
-        self.model = self._train()
         self.inf_args = {
             "power": 0.5,  # the EP power
         }
+        self.model = self._train()
+
         
     def _train(self):
-        X = t_tr
-        Y = x_tr
+        X = self.t_tr
+        Y = self.x_tr
         N = X.shape[0]
         batch_size = N  # 100
 
@@ -141,21 +139,19 @@ class jax_Gaussian_model(object):
 
         train_op = objax.Jit(train_op)
 
-        t0 = time.time()
         for i in range(1, iters + 1):
             loss = train_op()
-        t1 = time.time()
         return model
     
     def compute_predictive_log_likelihood(self, x_te):
-        t_te = numpy.array([np.arange(x_te.shape[0])]).T
+        t_te = np.array([np.arange(x_te.shape[0])]).T
         model_te = self._train_test_model(x_te, t_te)
         return float(model_te.compute_log_lik())
     
     def compute_predictive_density(self, x_te):
-        t_te = numpy.array([np.arange(x_te.shape[0])]).T
-        x_te_not_nan_idx = np.where([numpy.any(np.isnan(x_te), axis=1)])[0]
-        x_te_nan_idx = np.where([np.logical_not(numpy.any(np.isnan(x_te), axis=1))])[0]
+        t_te = np.array([np.arange(x_te.shape[0])]).T
+        x_te_nan_idx = np.where([np.any(np.isnan(x_te), axis=1)])[0]
+        x_te_not_nan_idx = np.where([np.logical_not(np.any(np.isnan(x_te), axis=1))])[0]
         model_te = self._train_test_model(x_te[x_te_not_nan_idx], t_te[x_te_not_nan_idx])
         mean_te, std_te = model_te.predict_y(t_te)
         return PredictiveDensity(mean_te, std_te)
@@ -172,10 +168,17 @@ class jax_Gaussian_model(object):
         #lik = newt.likelihoods.HeteroscedasticNoise()
         lik = newt.likelihoods.Gaussian()
         lik.transformed_variance =  self.model.likelihood.transformed_variance
-        t_te = numpy.array([numpy.arange(x_te.shape[0])]).T
+        t_te = np.array([np.arange(x_te.shape[0])]).T
         model_te = newt.models.MarkovVariationalGP(kernel=kern, likelihood=lik, X=t_te, Y=x_te)
-        _ = model_te.inference(lr=lr_newton, **self.inf_args)
+        lr_newton = 0.05
+        for i in range(50):
+            model_te.inference(lr=lr_newton, **self.inf_args)
         return model_te
+    
+def train_newt_gauss(x_tr, **kwargs):
+    
+    jax_gauss_model = jax_Gaussian_model(x_tr)
+    return jax_gauss_model
 
 
 class TCNModel_ext(TCNModel):
@@ -340,6 +343,8 @@ if __name__ == "__main__":
         model = 'deep_tcn'
     if args.model_name == 'gp':
         model =  'gp'
+    if args.model_name == 'newt_gauss':
+        model = 'newt_gauss'
     trained_model = eval('train_' + model)(x_tr)
         
     '''
@@ -362,9 +367,9 @@ if __name__ == "__main__":
     sigma_pred_x_te = pred_x_te.Sigma
     
     # compute metrics
-    mape_tr = compute_mape(x_tr, mu_pred_x_tr)
-    mape_va = compute_mape(x_va, mu_pred_x_va)
-    mape_te = compute_mape(x_te, mu_pred_x_te)
+    mape_tr = compute_mape(x_tr, mu_pred_x_tr[:,0])
+    mape_va = compute_mape(x_va, mu_pred_x_va[:,0])
+    mape_te = compute_mape(x_te, mu_pred_x_te[:,0])
 
     pll_tr = trained_model.compute_predictive_log_likelihood(x_tr)
     pll_va = trained_model.compute_predictive_log_likelihood(x_va)
@@ -382,8 +387,12 @@ if __name__ == "__main__":
         #x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix]
         #x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix]
         
-        x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix, ix]
-        x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix, ix]
+        if sigma_pred_x_tr.ndim == 3:
+            x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix, ix]
+            x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix, ix]
+        else:
+            x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix]
+            x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix]
         capture_tr_ix = np.mean((np.less(x_min, x_tr[:, ix]) * np.less(x_tr[:, ix], x_max)))
         capture_tr_all_x.append(capture_tr_ix)
         
@@ -391,8 +400,12 @@ if __name__ == "__main__":
         width_tr = np.mean(np.abs(x_max - x_min)) / x_tr_range
         width_tr_all_x.append(width_tr)
         
-        x_min = mu_pred_x_va[:,ix] - 1.68 * sigma_pred_x_va[:,ix, ix]
-        x_max = mu_pred_x_va[:,ix] + 1.68 * sigma_pred_x_va[:,ix, ix]
+        if sigma_pred_x_va.ndim == 3:
+            x_min = mu_pred_x_va[:,ix] - 1.68 * sigma_pred_x_va[:,ix, ix]
+            x_max = mu_pred_x_va[:,ix] + 1.68 * sigma_pred_x_va[:,ix, ix]
+        else:
+            x_min = mu_pred_x_va[:,ix] - 1.68 * sigma_pred_x_va[:,ix]
+            x_max = mu_pred_x_va[:,ix] + 1.68 * sigma_pred_x_va[:,ix]
         capture_va_ix = np.mean((np.less(x_min, x_va[:, ix]) * np.less(x_va[:, ix], x_max)))
         capture_va_all_x.append(capture_va_ix)
         
@@ -400,9 +413,13 @@ if __name__ == "__main__":
         width_va = np.mean(np.abs(x_max - x_min)) / x_va_range
         width_va_all_x.append(width_va)
         
-        
-        x_min = mu_pred_x_te[:,ix] - 1.68 * np.sqrt(sigma_pred_x_te[:,ix, ix])
-        x_max = mu_pred_x_te[:,ix] + 1.68 * np.sqrt(sigma_pred_x_te[:,ix, ix])
+        if sigma_pred_x_te.ndim == 3:
+            x_min = mu_pred_x_te[:,ix] - 1.68 * np.sqrt(sigma_pred_x_te[:,ix, ix])
+            x_max = mu_pred_x_te[:,ix] + 1.68 * np.sqrt(sigma_pred_x_te[:,ix, ix])
+        else:
+            x_min = mu_pred_x_te[:,ix] - 1.68 * np.sqrt(sigma_pred_x_te[:,ix])
+            x_max = mu_pred_x_te[:,ix] + 1.68 * np.sqrt(sigma_pred_x_te[:,ix])
+            
         capture_te_ix = np.mean((np.less(x_min, x_te[:, ix]) * np.less(x_te[:, ix], x_max)))
         capture_te_all_x.append(capture_te_ix)
         
