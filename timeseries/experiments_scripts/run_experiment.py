@@ -119,13 +119,18 @@ class jax_HSK_model(object):
 
         var_f1 = 3.  # GP variance
         len_f1 = 10.  # GP lengthscale
-        var_f2 = 1.  # GP variance
-        len_f2 = 1.  # GP lengthscale
+        var_f2 = 3.  # GP variance
+        len_f2 = 5.  # GP lengthscale
+        
+        if args.newt_kernel == 'Matern12':
+            kern1 = newt.kernels.Matern12(variance=var_f1, lengthscale=len_f1)
+            kern2 = newt.kernels.Matern12(variance=var_f2, lengthscale=len_f2)
+        elif args.newt_kernel == 'Matern32':
+            kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
+            kern2 = newt.kernels.Matern32(variance=var_f2, lengthscale=len_f2)
 
-        kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
-        kern2 = newt.kernels.Matern32(variance=var_f2, lengthscale=len_f2)
         kern = newt.kernels.Independent([kern1, kern2])
-        lik = newt.likelihoods.HeteroscedasticNoise()
+        lik = newt.likelihoods.HeteroscedasticNoise(link=args.newt_link)
         #model = newt.models.MarkovVariationalGP(kernel=kern, likelihood=lik, X=X, Y=Y)
         model = newt.models.MarkovExpectationPropagationGP(kernel=kern, likelihood=lik, X=X, Y=Y)
         lr_adam = 0.01
@@ -133,7 +138,8 @@ class jax_HSK_model(object):
         iters = 200
         opt_hypers = objax.optimizer.Adam(model.vars())
         energy = objax.GradValues(model.energy, model.vars())
-
+        e2 = np.inf
+        converged = False
 
         @objax.Function.with_vars(model.vars() + opt_hypers.vars())
         def train_op():
@@ -143,24 +149,26 @@ class jax_HSK_model(object):
             return E
 
         train_op = objax.Jit(train_op)
-
-        for i in range(1, iters + 1):
+        i= 0
+        while i < 50:
             loss = train_op()
+            e1 = loss[0]
+            converged = (np.abs(e2 - e1) / np.amax(np.abs([e1, e2]))) < 1e-4
+            e2 = e1
+            i += 1
         return model
     
     def compute_predictive_log_likelihood(self, x_te):
         t_te = np.array([np.arange(x_te.shape[0])]).T
         model_te = self._train_test_model(x_te, t_te)
-        posterior_mean, posterior_var = model_te.predict(X=t_te)
-        #link = model_te.likelihood.link_fn
-        #mean_te, std_te = posterior_mean[:, 0], np.sqrt(posterior_var[:, 0] + link(posterior_mean[:, 1]) ** 2)
-        #llk = - .5 * np.sum(((x_te-mean_te) / std_te) ** 2 + np.log(2 * np.pi * std_te ** 2))
-        return float(model_te.compute_log_lik())
+        #predictions = self.compute_predictive_density(x_te)
+        #llk = - .5 * np.sum(((x_te - predictions.mu) / predictions.Sigma) ** 2 + np.log(2 * np.pi * predictions.Sigma))
+        return model_te.compute_log_lik()
     
     def compute_predictive_density(self, x_te):
         t_te = np.array([np.arange(x_te.shape[0])]).T
-        x_te_nan_idx = np.where([np.any(np.isnan(x_te), axis=1)])[0]
-        x_te_not_nan_idx = np.where([np.logical_not(np.any(np.isnan(x_te), axis=1))])[0]
+        x_te_nan_idx = np.where([np.any(np.isnan(x_te), axis=1)])[1]
+        x_te_not_nan_idx = np.where([np.logical_not(np.any(np.isnan(x_te), axis=1))])[1]
         model_te = self._train_test_model(x_te[x_te_not_nan_idx], t_te[x_te_not_nan_idx])
         posterior_mean, posterior_var = model_te.predict(X=t_te)
         link = model_te.likelihood.link_fn
@@ -173,16 +181,58 @@ class jax_HSK_model(object):
         var_f2 = self.model.kernel.kernel1.variance  # GP variance
         len_f2 = self.model.kernel.kernel1.lengthscale  # GP lengthscale
 
-        kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
-        kern2 = newt.kernels.Matern32(variance=var_f2, lengthscale=len_f2)
+        if args.newt_kernel == 'Matern12':
+            kern1 = newt.kernels.Matern12(variance=var_f1, lengthscale=len_f1)
+            kern2 = newt.kernels.Matern12(variance=var_f2, lengthscale=len_f2)
+        elif args.newt_kernel == 'Matern32':
+            kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
+            kern2 = newt.kernels.Matern32(variance=var_f2, lengthscale=len_f2)
+
         kern = newt.kernels.Independent([kern1, kern2])
-        lik = newt.likelihoods.HeteroscedasticNoise()
-        t_te = np.array([np.arange(x_te.shape[0])]).T
+        lik = newt.likelihoods.HeteroscedasticNoise(link=args.newt_link)
         #model_te = newt.models.MarkovVariationalGP(kernel=kern, likelihood=lik, X=t_te, Y=x_te)
         model_te = newt.models.MarkovExpectationPropagationGP(kernel=kern, likelihood=lik, X=t_te, Y=x_te)
         lr_newton = 0.05
-        for i in range(50):
-            model_te.inference(lr=lr_newton, **self.inf_args)
+        e2 = np.inf
+        converged = False
+        #for i in range(100):
+        i = 0
+        opt_hypers = objax.optimizer.Adam(model_te.vars())
+        energy = objax.GradValues(model_te.energy, model_te.vars())
+        
+        @objax.Function.with_vars(model_te.vars() + opt_hypers.vars())
+        def train_op():
+            model_te.inference(lr=lr_newton, **self.inf_args)  # perform inference and update variational params
+            dE, E = energy(**self.inf_args)  # compute energy and its gradients w.r.t. hypers
+            #opt_hypers(lr_adam, dE)
+            return E[0]
+
+        train_op = objax.Jit(train_op)
+        
+        while not converged:
+            e1 = train_op()
+            #e1 = model_te.energy()
+            converged = (np.abs(e2 - e1) / np.amax(np.abs([e1, e2]))) < 1e-4
+            e2 = e1
+            i += 1
+        """
+        lr_adam = 0.01
+        
+        
+        opt_hypers = objax.optimizer.Adam(model_te.vars())
+        energy = objax.GradValues(model_te.energy, model_te.vars())
+
+        @objax.Function.with_vars(model_te.vars() + opt_hypers.vars())
+        def train_op():
+            model_te.inference(lr=lr_newton, **self.inf_args)  # perform inference and update variational params
+            dE, E = energy(**self.inf_args)  # compute energy and its gradients w.r.t. hypers
+            opt_hypers(lr_adam, dE)
+            return E
+        
+        for i in range(1, 10 + 1):
+            loss = train_op()
+            print(loss)
+        """
         return model_te
     
 def train_newt_hsk(x_tr, **kwargs):
@@ -212,7 +262,10 @@ class jax_Gaussian_model(object):
         #var_f2 = 1.  # GP variance
         #len_f2 = 1.  # GP lengthscale
 
-        kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
+        if args.newt_kernel == 'Matern12':
+            kern1 = newt.kernels.Matern12(variance=var_f1, lengthscale=len_f1)
+        elif args.newt_kernel == 'Matern32':
+            kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
         #kern2 = newt.kernels.Matern32(variance=var_f2, lengthscale=len_f2)
         kern = newt.kernels.Independent([kern1, ])
         #lik = newt.likelihoods.HeteroscedasticNoise()
@@ -222,7 +275,10 @@ class jax_Gaussian_model(object):
 
         lr_adam = 0.01
         lr_newton = 0.05
-        iters = 200
+        e2 = np.inf
+        converged = False
+        #for i in range(100):
+        i = 0
         opt_hypers = objax.optimizer.Adam(model.vars())
         energy = objax.GradValues(model.energy, model.vars())
 
@@ -236,19 +292,26 @@ class jax_Gaussian_model(object):
 
         train_op = objax.Jit(train_op)
 
-        for i in range(1, iters + 1):
+        while i < 200:
             loss = train_op()
+            e1 = loss[0]
+            converged = (np.abs(e2 - e1) / np.amax(np.abs([e1, e2]))) < 1e-4
+            e2 = e1
+            i += 1
+        print(i)
         return model
     
     def compute_predictive_log_likelihood(self, x_te):
         t_te = np.array([np.arange(x_te.shape[0])]).T
         model_te = self._train_test_model(x_te, t_te)
-        return float(model_te.compute_log_lik())
+        #predictions = self.compute_predictive_density(x_te)
+        #llk = - .5 * np.sum(((x_te - predictions.mu) / predictions.Sigma) ** 2 + np.log(2 * np.pi * predictions.Sigma))
+        return model_te.compute_log_lik()
     
     def compute_predictive_density(self, x_te):
         t_te = np.array([np.arange(x_te.shape[0])]).T
-        x_te_nan_idx = np.where([np.any(np.isnan(x_te), axis=1)])[0]
-        x_te_not_nan_idx = np.where([np.logical_not(np.any(np.isnan(x_te), axis=1))])[0]
+        x_te_nan_idx = np.where([np.any(np.isnan(x_te), axis=1)])[1]
+        x_te_not_nan_idx = np.where([np.logical_not(np.any(np.isnan(x_te), axis=1))])[1]
         model_te = self._train_test_model(x_te[x_te_not_nan_idx], t_te[x_te_not_nan_idx])
         mean_te, std_te = model_te.predict_y(t_te)
         return PredictiveDensity(mean_te, std_te)
@@ -259,7 +322,10 @@ class jax_Gaussian_model(object):
         #var_f2 = self.model.kernel.kernel1.variance  # GP variance
         #len_f2 = self.model.kernel.kernel1.lengthscale  # GP lengthscale
 
-        kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
+        if args.newt_kernel == 'Matern12':
+            kern1 = newt.kernels.Matern12(variance=var_f1, lengthscale=len_f1)
+        elif args.newt_kernel == 'Matern32':
+            kern1 = newt.kernels.Matern32(variance=var_f1, lengthscale=len_f1)
         #kern2 = newt.kernels.Matern32(variance=var_f2, lengthscale=len_f2)
         kern = newt.kernels.Independent([kern1, ])
         #lik = newt.likelihoods.HeteroscedasticNoise()
@@ -268,9 +334,31 @@ class jax_Gaussian_model(object):
         t_te = np.array([np.arange(x_te.shape[0])]).T
         #model_te = newt.models.MarkovVariationalGP(kernel=kern, likelihood=lik, X=t_te, Y=x_te)
         model_te = newt.models.MarkovExpectationPropagationGP(kernel=kern, likelihood=lik, X=t_te, Y=x_te)
+        e2 = np.inf
+        converged = False
+        #for i in range(100):
+        i = 0
+        opt_hypers = objax.optimizer.Adam(model_te.vars())
+        energy = objax.GradValues(model_te.energy, model_te.vars())
+        lr_adam = 0.01
         lr_newton = 0.05
-        for i in range(50):
-            model_te.inference(lr=lr_newton, **self.inf_args)
+        
+        @objax.Function.with_vars(model_te.vars() + opt_hypers.vars())
+        def train_op():
+            model_te.inference(lr=lr_newton, **self.inf_args)  # perform inference and update variational params
+            dE, E = energy(**self.inf_args)  # compute energy and its gradients w.r.t. hypers
+            #opt_hypers(lr_adam, dE)
+            return E[0]
+        
+        train_op = objax.Jit(train_op)
+        
+        while not converged:
+            e1 = train_op()
+            #e1 = model_te.energy()
+            converged = (np.abs(e2 - e1) / np.amax(np.abs([e1, e2]))) < 1e-4
+            e2 = e1
+            i += 1
+            
         return model_te
     
 def train_newt_gauss(x_tr, **kwargs):
@@ -410,6 +498,8 @@ if __name__ == "__main__":
     parser.add_argument('--gp_kernel_width', type=float, default='0.001')
     parser.add_argument('--gp_noise_dist', type=float, default='0.004')
     parser.add_argument('--exp_num', type=str, default="1")
+    parser.add_argument('--newt_kernel', type=str, default="Matern12")
+    parser.add_argument('--newt_link', type=str, default="softplus")
     args = parser.parse_args()
 
     reset_seeds(args.seed)
