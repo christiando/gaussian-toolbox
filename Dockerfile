@@ -18,7 +18,7 @@ FROM ${RENKU_BASE_IMAGE}
 # USER ${NB_USER}
 
 # install the python dependencies
-COPY requirements.txt environment.yml /tmp/
+COPY requirements.txt requirements_external.txt environment.yml /tmp/
 RUN conda env update -q -f /tmp/environment.yml && \
     /opt/conda/bin/pip install -r /tmp/requirements.txt && \
     /opt/conda/bin/pip install -r /tmp/requirements_external.txt && \
