@@ -150,7 +150,7 @@ class jax_HSK_model(object):
 
         train_op = objax.Jit(train_op)
         i= 0
-        while i < 50:
+        while not converged:
             loss = train_op()
             e1 = loss[0]
             converged = (np.abs(e2 - e1) / np.amax(np.abs([e1, e2]))) < 1e-4
@@ -159,11 +159,10 @@ class jax_HSK_model(object):
         return model
     
     def compute_predictive_log_likelihood(self, x_te):
-        t_te = np.array([np.arange(x_te.shape[0])]).T
-        model_te = self._train_test_model(x_te, t_te)
-        #predictions = self.compute_predictive_density(x_te)
-        #llk = - .5 * np.sum(((x_te - predictions.mu) / predictions.Sigma) ** 2 + np.log(2 * np.pi * predictions.Sigma))
-        return model_te.compute_log_lik()
+        predictions = self.compute_predictive_density(x_te)
+        llk = - .5 * np.sum(((x_te - predictions.mu) / predictions.Sigma) ** 2 + np.log(2 * np.pi * predictions.Sigma ** 2))
+        return llk
+        #return model_te.compute_log_lik()
     
     def compute_predictive_density(self, x_te):
         t_te = np.array([np.arange(x_te.shape[0])]).T
@@ -302,11 +301,11 @@ class jax_Gaussian_model(object):
         return model
     
     def compute_predictive_log_likelihood(self, x_te):
-        t_te = np.array([np.arange(x_te.shape[0])]).T
-        model_te = self._train_test_model(x_te, t_te)
-        #predictions = self.compute_predictive_density(x_te)
-        #llk = - .5 * np.sum(((x_te - predictions.mu) / predictions.Sigma) ** 2 + np.log(2 * np.pi * predictions.Sigma))
-        return model_te.compute_log_lik()
+        #t_te = np.array([np.arange(x_te.shape[0])]).T
+        #model_te = self._train_test_model(x_te, t_te)
+        predictions = self.compute_predictive_density(x_te)
+        llk = - .5 * np.sum(((x_te - predictions.mu) / predictions.Sigma) ** 2 + np.log(2 * np.pi * predictions.Sigma ** 2))
+        return llk#model_te.compute_log_lik()
     
     def compute_predictive_density(self, x_te):
         t_te = np.array([np.arange(x_te.shape[0])]).T
