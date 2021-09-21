@@ -112,14 +112,17 @@ class HMM_class:
         
     def _train(self):
         model = HMM(self.K, self.D, observations=self.obs_model)
-        model.fit(x_tr, method="em")
+        model.fit(self.x_tr, method="em")
         return model
 
     def compute_predictive_log_likelihood(self, x_te):
         return self.model.log_likelihood(x_te)
     
     def compute_predictive_density(self, x_te):
-        states = self.model.filter(x_te)
+        mask = np.logical_not(np.isnan(x_te))
+        x_te_not_nan = np.zeros(x_te.shape)
+        x_te_not_nan[mask] = x_te[mask]
+        states = self.model.filter(x_te_not_nan, mask=mask)
         if self.obs_model == 'gaussian':
             mean_te = np.dot(states, self.model.observations.mus)
         elif self.obs_model == 'ar':
