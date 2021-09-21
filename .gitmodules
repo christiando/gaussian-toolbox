@@ -1,3 +1,0 @@
-[submodule "src/ssm"]
-	path = src/ssm
-	url = https://github.com/lindermanlab/ssm.git

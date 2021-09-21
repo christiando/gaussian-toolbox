@@ -21,6 +21,7 @@ FROM ${RENKU_BASE_IMAGE}
 COPY requirements.txt environment.yml /tmp/
 RUN conda env update -q -f /tmp/environment.yml && \
     /opt/conda/bin/pip install -r /tmp/requirements.txt && \
+    /opt/conda/bin/pip install -r /tmp/requirements_external.txt && \
     conda clean -y --all && \
     conda env export -n "root"
 
