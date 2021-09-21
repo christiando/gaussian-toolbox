@@ -34,6 +34,7 @@ from exp_utils import *
 
 import newt
 import objax
+from ssm import HMM
 
 '''
 sys.path.append('../../timeseries/kalman-jax-master')
@@ -100,7 +101,36 @@ def train_nonlinear_SSM(x_tr, **kwargs):
     
     return nonlin_model
 
+class HMM_class:
+    
+    def __init__(self, x_tr, K, obs_model='gaussian'):
+        self.x_tr = x_tr
+        self.D = x_tr.shape[1]
+        self.K = K
+        self.obs_model = obs_model
+        self.model = self._train()
+        
+    def _train(self):
+        model = HMM(self.K, self.D, observations=self.obs_model)
+        model.fit(x_tr, method="em")
+        return model
 
+    def compute_predictive_log_likelihood(self, x_te):
+        return self.model.log_likelihood(x_te)
+    
+    def compute_predictive_density(self, x_te):
+        states = self.model.filter(x_te)
+        if self.obs_model == 'gaussian':
+            mean_te = np.dot(states, self.model.observations.mus)
+        elif self.obs_model == 'ar':
+            mean_te = np.sum(states[:,:,None] * (np.sum(self.model.observations.As[None] * x_te[:,None, None], axis=3) + self.model.observations.bs), axis=1)
+        std_te = np.dot(states, np.sqrt(self.model.observations.Sigmas.diagonal(axis1=1, axis2=2)))
+        print(mean_te.shape, std_te.shape)
+        return PredictiveDensity(mean_te, std_te)
+
+def train_HMM(x_tr, **kwargs):
+    return HMM_class(x_tr, args.num_states, args.obs_model)
+    
 class jax_HSK_model(object):
     def __init__(self, x_tr):
         self.x_tr = x_tr
@@ -499,6 +529,8 @@ if __name__ == "__main__":
     parser.add_argument('--exp_num', type=str, default="1")
     parser.add_argument('--newt_kernel', type=str, default="Matern12")
     parser.add_argument('--newt_link', type=str, default="softplus")
+    parser.add_argument('--num_states', type=int, default=1)
+    parser.add_argument('--obs_model', type=str, default='gaussian')
     args = parser.parse_args()
 
     reset_seeds(args.seed)
@@ -534,6 +566,8 @@ if __name__ == "__main__":
         model = 'newt_gauss'
     if args.model_name == 'newt_hsk':
         model = 'newt_hsk'
+    if args.model_name == 'hmm':
+        model = 'HMM'
     trained_model = eval('train_' + model)(x_tr)
         
     '''
@@ -556,9 +590,9 @@ if __name__ == "__main__":
     sigma_pred_x_te = pred_x_te.Sigma
     print(mu_pred_x_tr.shape, x_tr.shape)
     # compute metrics
-    mape_tr = compute_mape(x_tr, mu_pred_x_tr[:,0])
-    mape_va = compute_mape(x_va, mu_pred_x_va[:,0])
-    mape_te = compute_mape(x_te, mu_pred_x_te[:,0])
+    mape_tr = compute_mape(x_tr, mu_pred_x_tr)
+    mape_va = compute_mape(x_va, mu_pred_x_va)
+    mape_te = compute_mape(x_te, mu_pred_x_te)
 
     pll_tr = trained_model.compute_predictive_log_likelihood(x_tr)
     pll_va = trained_model.compute_predictive_log_likelihood(x_va)
