@@ -544,13 +544,13 @@ if __name__ == "__main__":
 
     # load data
     if args.dataset == 'sunspots':
-        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_sunspots_e' + args.exp_num)(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_sunspots_e' + args.exp_num)(ts=args.ts, train_ratio=args.train_ratio)
     if args.dataset == 'energy':
-        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_energy_e' + args.exp_num)(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_energy_e' + args.exp_num)(ts=args.ts, train_ratio=args.train_ratio)
     if args.dataset == 'synthetic':
-        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_synthetic_e' + args.exp_num)(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_synthetic_e' + args.exp_num)(ts=args.ts, train_ratio=args.train_ratio)
     if args.dataset == 'airfoil':
-        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_airfoil_e' + args.exp_num)(ts=args.ts, train_ratio=0.5)
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_airfoil_e' + args.exp_num)(ts=args.ts, train_ratio=args.train_ratio)
   
 
     # train model
