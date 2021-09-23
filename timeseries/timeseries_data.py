@@ -38,7 +38,7 @@ def _generate_heteroscedastic_data(T, Dx, Dz, Du, sigma_z = .02, sigma_x = .02):
     # b = numpy.zeros(Dz)
     # for t in range(1,T):
     #     z[:,t] = numpy.dot(A, z[:,t-1]) + b + noise_z[:,t-1]
-    freq = 1 / (1000 * numpy.random.rand(Dz) + 500)
+    freq = 2 / (1000 * numpy.random.rand(Dz) + 500)
     phase = 2 * numpy.pi * numpy.random.rand(Dz)
     for idz in range(Dz): 
         z[idz] = 1*numpy.cos(2 * numpy.pi * numpy.arange(T) * freq[idz] + phase[idz]) + noise_z[idz]
@@ -52,7 +52,7 @@ def _generate_heteroscedastic_data(T, Dx, Dz, Du, sigma_z = .02, sigma_x = .02):
         x[:,t] = mu_x[:,t] + numpy.dot(L_x, noise_x[:,t])
     return x.T, z.T, params_dict
 
-def load_synthetic_data(Dz:int = 2, Dx:int = 7, Du:int = 3, T:int = 4000, sigma_x: float=.01, seed=1):
+def load_synthetic_data(Dz:int = 2, Dx:int = 7, Du:int = 3, T:int = 10000, sigma_x: float=.01, seed=1):
     numpy.random.seed(seed)
     var_names = ['x_%d' %i for i in range(Dx)]
     return pandas.DataFrame(data=_generate_heteroscedastic_data(T, Dx, Dz, Du, sigma_x=sigma_x)[0], columns=var_names)

@@ -14,11 +14,26 @@ import observation_models, state_models
 import sys
 sys.path.append('../src/')
 import densities
+import pickle
+import os
+
+def load_model(model_name: str, path: str='') -> 'StateSpaceEM':
+    """ Loads state space em model.
+    
+    :param model_name: str
+        Name of the model, which is used as file name.
+    :param path: str
+        Path to which model is saved to. (Default='')
+    :return: StateSpaceEM
+        Loaded model.
+    """
+    return pickle.load(open('%s/%s.p' %(path, model_name), "rb"))
+    
 
 class StateSpaceEM:
     
     def __init__(self, X: numpy.ndarray, observation_model: observation_models.ObservationModel, 
-                 state_model: state_models.StateModel, max_iter: int=100, conv_crit: float=1e-4,
+                 state_model: state_models.StateModel, max_iter: int=100, conv_crit: float=1e-3,
                  u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
         """ Class to fit a state space model with the expectation-maximization procedure.
         
@@ -237,7 +252,7 @@ class StateSpaceEM:
                 ux_t = u_x[t-1:t]
             else:
                 ux_t = None
-            cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
+            cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
             filter_density.update([t], cur_filter_density)
             
         px = self.om.emission_density.affine_marginal_transformation(prediction_density.slice(numpy.arange(1, T+1)))
@@ -320,9 +335,7 @@ class StateSpaceEM:
                 mu_unobserved[t, numpy.isnan(X[t])] = mu_ux
                 std_unobserved[t, numpy.isnan(X[t])] = std_ux
             return smoothing_density, mu_unobserved, std_unobserved
-        
-                
-            
+
     def compute_data_density(self) -> densities.GaussianDensity:
         """ Computes the data density for the training data, given the prediction density.
         
@@ -331,3 +344,16 @@ class StateSpaceEM:
         """
         px = self.om.emission_density.affine_marginal_transformation(self.prediction_density.slice(range(1,self.T+1)))
         return px
+    
+    def save(self, model_name: str, path: str='', overwrite: bool=False):
+        """ Saves the model.
+        
+        :param model_name: str
+            Name of the model, which is used as file name.
+        :param path: str
+            Path to which model is saved to. (Default='')
+        """
+        if os.path.isfile(path) and not overwrite:
+            raise RuntimeException('File already exists. Pick another name or indicate overwrite.')
+        else:
+            pickle.dump(self, open('%s/%s.p' %(path, model_name), 'wb'))

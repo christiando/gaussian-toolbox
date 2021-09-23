@@ -26,6 +26,25 @@ import sys
 sys.path.append('../src/')
 import densities, conditionals, factors
 
+
+def recommend_dims(X, smooth_window=20, cut_off=.99):
+    X_mean = numpy.mean(X, axis=0)
+    T = X.shape[0]
+    X_smoothed = numpy.empty(X.shape)
+    for i in range(X.shape[1]):
+        X_smoothed[:,i] = numpy.convolve(X[:,i], 
+                                         numpy.ones(smooth_window) / smooth_window, 
+                                         mode='same')
+    eig_vals_X, eig_vecs_X = scipy.linalg.eigh(numpy.dot((X_smoothed-X_mean[None]).T, 
+                                                     X_smoothed-X_mean[None]))
+    Dz = numpy.searchsorted(numpy.cumsum(eig_vals_X[::-1]) / numpy.sum(eig_vals_X), cut_off) + 1
+    C =  eig_vecs_X[:,-Dz:] * eig_vals_X[-Dz:] / T
+    z_hat = numpy.dot(numpy.linalg.pinv(C), (X_smoothed - X_mean).T).T
+    delta_X = X - numpy.dot(z_hat, C.T) - X_mean
+    cov = numpy.dot(delta_X.T, delta_X)
+    eig_vals_deltaX, eig_vecs_deltaX = scipy.linalg.eigh(cov)
+    Du = numpy.searchsorted(numpy.cumsum(eig_vals_deltaX[::-1]) / numpy.sum(eig_vals_deltaX), cut_off)
+    return Dz, Du
     
 def logcosh(x):
     # s always has real part >= 0
@@ -461,7 +480,7 @@ class HCCovObservationModel(LinearObservationModel):
         """
         x0 = self.C.flatten()
         objective = lambda x: self.parameter_optimization_C(x, smoothing_density, X)
-        result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', options={'disp': True, 'maxiter': 10})
+        result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', options={'disp': False, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
@@ -504,7 +523,7 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta) - numpy.log(self.sigma_x ** 2), self.W.flatten()])
         bounds = [(None, 10)] + [(numpy.log(.25), 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 10})
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
@@ -523,7 +542,7 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta) - numpy.log(self.sigma_x ** 2), self.W.flatten()])
         bounds = [(None, 10)] + [(numpy.log(.25), 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
-        result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': True, 'maxiter': 10})
+        result = minimize(value_and_grad(objective), x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
@@ -552,7 +571,7 @@ class HCCovObservationModel(LinearObservationModel):
             R[iu] /= numpy.amax(R[iu])
         objective = lambda x: self._U_lagrange_func(x, R)
         result = minimize(value_and_grad(objective), x0,
-                          method='L-BFGS-B', jac=True, options={'disp': True})
+                          method='L-BFGS-B', jac=True, options={'disp': False})
         self.U = result.x[:self.Du * self.Dx].reshape((self.Dx, self.Du))
         
         
