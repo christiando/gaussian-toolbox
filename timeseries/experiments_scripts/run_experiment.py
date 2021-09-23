@@ -476,7 +476,7 @@ class DynamicFactor_ext():
     def __init__(self, x_tr):
         
         x_tr_df = pd.DataFrame(x_tr)
-        self.dyn_fact_model = sm.tsa.DynamicFactor(x_tr_df, k_factors=1, factor_order=1)
+        self.dyn_fact_model = sm.tsa.DynamicFactor(x_tr_df, k_factors=args.dz, factor_order=1,)
         self.trained_model_result = self.dyn_fact_model.fit(full_output=False)
         
     def compute_predictive_density(self, x_te):
@@ -528,15 +528,11 @@ if __name__ == "__main__":
     parser.add_argument('--results_file', type=str, default='first_results.txt')
     parser.add_argument('--gp_kernel_width', type=float, default='0.001')
     parser.add_argument('--gp_noise_dist', type=float, default='0.004')
-<<<<<<< timeseries/experiments_scripts/run_experiment.py
-    parser.add_argument('--exp_num', type=str, default="2")
-=======
     parser.add_argument('--exp_num', type=str, default="1")
     parser.add_argument('--newt_kernel', type=str, default="Matern12")
     parser.add_argument('--newt_link', type=str, default="softplus")
     parser.add_argument('--num_states', type=int, default=1)
     parser.add_argument('--obs_model', type=str, default='gaussian')
->>>>>>> timeseries/experiments_scripts/run_experiment.py
     args = parser.parse_args()
 
     reset_seeds(args.seed)
