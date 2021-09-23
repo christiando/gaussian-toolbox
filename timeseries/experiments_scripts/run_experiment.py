@@ -124,7 +124,7 @@ class HMM_class:
         x_te_not_nan = np.zeros(x_te.shape)
         x_te_not_nan[mask] = x_te[mask]
         states = self.model.filter(x_te_not_nan, mask=mask)
-        if self.obs_model == 'gaussian':
+        if self.obs_model == 'gaussian' or  self.obs_model == 'studentst':
             mean_te = np.dot(states, self.model.observations.mus)
         elif self.obs_model == 'ar':
             mean_te = np.sum(states[:,:,None] * (np.sum(self.model.observations.As[None] * x_te[:,None, None], axis=3) + self.model.observations.bs), axis=1)
