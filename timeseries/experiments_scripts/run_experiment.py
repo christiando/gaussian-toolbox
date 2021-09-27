@@ -35,7 +35,7 @@ from exp_utils import *
 
 import newt
 import objax
-from ssm import HMM
+import ssm
 
 '''
 sys.path.append('../../timeseries/kalman-jax-master')
@@ -112,7 +112,7 @@ class HMM_class:
         self.model = self._train()
         
     def _train(self):
-        model = HMM(self.K, self.D, observations=self.obs_model)
+        model = ssm.HMM(self.K, self.D, observations=self.obs_model)
         model.fit(self.x_tr, method="em")
         return model
 
@@ -400,6 +400,57 @@ def train_newt_gauss(x_tr, **kwargs):
     return jax_gauss_model
 
 
+class LDS_model:
+    
+    def __init__(self, x_tr):
+        self.x_tr = x_tr
+        self.D = args.dz
+        self.emission = args.obs_model
+        self._train()
+        
+    def _train(self):
+        self.lds = ssm.LDS(self.x_tr.shape[1], self.D, 
+                      emissions=self.emission)
+        q_lem_elbos, q_lem = self.lds.fit(self.x_tr, 
+                                     method="bbvi", 
+                                     variational_posterior="lds",
+                                     num_iters=10000, initialize=False)
+        
+    def compute_predictive_log_likelihood(self, x_te):
+        elbo, q_lem = self.lds.approximate_posterior(x_te, method="bbvi", 
+                                                     variational_posterior="lds", num_iters=10000)
+        llk = []
+        num_samples = 10000
+        sample_x = np.empty((num_samples, x_te.shape[0], x_te.shape[1]))
+        etas = np.exp(self.lds.emissions.inv_etas)
+        for i in range(num_samples):
+            sample_z = q_lem.sample()[0]
+            sample_z2 = np.zeros(sample_z.shape[0])
+            sample_x[i] = self.lds.emissions.sample(sample_z2, sample_z, np.zeros((x_te.shape[0],0)))
+            mus = self.lds.emissions.forward(sample_z, np.zeros((x_te.shape[0],0)), None)[:,0]
+            llk.append(np.sum(- .5 * (x_te - mus) ** 2 / etas - .5 * np.log(2 * np.pi * etas)))
+        llk = scipy.special.logsumexp(llk) - np.log(num_samples)
+        return llk
+    
+    def compute_predictive_density(self, x_te):
+        elbo, q_lem = self.lds.approximate_posterior(x_te, method="bbvi", 
+                                                     variational_posterior="lds", num_iters=10000)
+        num_samples = 10000
+        sample_x = np.empty((num_samples, x_te.shape[0], x_te.shape[1]))
+        for i in range(num_samples):
+            sample_z = q_lem.sample()[0]
+            sample_z2 = np.zeros(sample_z.shape[0])
+            sample_x[i] = self.lds.emissions.sample(sample_z2, sample_z, np.zeros((x_te.shape[0],0)))
+        mu = np.mean(sample_x, axis=0)
+        std = np.std(sample_x, axis=0)
+        return PredictiveDensity(mu, std)
+    
+def train_lds(x_tr, **kwargs):
+    
+    lds_model = LDS_model(x_tr)
+    return lds_model
+
+
 class TCNModel_ext(TCNModel):
     def __init__(self, x_tr):
             self.pred_mean = 0
@@ -445,8 +496,8 @@ class TCNModel_ext(TCNModel):
             return scipy.stats.multivariate_normal.logpdf(test_data, 
                                                           self.muVector, self.Sigma).sum()
         else:
-            return scipy.stats.norm.logpdf(test_data, numpy.mean(test_data), 
-                                           numpy.var(test_data)).sum()
+            return scipy.stats.norm.logpdf(test_data, np.mean(test_data), 
+                                           np.var(test_data)).sum()
 
         
 def train_deep_tcn(x_tr):
@@ -572,6 +623,8 @@ if __name__ == "__main__":
         model = 'newt_hsk'
     if args.model_name == 'hmm':
         model = 'HMM'
+    if args.model_name == 'lds':
+        model = 'lds'
     trained_model = eval('train_' + model)(x_tr)
         
     '''
