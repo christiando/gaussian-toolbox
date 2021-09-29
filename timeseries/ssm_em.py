@@ -194,7 +194,9 @@ class StateSpaceEM:
         """
         T = X.shape[0]
         if p0 is None:
-            p0 = self.filter_density.slice([0])
+            #p0 = self.filter_density.slice([0])
+            p0 = densities.GaussianDensity(Sigma=numpy.array([numpy.eye(self.Dz)]), 
+                                           mu=numpy.zeros((1,self.Dz)))
         prediction_density = self._setup_density(T=T+1)
         filter_density = self._setup_density(T=T+1)
         filter_density.update([0], p0)
@@ -235,7 +237,9 @@ class StateSpaceEM:
         """
         T = X.shape[0]
         if p0 is None:
-            p0 = self.filter_density.slice([0])
+            #p0 = self.filter_density.slice([0])
+            p0 = densities.GaussianDensity(Sigma=numpy.array([numpy.eye(self.Dz)]), 
+                                           mu=numpy.zeros((1,self.Dz)))
         prediction_density = self._setup_density(T=T+1)
         filter_density = self._setup_density(T=T+1)
         filter_density.update([0], p0)
@@ -280,7 +284,9 @@ class StateSpaceEM:
         """
         T = X.shape[0]
         if p0 is None:
-            p0 = self.filter_density.slice([0])
+            #p0 = self.filter_density.slice([0])
+            p0 = densities.GaussianDensity(Sigma=numpy.array([numpy.eye(self.Dz)]), 
+                                           mu=numpy.zeros((1,self.Dz)))
         prediction_density = self._setup_density(T=T+1)
         filter_density = self._setup_density(T=T+1)
         filter_density.update([0], p0)
