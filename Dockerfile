@@ -28,7 +28,7 @@ RUN conda env update -q -f /tmp/environment.yml && \
 # RENKU_VERSION determines the version of the renku CLI
 # that will be used in this image. To find the latest version,
 # visit https://pypi.org/project/renku/#history.
-ARG RENKU_VERSION=0.16.0
+ARG RENKU_VERSION=0.16.1.post1
 
 ########################################################
 # Do not edit this section and do not add anything below
@@ -40,6 +40,7 @@ RUN if [ -n "$RENKU_VERSION" ] ; then \
         currentversion=$(renku --version) ; \
         if [ "$RENKU_VERSION" != "$currentversion" ] ; then \
             pip uninstall renku ; \
+            /home/jovyan/.local/pipx/shared/bin/pip install setuptools==57.5.0; \
             gitversion=$(echo "$RENKU_VERSION" | sed -n "s/^[[:digit:]]\+\.[[:digit:]]\+\.[[:digit:]]\+\(\.dev[[:digit:]]\+\)*\(+g\([a-f0-9]\+\)\)*\(+dirty\)*$/\3/p") ; \
             if [ -n "$gitversion" ] ; then \
                 pip install --force "git+https://github.com/SwissDataScienceCenter/renku-python.git@$gitversion" ;\
