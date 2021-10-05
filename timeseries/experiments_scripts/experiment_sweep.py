@@ -17,24 +17,31 @@ def simple_sweep(grid, prefix=""):
 
 def sweep():
     parameters = {
-        "dataset": ['sunspots', 'energy', "synthetic", 'airfoil'],
-        "init_w_pca": [0, 1],
-        "exp_num": ["1", "2"],
+        "dataset": ['sunspots', 'energy'],
+        "init_w_pca": [1],
+        "exp_num": ["1"],
         "seed" : [0],
         "method": {
-            "lin_ssm": {},
-            "linear_hsk_ssm": {},
-            "linear_hsk_ssm": {
-                "dz": [1, 2, 3],
+            "lin_ssm_hsk": {
                 "du": [1, 2, 3],
-                "dk": [1, 2, 3]
+                "dz": [1, 2, 3],
             },
-            
+            "lin_ssm": {
+                "dz": [1, 2, 3]
+            },
+            "hmm": {
+                "num_states": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+                "obs_model": ["gaussian", "studentst"],
+            },
+            "arimax": {
+                "p_arimax":[0, 1, 2, 3],
+                "q_arimax":[0, 1, 2, 3],
+            },
         }
     }
 
     commands = []
-
+    
     for dataset in parameters["dataset"]:
         for method in parameters["method"]:
             for exp_num in parameters["exp_num"]:
