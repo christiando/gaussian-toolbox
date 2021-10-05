@@ -28,7 +28,7 @@ import darts
 import statsmodels.api as sm
 from darts.models import TCNModel
 from darts.models import GaussianProcessFilter
-from darts.utils.likelihood_models import GaussianLikelihoodModel
+#from darts.utils.likelihood_models import GaussianLikelihoodModel
 from darts.timeseries import TimeSeries
 from exp_utils import *
 
@@ -119,7 +119,7 @@ class HMM_class:
             mean_te = np.sum(states[:,:,None] * (np.sum(self.model.observations.As[None] * x_te[:,None, None], axis=3) + self.model.observations.bs), axis=1)
         std_te = np.dot(states, np.sqrt(self.model.observations.Sigmas.diagonal(axis1=1, axis2=2)))
         print(mean_te.shape, std_te.shape)
-        return PredictiveDensity(mean_te, std_te)
+        return PredictiveDensity(mean_te, std_te ** 2)
 
 def train_HMM(x_tr, **kwargs):
     return HMM_class(x_tr, args.num_states, args.obs_model)
@@ -168,7 +168,7 @@ class LDS_model:
             sample_x[i] = self.lds.emissions.sample(sample_z2, sample_z, np.zeros((x_te.shape[0],0)))
         mu = np.mean(sample_x, axis=0)
         std = np.std(sample_x, axis=0)
-        return PredictiveDensity(mu, std)
+        return PredictiveDensity(mu, std ** 2)
     
 def train_lds(x_tr, **kwargs):
     
@@ -201,7 +201,7 @@ class ARIMAX:
             std = predict.predicted_mean - predict_ci[:,0]
         else:
             std = predict.predicted_mean - predict_ci[:,:x_te.shape[1]]
-        return PredictiveDensity(mu, std)
+        return PredictiveDensity(mu, std ** 2)
             
     def compute_predictive_log_likelihood(self, x_te):  
         mod_te = self.mod.clone(x_te)
@@ -419,13 +419,13 @@ if __name__ == "__main__":
         #x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix]
         
         if sigma_pred_x_tr.ndim == 3:
-            x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix, ix]
-            x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix, ix]
+            x_min = mu_pred_x_tr[:,ix] - 1.68 * np.sqrt(sigma_pred_x_tr[:,ix, ix])
+            x_max = mu_pred_x_tr[:,ix] + 1.68 * np.sqrt(sigma_pred_x_tr[:,ix, ix])
             capture_tr_ix = np.nanmean((np.less(x_min, x_tr[:, ix]) * np.less(x_tr[:, ix], x_max)))
         else:
             print(mu_pred_x_tr.shape, sigma_pred_x_tr.shape)
-            x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix]
-            x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix]
+            x_min = mu_pred_x_tr[:,ix] - 1.68 * np.sqrt(sigma_pred_x_tr[:,ix])
+            x_max = mu_pred_x_tr[:,ix] + 1.68 * np.sqrt(sigma_pred_x_tr[:,ix])
         capture_tr_ix = np.nanmean((np.less(x_min, x_tr[:, ix]) * np.less(x_tr[:, ix], x_max)))
 
         capture_tr_all_x.append(capture_tr_ix)
@@ -435,11 +435,11 @@ if __name__ == "__main__":
         width_tr_all_x.append(width_tr)
         
         if sigma_pred_x_va.ndim == 3:
-            x_min = mu_pred_x_va[:,ix] - 1.68 * sigma_pred_x_va[:,ix, ix]
-            x_max = mu_pred_x_va[:,ix] + 1.68 * sigma_pred_x_va[:,ix, ix]
+            x_min = mu_pred_x_va[:,ix] - 1.68 * np.sqrt(sigma_pred_x_va[:,ix, ix])
+            x_max = mu_pred_x_va[:,ix] + 1.68 * np.sqrt(sigma_pred_x_va[:,ix, ix])
         else:
-            x_min = mu_pred_x_va[:,ix] - 1.68 * sigma_pred_x_va[:,ix]
-            x_max = mu_pred_x_va[:,ix] + 1.68 * sigma_pred_x_va[:,ix]
+            x_min = mu_pred_x_va[:,ix] - 1.68 * np.sqrt(sigma_pred_x_va[:,ix])
+            x_max = mu_pred_x_va[:,ix] + 1.68 * np.sqrt(sigma_pred_x_va[:,ix])
         capture_va_ix = np.nanmean((np.less(x_min, x_va[:, ix]) * np.less(x_va[:, ix], x_max)))
         capture_va_all_x.append(capture_va_ix)
         
