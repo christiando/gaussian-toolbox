@@ -1,4 +1,4 @@
-input="run_exp1_0.75tr_05102021.txt"
+input="new_hsk.txt"
 while IFS= read -r line
 do
   $line
