@@ -226,42 +226,59 @@ class TCNModel_ext(TCNModel):
                                     dropout=args.dropout,
                                     random_state=args.seed,
                                     n_epochs=args.epochs,
-                                    likelihood=GaussianLikelihoodModel())
+                                    likelihood=GaussianLikelihood())
             
             self.tcnmodel.fit(x_tr)
+            
+            
+            
+            backtest_en = self.tcnmodel.historical_forecasts(
+                                            series=x_tr,
+                                            num_samples=50,
+                                            start=3,
+                                            forecast_horizon=1,
+                                            retrain=False,
+                                            verbose=True)
+        
+        
+            self.pred_data = np.mean(backtest_en._xa, 2)
+            self.muVector =  self.pred_data#
+            cov = EmpiricalCovariance().fit(self.pred_data)
+            self.Sigma = cov.covariance_
+            
+            
     
-    def predict(self, x_te):
+    def compute_predictive_density(self, x_te):
         
         backtest_en = self.tcnmodel.historical_forecasts(
                                             series=x_te,
                                             num_samples=50,
-                                            start=4,
+                                            start=3,
                                             forecast_horizon=1,
                                             retrain=False,
                                             verbose=True)
         tcn_sigma = (backtest_en.quantile_timeseries(quantile=0.975) - \
                      backtest_en.quantile_timeseries(quantile=0.025))/2
         
-        pred_data = np.mean(backtest_en._xa, 2)
-        muVector = np.mean(pred_data, axis=0)
-        cov = EmpiricalCovariance().fit(pred_data)
+        self.pred_data = np.mean(backtest_en._xa, 2)
+        muVector =  self.pred_data#
+        cov = EmpiricalCovariance().fit(self.pred_data)
         Sigma = cov.covariance_
-        self.muVector = muVector
-        self.Sigma = Sigma
         
-        return 0, backtest_en, tcn_sigma
+        
+        #return 0, backtest_en, tcn_sigma
+        return  PredictiveDensity(muVector, Sigma)
 
     
     def compute_predictive_log_likelihood(self, x_te):
-        test_data = x_te.all_values().squeeze()
+        test_data = x_te#.all_values().squeeze()
         if test_data.shape[1] > 1:
             return scipy.stats.multivariate_normal.logpdf(test_data, 
-                                                          self.muVector, self.Sigma).sum()
+                                                          np.mean(self.muVector, axis=0) , self.Sigma)
         else:
             return scipy.stats.norm.logpdf(test_data, np.mean(test_data), 
-                                           np.var(test_data)).sum()
+                                           np.var(test_data))
 
-        
 def train_deep_tcn(x_tr):
     
     deep_tcn = TCNModel_ext(x_tr)
@@ -316,7 +333,7 @@ if __name__ == "__main__":
     parser.add_argument('--du', type=int, default=1)
     parser.add_argument('--dk', type=int, default=1)
     parser.add_argument('--init_w_pca', type=int, default=0)
-    parser.add_argument('--results_file', type=str, default='first_results.txt')
+    parser.add_argument('--results_file', type=str, default='results_exp1_0.75_05102021.txt')
     parser.add_argument('--exp_num', type=str, default="1")
     parser.add_argument('--num_states', type=int, default=1)
     parser.add_argument('--obs_model', type=str, default='gaussian')
@@ -354,8 +371,8 @@ if __name__ == "__main__":
   
 
     # train model
-    if args.model_name == 'linear_hsk_ssm':
-        model = 'linear_hsk_SSM'
+    if args.model_name == 'lin_hsk_ssm':
+        model = 'lin_hsk_SSM'
     if args.model_name == 'lin_ssm':
         model = 'linear_SSM'
     if args.model_name == 'nonlinear_ssm':
