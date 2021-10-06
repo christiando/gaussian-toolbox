@@ -333,7 +333,7 @@ if __name__ == "__main__":
     parser.add_argument('--du', type=int, default=1)
     parser.add_argument('--dk', type=int, default=1)
     parser.add_argument('--init_w_pca', type=int, default=0)
-    parser.add_argument('--results_file', type=str, default='results_exp1_0.75_05102021.txt')
+    parser.add_argument('--results_file', type=str, default='results_exp1_0.75_06102021.txt')
     parser.add_argument('--exp_num', type=str, default="1")
     parser.add_argument('--num_states', type=int, default=1)
     parser.add_argument('--obs_model', type=str, default='gaussian')

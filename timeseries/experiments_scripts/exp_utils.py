@@ -59,7 +59,7 @@ def load_sunspots_e1(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     #x_al[:, 1] = np.asarray(x_al[:, 1], dtype=np.float64)
     
     x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
-    x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed,  shuffle=False)
+    x_tr, x_va = train_test_split(x_tr, test_size=0.2, random_state=seed,  shuffle=False)
     
     s_x = StandardScaler().fit(x_tr[:, 1].reshape(-1, 1))
     x_tr[:, 1] = s_x.transform(x_tr[:, 1].reshape(-1, 1)).reshape(-1)
@@ -107,7 +107,7 @@ def load_sunspots_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     
     # split in train test and prepare in ndarray and TimeSeries data format
     x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
-    x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed,  shuffle=False)
+    x_tr, x_va = train_test_split(x_tr, test_size=0.2, random_state=seed,  shuffle=False)
 
     df_tmp = pd.DataFrame(data = x_tr, columns=['Month', 'Sunspots'])
     ts_tr = TimeSeries.from_dataframe(df=df_tmp, time_col='Month')
@@ -170,7 +170,7 @@ def load_energy_e1(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
         x_al[:,c] =  np.apply_along_axis(inv_softplus, 0, x_al[:,c])
     
     x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
-    x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed, shuffle=False)
+    x_tr, x_va = train_test_split(x_tr, test_size=0.2, random_state=seed, shuffle=False)
 
     s_x = StandardScaler().fit(x_tr[:, 1:])
     x_tr[:, 1:] = s_x.transform(x_tr[:, 1:])
@@ -237,7 +237,7 @@ def load_energy_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     x_al[:, [1,3, 4]] = s_x.transform(x_al[:, [1,3, 4]])
     
     x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
-    x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed,  shuffle=False)
+    x_tr, x_va = train_test_split(x_tr, test_size=0.2, random_state=seed,  shuffle=False)
     
 
 
@@ -284,8 +284,8 @@ def load_airfoil_e1(ts=False, train_ratio=0.5, seed=0):
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
       
-    x_tr, x_te, = train_test_split(x_al, test_size=train_ratio, random_state=seed, shuffle=False)
-    x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed, shuffle=False)
+    x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
+    x_tr, x_va = train_test_split(x_tr, test_size=0.2, random_state=seed, shuffle=False)
 
     s_x = StandardScaler().fit(x_tr[:, 1:])
     x_tr[:, 1:] = s_x.transform(x_tr[:, 1:])
@@ -331,7 +331,7 @@ def load_airfoil_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     x_al[:, 1:] = s_x.transform(x_al[:, 1:])
     
     x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
-    x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed,  shuffle=False)
+    x_tr, x_va = train_test_split(x_tr, test_size=0.2, random_state=seed,  shuffle=False)
     
     df_tmp = pd.DataFrame(data = x_tr, columns=col_names)
     ts_tr = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
@@ -378,7 +378,7 @@ def load_synthetic_e1(ts=False, train_ratio=0.5, seed=0):
     x_al[:, 1:] = np.asarray(x_al[:, 1:], dtype=np.float64)
     
     x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
-    x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed, shuffle=False)
+    x_tr, x_va = train_test_split(x_tr, test_size=0.2, random_state=seed, shuffle=False)
 
     s_x = StandardScaler().fit(x_tr[:, 1:])
     x_tr[:, 1:] = s_x.transform(x_tr[:, 1:])
@@ -423,7 +423,7 @@ def load_synthetic_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
     x_al[:, 1:] = s_x.transform(x_al[:, 1:])
     
     x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
-    x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed,  shuffle=False)
+    x_tr, x_va = train_test_split(x_tr, test_size=0.2, random_state=seed,  shuffle=False)
     
     df_tmp = pd.DataFrame(data = x_tr, columns=col_names)
     ts_tr = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
