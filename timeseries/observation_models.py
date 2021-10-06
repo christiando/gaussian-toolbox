@@ -145,8 +145,8 @@ class LinearObservationModel(ObservationModel):
                                              mode='same')
         eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X_smoothed-self.d[None]).T, 
                                                          X_smoothed-self.d[None]), 
-                                               eigvals=(self.Dx-self.Dz, self.Dx-1))
-        self.C =  eig_vecs * eig_vals / T
+                                               eigvals=(self.Dx-numpy.amin([self.Dz,self.Dx]), self.Dx-1))
+        self.C[:,:numpy.amin([self.Dz,self.Dx])] =  eig_vecs * eig_vals / T
         z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
         self.Qx = numpy.dot(delta_X.T, delta_X)
@@ -379,8 +379,8 @@ class HCCovObservationModel(LinearObservationModel):
                                              mode='same')
         eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X_smoothed-self.d[None]).T, 
                                                          X_smoothed-self.d[None]), 
-                                               eigvals=(self.Dx-self.Dz, self.Dx-1))
-        self.C =  eig_vecs * eig_vals / T
+                                               eigvals=(self.Dx-numpy.amin([self.Dz,self.Dx]), self.Dx-1))
+        self.C[:,:numpy.amin([self.Dz,self.Dx])] =  eig_vecs * eig_vals / T
         z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
         cov = numpy.dot(delta_X.T, delta_X)
