@@ -284,7 +284,7 @@ def load_airfoil_e1(ts=False, train_ratio=0.5, seed=0):
     df_dim = df.shape[1]
     x_al = np.asarray(df).copy().reshape(-1, df_dim)
       
-    x_tr, x_te, = train_test_split(x_al, test_size=train_ratio, random_state=seed, shuffle=False)
+    x_tr, x_te, = train_test_split(x_al, test_size=1-train_ratio, random_state=seed, shuffle=False)
     x_tr, x_va = train_test_split(x_tr, test_size=0.1, random_state=seed, shuffle=False)
 
     s_x = StandardScaler().fit(x_tr[:, 1:])
@@ -456,3 +456,36 @@ def load_synthetic_e2(ts=False, train_ratio=0.5, delete_ratio=0.5, seed=0):
                np.asarray(x_te[:, 1:], dtype=np.float64), \
                np.asarray(x_na[:, 1:], dtype=np.float64), s_x
     
+    
+def load_lorenz_e1(ts=False, train_ratio=.5, seed=0):
+    df = timeseries_data.load_lorenz_data()
+    col_names = df.columns
+ 
+    df_dim = df.shape[1]
+    x_al = np.asarray(df).copy().reshape(-1, df_dim)
+      
+    x_tr = x_al[:4000, :]
+    s_x = StandardScaler().fit(x_tr[x_tr[:,0] < 0, :])
+    x_tr = s_x.transform(x_al[:3000][x_al[:3000,0] < 0])
+    x_va = s_x.transform(x_al[3000:4000][x_al[3000:4000,0] < 0])
+    x_te = s_x.transform(x_al[4000:, :])
+
+    if ts:
+        
+        df_tmp = pd.DataFrame(data = x_tr, columns=col_names)
+        ts_tr = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
+        
+        df_tmp = pd.DataFrame(data = x_va, columns=col_names)
+        ts_va = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
+        
+        df_tmp = pd.DataFrame(data = x_te, columns=col_names)
+        ts_te = TimeSeries.from_dataframe(df=df_tmp.reset_index(), time_col='timestamp')
+
+        return ts_tr, ts_va, ts_te, 0, s_x
+    
+    else:
+        
+        return np.asarray(x_tr[:, :], dtype=np.float64),\
+               np.asarray(x_va[:, :], dtype=np.float64),\
+               np.asarray(x_te[:, :], dtype=np.float64), \
+               0, s_x

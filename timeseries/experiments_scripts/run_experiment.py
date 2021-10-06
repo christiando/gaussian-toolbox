@@ -368,11 +368,14 @@ if __name__ == "__main__":
         x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_synthetic_e' + args.exp_num)(ts=args.ts, train_ratio=args.train_ratio)
     if args.dataset == 'airfoil':
         x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_airfoil_e' + args.exp_num)(ts=args.ts, train_ratio=args.train_ratio)
+    if args.dataset == 'lorenz':
+        x_tr, x_va, x_te, x_te_na, s_tr_x = eval('load_lorenz_e' + args.exp_num)(ts=args.ts, train_ratio=args.train_ratio)
   
 
     # train model
+    print(args.model_name)
     if args.model_name == 'lin_hsk_ssm':
-        model = 'lin_hsk_SSM'
+        model = 'linear_hsk_SSM'
     if args.model_name == 'lin_ssm':
         model = 'linear_SSM'
     if args.model_name == 'nonlinear_ssm':

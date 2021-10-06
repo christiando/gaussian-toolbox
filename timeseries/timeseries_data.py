@@ -128,3 +128,46 @@ def load_opsd_data():
     full_df = full_df.fillna(method='backfill')
     var_names = ['DE_solar_generation_actual'] + ['DE_temperature', 'DE_radiation_direct_horizontal', 'DE_radiation_diffuse_horizontal']
     return full_df[1:-1]
+
+
+###################################### Lorenz data ##########################################
+
+def load_lorenz_data():
+    def lorenz(x, y, z, s=10, r=28, b=8/3):
+        """
+        Given:
+           x, y, z: a point of interest in three dimensional space
+           s, r, b: parameters defining the lorenz attractor
+        Returns:
+           x_dot, y_dot, z_dot: values of the lorenz attractor's partial
+               derivatives at the point x, y, z
+        """
+        x_dot = s*(y - x)
+        y_dot = r*x - y - x*z
+        z_dot = x*y - b*z
+        return x_dot, y_dot, z_dot
+
+
+    dt = 0.01
+    num_steps = 10000
+
+    # Need one more for the initial values
+    xs = numpy.empty(num_steps + 1)
+    ys = numpy.empty(num_steps + 1)
+    zs = numpy.empty(num_steps + 1)
+
+    # Set initial values
+    xs[0], ys[0], zs[0] = (0., 1., 1.05)
+
+    # Step through "time", calculating the partial derivatives at the current point
+    # and using them to estimate the next point
+    for i in range(num_steps):
+        x_dot, y_dot, z_dot = lorenz(xs[i], ys[i], zs[i])
+        xs[i + 1] = xs[i] + (x_dot * dt)
+        ys[i + 1] = ys[i] + (y_dot * dt)
+        zs[i + 1] = zs[i] + (z_dot * dt)
+    
+    x_all = numpy.vstack([xs, ys, zs]).T
+    x_all += .5 * numpy.random.randn(*x_all.shape)
+    x_all = x_all[::2]
+    return pandas.DataFrame(x_all, columns=['x', 'y', 'z'])
