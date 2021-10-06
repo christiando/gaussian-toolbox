@@ -179,8 +179,8 @@ class ARIMAX:
     
     def __init__(self, x_tr):
         self.x_tr = x_tr
-        self.p = args.p_arimax
-        self.q = args.q_arimax
+        self.p = int(args.p_arimax)
+        self.q = int(args.q_arimax)
         self._train()
         
     def _train(self):
@@ -328,7 +328,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_name', type=str, default="dyn_factor")
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--whiten', type=int, default=0)
-    parser.add_argument('--train_ratio', type=float, default=0.5)
+    parser.add_argument('--train_ratio', type=float, default=0.75)
     parser.add_argument('--dz', type=int, default=2)
     parser.add_argument('--du', type=int, default=1)
     parser.add_argument('--dk', type=int, default=1)
@@ -371,8 +371,8 @@ if __name__ == "__main__":
   
 
     # train model
-    if args.model_name == 'lin_hsk_ssm':
-        model = 'lin_hsk_SSM'
+    if args.model_name == 'lin_ssm_hsk':
+        model = 'linear_hsk_SSM'
     if args.model_name == 'lin_ssm':
         model = 'linear_SSM'
     if args.model_name == 'nonlinear_ssm':
