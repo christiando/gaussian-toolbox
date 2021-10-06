@@ -105,8 +105,17 @@ class HMM_class:
         model.fit(self.x_tr, method="em")
         return model
 
-    def compute_predictive_log_likelihood(self, x_te):
-        return self.model.log_likelihood(x_te)
+    def compute_predictive_log_likelihood(self, x_te, ignore_init_samples=0):
+        mask = np.logical_not(np.isnan(x_te))
+        x_te_not_nan = np.zeros(x_te.shape)
+        x_te_not_nan[mask] = x_te[mask]
+        states = self.model.filter(x_te_not_nan, mask=mask)
+        llk_states = numpy.empty(states.shape)
+        for k in range(self.K):
+            mu, Sigma  = self.model.observations.mus[k], self.model.observations.Sigmas[k]
+            llk_states[:,k] = scipy.stats.multivariate_normal(mu, Sigma).logpdf(x_te)
+        llk =  numpy.sum(scipy.special.logsumexp(llk_states[ignore_init_samples:], axis=1, b=states[ignore_init_samples:])[:])
+        return llk
     
     def compute_predictive_density(self, x_te):
         mask = np.logical_not(np.isnan(x_te))
@@ -203,8 +212,8 @@ class ARIMAX:
             std = predict.predicted_mean - predict_ci[:,:x_te.shape[1]]
         return PredictiveDensity(mu, std ** 2)
             
-    def compute_predictive_log_likelihood(self, x_te):  
-        mod_te = self.mod.clone(x_te)
+    def compute_predictive_log_likelihood(self, x_te, ignore_init_samples=0):  
+        mod_te = self.mod.clone(x_te[ignore_init_samples:])
         return mod_te.loglike(self.fit_res.params)
     
 def train_arimax(x_tr, **kwargs):
@@ -350,6 +359,7 @@ if __name__ == "__main__":
     parser.add_argument('--d_base', type=int, default=2)
     parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--epochs', type=int, default=30)
+    parser.add_argument('--ignore_init_samples', type=int, default=10)
     args = parser.parse_args()
 
     reset_seeds(args.seed)
@@ -422,9 +432,9 @@ if __name__ == "__main__":
     mape_va = compute_mape(x_va, mu_pred_x_va)
     mape_te = compute_mape(x_te, mu_pred_x_te)
 
-    pll_tr = trained_model.compute_predictive_log_likelihood(x_tr)
-    pll_va = trained_model.compute_predictive_log_likelihood(x_va)
-    pll_te = trained_model.compute_predictive_log_likelihood(x_te)
+    pll_tr = trained_model.compute_predictive_log_likelihood(x_tr, ignore_init_samples=args.ignore_init_samples)
+    pll_va = trained_model.compute_predictive_log_likelihood(x_va, ignore_init_samples=args.ignore_init_samples)
+    pll_te = trained_model.compute_predictive_log_likelihood(x_te, ignore_init_samples=args.ignore_init_samples)
     
     capture_tr_all_x = []
     capture_va_all_x = []

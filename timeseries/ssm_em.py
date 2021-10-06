@@ -176,7 +176,8 @@ class StateSpaceEM:
         return self.om.evaluate_llk(p_z, self.X, u=self.u_x)
     
     def compute_predictive_log_likelihood(self, X: numpy.ndarray, p0: 'GaussianDensity'=None, 
-                                          u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
+                                          u_x: numpy.ndarray=None, u_z: numpy.ndarray=None,
+                                          ignore_init_samples: int=0):
         """ Computes the likelihood for given data X.
         
         :param X: numpy.ndarray [T, Dx]
@@ -188,6 +189,8 @@ class StateSpaceEM:
             Control parameters for observation model. (Default=None)
         :param u_z: numpy.ndarray [T, ...]
             Control parameters for state model. (Default=None)
+        :param ignore_init_samples: int
+            How many initial samples should be ignored. 
             
         :return: float
             Data log likelihood.
@@ -215,8 +218,12 @@ class StateSpaceEM:
                 ux_t = None
             cur_filter_density = self.om.filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
             filter_density.update([t], cur_filter_density)
-        p_z = prediction_density.slice(range(1,T+1))
-        return self.om.evaluate_llk(p_z, X, u_x=self.u_x)
+        p_z = prediction_density.slice(range(1+ignore_init_samples,T+1))
+        if u_x is not None:
+            u_x_tmp = u_x[ignore_init_samples:]
+        else:
+            u_x_tmp = u_x
+        return self.om.evaluate_llk(p_z, X[ignore_init_samples:], u_x=u_x_tmp)
     
     def compute_predictive_density(self, X: numpy.ndarray, p0: 'GaussianDensity'=None, 
                                           u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
