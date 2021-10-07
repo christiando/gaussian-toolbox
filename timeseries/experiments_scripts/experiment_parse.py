@@ -13,9 +13,9 @@ def tensor_to_latex_table(tensor,
         print("\\begin{document}")
         print("")
 
-    alignments = "l" + "r" * len(errors) 
+    alignments = "l" + "r" * len(column_names) 
 
-    max_row_len = max(*[len(name) for name in row_names])
+    max_row_len = 12#max(*[len(name) for name in row_names])
 
     print("\\begin{table}")
     print("\\begin{center}")
@@ -48,8 +48,12 @@ if __name__ == "__main__":
     results = np.genfromtxt(sys.argv[1], dtype=np.str)
     datasets = np.unique(results[:, 2])
     methods = np.unique(results[:, 0])
+    experiment = np.unique(results[:, 4])
     errors = torch.zeros(len(methods), len(datasets))
     errors = []
+    
+    print(methods)
+    print(datasets)
     
     for row, method in enumerate(methods):
         errors.append([])
@@ -60,12 +64,14 @@ if __name__ == "__main__":
             idx = np.intersect1d(idx_dataset, idx_method)
             if len(idx):
                 nll = results[idx, 7].astype(np.float)
+                #nll = results[idx, 14].astype(np.float) #picp
+                #nll = results[idx, 17].astype(np.float)
                 errors[row][column] = "${:.2f} \\pm {:.2f}$".format(nll.mean(), nll.std())
             else:
                 errors[row][column] = "empty"
 
     #errors = torch.cat((errors, errors.mean(1).view(-1, 1)), 1)
-    print(errors)
-    print(methods)
-    print(datasets)
+    #print(errors)
+    #print(methods)
+    #print(datasets)
     tensor_to_latex_table(errors, methods, [""] + list(datasets)) #+ ["all"]
