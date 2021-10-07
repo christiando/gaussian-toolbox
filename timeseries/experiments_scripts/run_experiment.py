@@ -110,11 +110,11 @@ class HMM_class:
         x_te_not_nan = np.zeros(x_te.shape)
         x_te_not_nan[mask] = x_te[mask]
         states = self.model.filter(x_te_not_nan, mask=mask)
-        llk_states = numpy.empty(states.shape)
+        llk_states = np.empty(states.shape)
         for k in range(self.K):
             mu, Sigma  = self.model.observations.mus[k], self.model.observations.Sigmas[k]
             llk_states[:,k] = scipy.stats.multivariate_normal(mu, Sigma).logpdf(x_te)
-        llk =  numpy.sum(scipy.special.logsumexp(llk_states[ignore_init_samples:], axis=1, b=states[ignore_init_samples:])[:])
+        llk =  np.sum(scipy.special.logsumexp(llk_states[ignore_init_samples:], axis=1, b=states[ignore_init_samples:])[:])
         return llk
     
     def compute_predictive_density(self, x_te):
