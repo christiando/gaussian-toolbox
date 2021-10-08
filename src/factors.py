@@ -100,7 +100,7 @@ class ConjugateFactor:
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        import measures
+        from src import measures
         Lambda_new = (measure.Lambda[:,None] + self.Lambda[None]).reshape((measure.R * self.R, self.D, self.D))
         nu_new = (measure.nu[:,None] + self.nu[None]).reshape((measure.R * self.R, self.D))
         ln_beta_new = (measure.ln_beta[:,None] + self.ln_beta[None]).reshape((measure.R * self.R))
@@ -125,7 +125,7 @@ class ConjugateFactor:
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        import measures
+        from src import measures
         Lambda_new = measure.Lambda + self.Lambda
         nu_new = measure.nu + self.nu
         ln_beta_new = measure.ln_beta + self.ln_beta
@@ -229,7 +229,7 @@ class OneRankFactor(LowRankFactor):
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        import measures
+        from src import measures
         Lambda_new = (measure.Lambda[:,None] + self.Lambda[None]).reshape((measure.R * self.R, self.D, self.D))
         nu_new = (measure.nu[:,None] + self.nu[None]).reshape((measure.R * self.R, self.D))
         ln_beta_new = (measure.ln_beta[:,None] + self.ln_beta[None]).reshape((measure.R * self.R))
@@ -267,7 +267,7 @@ class OneRankFactor(LowRankFactor):
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        import measures
+        from src import measures
         Lambda_new = measure.Lambda + self.Lambda
         nu_new = measure.nu + self.nu
         ln_beta_new = measure.ln_beta + self.ln_beta
@@ -337,7 +337,7 @@ class LinearFactor(ConjugateFactor):
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        import measures
+        from src import measures
         Lambda_new = numpy.tile(measure.Lambda[:,None], (1, self.R, 1, 1)).reshape(measure.R * self.R, self.D, self.D)
         nu_new = (measure.nu[:,None] + self.nu[None]).reshape((measure.R * self.R, self.D))
         ln_beta_new = (measure.ln_beta[:,None] + self.ln_beta[None]).reshape((measure.R * self.R))
@@ -367,7 +367,7 @@ class LinearFactor(ConjugateFactor):
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        import measures
+        from src import measures
         nu_new = measure.nu + self.nu
         ln_beta_new = measure.ln_beta + self.ln_beta
         product = measures.GaussianMeasure(Lambda=measure.Lambda, nu=nu_new, ln_beta=ln_beta_new)
@@ -423,7 +423,7 @@ class ConstantFactor(ConjugateFactor):
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        import measures
+        from src import measures
         Lambda_new = numpy.tile(measure.Lambda[:,None], (1, self.R, 1, 1)).reshape(measure.R * self.R, self.D, self.D)
         nu_new = numpy.tile(measure.nu[:,None], (1, self.R, 1)).reshape((measure.R * self.R, self.D))
         ln_beta_new = (measure.ln_beta[:,None] + self.ln_beta[None]).reshape((measure.R * self.R))
@@ -453,7 +453,7 @@ class ConstantFactor(ConjugateFactor):
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        import measures
+        from src import measures
         ln_beta_new = measure.ln_beta + self.ln_beta
         product = measures.GaussianMeasure(Lambda=measure.Lambda, nu=measure.nu, ln_beta=ln_beta_new)
         if update_full:

@@ -9,8 +9,8 @@
 __author__ = "Christian Donner"
 
 from autograd import numpy
-import measures
-import conditionals
+from src import measures
+from src import conditionals
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     
@@ -311,13 +311,7 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
             Log determinant of the covariance matrix. (Default=None)
         """
         Lambda, ln_det_Sigma = self.invert_diagonal(Sigma)
-        nu = numpy.einsum('abc,ac->ab', Lambda, mu)
-        super().__init__(Lambda=Lambda, nu=nu)
-        self.Sigma = Sigma
-        self.ln_det_Sigma = ln_det_Sigma
-        self.ln_det_Lambda = -ln_det_Sigma
-        self.mu = mu
-        self.normalize()
+        super().__init__(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
         
     def slice(self, indices: list) -> 'GaussianDiagDensity':
         """ Returns an object with only the specified entries.

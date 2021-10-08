@@ -9,7 +9,7 @@
 __author__ = "Christian Donner"
 
 from autograd import numpy
-import factors
+from src import factors
 from autograd.scipy.special import logsumexp
 
 class GaussianMixtureMeasure:
@@ -299,7 +299,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: GaussianDensity
             Corresponding density object.
         """
-        import densities
+        from src import densities
         self._prepare_integration()
         return densities.GaussianDensity(Sigma=self.Sigma, mu=self.mu, Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
             
