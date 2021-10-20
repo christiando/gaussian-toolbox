@@ -23,8 +23,8 @@ from scipy.optimize import minimize
 from autograd import numpy
 from autograd import value_and_grad
 import sys
-sys.path.append('../src/')
-import densities, conditionals, factors
+sys.path.append('../')
+from src import densities, conditionals, factors
 
 
 def recommend_dims(X, smooth_window=20, cut_off=.99):
@@ -523,7 +523,8 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta) - numpy.log(self.sigma_x ** 2), self.W.flatten()])
         bounds = [(None, 10)] + [(numpy.log(.25), 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False, 'maxiter': 10})
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds,
+                          options={'disp': False, 'maxiter': 10})
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')

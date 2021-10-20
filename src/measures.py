@@ -7,7 +7,8 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
-
+import sys
+sys.path.append('../')
 from autograd import numpy
 from src import factors
 from autograd.scipy.special import logsumexp

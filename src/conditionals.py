@@ -8,9 +8,8 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
-
-#import numpy
-#from densities import GaussianDensity
+import sys
+sys.path.append('../')
 from autograd import numpy
 from src import factors
 
