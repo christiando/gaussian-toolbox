@@ -377,12 +377,9 @@ class LSEMStateModel(LinearStateModel):
         phi = smoothing_density.slice(jnp.arange(T))
         
         # E[f(z)f(z)']
-        Ekk = phi.multiply(self.state_density.k_func).multiply(self.state_density.k_func).integrate().reshape((T, 
-                                                                                                               self.Dk, 
-                                                                                                               self.Dk))
-        Ekz = phi.multiply(self.state_density.k_func).integrate('x').reshape((T, 
-                                                                              self.Dk, 
-                                                                              self.Dz))
+        phi_k = phi.multiply(self.state_density.k_func, update_full=True)
+        Ekk = phi_k.multiply(self.state_density.k_func, update_full=True).integrate().reshape((T, self.Dk, self.Dk))
+        Ekz = phi_k.integrate('x').reshape((T, self.Dk, self.Dz))
         mean_Ekz = jnp.mean(Ekz, axis=0)
         mean_Ezz = jnp.mean(phi.integrate('xx'), axis=0)
         mean_Ekk = jnp.mean(Ekk, axis=0) + .0001 * jnp.eye(self.Dk)
@@ -395,7 +392,7 @@ class LSEMStateModel(LinearStateModel):
         # Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
         # E[f(z)] b'
         Ez = jnp.mean(phi.integrate('x'), axis=0)
-        Ek = jnp.mean(phi.multiply(self.state_density.k_func, update_full=True).integrate().reshape((T,self.Dk)), axis=0)
+        Ek = jnp.mean(phi_k.integrate().reshape((T,self.Dk)), axis=0)
         Ef = jnp.concatenate([Ez, Ek])
         Ebf = Ef[None] * self.b[:,None]
         # E[z f(z)']
@@ -447,16 +444,16 @@ class LSEMStateModel(LinearStateModel):
         joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta)
         two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func, update_full=True)
         Ekz = jnp.mean(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2*self.Dz)), axis=0)
-        Ek = jnp.mean(smoothing_density.multiply(
-            self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk))[:-1], axis=0)
+        phi_k = smoothing_density.multiply(self.state_density.k_func, update_full=True)
+        Ek = jnp.mean(phi_k.integrate().reshape((T+1, self.Dk))[:-1], axis=0)
         Qz_k_lin_err = jnp.dot(self.A[:,self.Dz:], 
                   (Ekz[:,:self.Dz] - jnp.dot(self.A[:,:self.Dz], Ekz[:,self.Dz:].T).T - Ek[:,None] * self.b[None]))
-        Ekk = smoothing_density.multiply(self.state_density.k_func, update_full=True).multiply(self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk, self.Dk))
+        Ekk = phi_k.multiply(self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk, self.Dk))
         Qz_kk = jnp.dot(jnp.dot(self.A[:,self.Dz:], jnp.mean(Ekk[:-1], axis=0)), self.A[:,self.Dz:].T)
         return Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
-
+    
     @staticmethod
-    def _Wfunc(W, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity', A, b, Qz, Qz_inv, Dk, Dz) -> (float, jnp.ndarray):
+    def _Wfunc2(W, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity', A, b, Qz, Qz_inv, Dk, Dz) -> (float, jnp.ndarray):
         """ Computes the parts of the (negative) Q-fub
 
         :param W: jnp.ndarray [Dk, Dz + 1]
@@ -493,6 +490,7 @@ class LSEMStateModel(LinearStateModel):
         Qz_kk = jnp.dot(jnp.dot(A[:,Dz:], jnp.mean(Ekk[:-1], axis=0)), A[:,Dz:].T)
         Qfunc_W = .5 * jnp.trace(jnp.dot(Qz_inv, Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T))
         return Qfunc_W
+    
 
     @staticmethod
     def _Wfunc(W, smoothing_density: 'GaussianDensity', two_step_smoothing_density: 'GaussianDensity', A, b, Qz, Qz_inv,
@@ -516,22 +514,23 @@ class LSEMStateModel(LinearStateModel):
                                                              W=W,
                                                              Sigma=jnp.array([Qz]))
         # self.state_density.update_phi()
-        T = smoothing_density.R - 1
+        T = smoothing_density.R
+        A_lower = A[:, Dz:]
         # E[z f(z)'] A'
         v_joint = jnp.block([jnp.zeros([Dk, int(Dz)]),
                              state_density.k_func.v])
         nu_joint = jnp.block([jnp.zeros([Dk, int(Dz)]),
                               state_density.k_func.nu])
         joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=state_density.k_func.ln_beta)
-        two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func, update_full=True)
-        Ekz = jnp.sum(jnp.reshape(two_step_k_measure.integrate('x'), (T, Dk, 2 * Dz)), axis=0)
-        # Ek = jnp.mean(two_step_k_measure.integrate().reshape((T, self.Dk)), axis=0)
-        Ek = jnp.sum(jnp.reshape(smoothing_density.multiply(
-            state_density.k_func).integrate(), (T + 1, Dk))[:-1], axis=0)
-        Qz_k_lin_err = jnp.dot(A[:, Dz:], (Ekz[:, :Dz] - jnp.dot(Ekz[:, Dz:], A[:, :Dz].T) - Ek[:, None] * b[None]))
-        Ekk = jnp.reshape(smoothing_density.multiply(state_density.k_func, update_full=True).multiply(state_density.k_func, update_full=True).integrate(),
-                          (T + 1, Dk, Dk))
-        Qz_kk = jnp.dot(jnp.dot(A[:, Dz:], jnp.sum(Ekk[:-1], axis=0)), A[:, Dz:].T)
+        Ekz = jnp.sum(jnp.reshape(two_step_smoothing_density.multiply(joint_k_func, update_full=True).integrate('x'), (T, Dk, 2 * Dz)), axis=0)
+        phi_k = smoothing_density.multiply(state_density.k_func, update_full=True)
+        Ek = jnp.sum(jnp.reshape(phi_k.integrate(), (T, Dk)), axis=0)
+        Qz_k_lin_err = jnp.dot(A_lower, (Ekz[:, :Dz] - jnp.dot(Ekz[:, Dz:], A[:, :Dz].T) - Ek[:, None] * b[None]))
+        Ekk = jnp.sum(jnp.reshape(phi_k.multiply(state_density.k_func, update_full=True).integrate(), (T, Dk, Dk)), axis=0)
+        #Ekk = jnp.sum(jnp.reshape(jnp.exp(phi_kk.ln_beta + phi_kk.lnZ)
+        #Ekk = jnp.reshape(smoothing_density.multiply(state_density.k_func, update_full=True).multiply(state_density.k_func, update_full=True).integrate(),
+        #                  (T, Dk, Dk))
+        Qz_kk = jnp.dot(jnp.dot(A_lower, Ekk), A_lower.T)
         Qfunc_W = .5 * jnp.trace(jnp.dot(Qz_inv, Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T))
         return Qfunc_W
 
@@ -552,7 +551,8 @@ class LSEMStateModel(LinearStateModel):
         # result = minimize_sc(objective, np.array(self.W.flatten()), method='BFGS', jac=True,
         #                   options={'disp': True, 'maxiter': 10})
         # self.W = jnp.array(result.x.reshape((self.Dk, self.Dz + 1)))
-        func = jit(lambda W: self._Wfunc(W, smoothing_density, two_step_smoothing_density, self.A, self.b, self.Qz,
+        phi = smoothing_density.slice(jnp.arange(0,smoothing_density.R - 1))
+        func = jit(lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
                                   self.Qz_inv, self.Dk, self.Dz))
         result = minimize(func, self.W.flatten(), method='BFGS', options={'maxiter': 10})
         self.W = result.x.reshape((self.Dk, self.Dz + 1))
