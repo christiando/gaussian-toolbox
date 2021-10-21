@@ -5,6 +5,7 @@
 # For finding latest versions of the base image see
 # https://github.com/SwissDataScienceCenter/renkulab-docker
 ARG RENKU_BASE_IMAGE=renku/renkulab-cuda10.0-tf1.14:0.7.3
+FROM ${RENKU_BASE_IMAGE}
 
 # Uncomment and adapt if code is to be included in the image
 # COPY src /code/src
