@@ -89,11 +89,8 @@ class GaussianDensity(measures.GaussianMeasure):
         elif ln_det_Sigma is None:
             ln_det_Sigma = numpy.linalg.slogdet(Sigma)[1]
         nu = numpy.einsum('abc,ab->ac', Lambda, mu)
-        super().__init__(Lambda=Lambda, nu=nu)
-        self.Sigma = Sigma
+        super().__init__(Lambda=Lambda, nu=nu, Sigma=Sigma, ln_det_Lambda=-ln_det_Sigma, ln_det_Sigma=ln_det_Sigma)
         self.mu = mu
-        self.ln_det_Sigma = ln_det_Sigma
-        self.ln_det_Lambda = -ln_det_Sigma
         self._prepare_integration()
         self.normalize()
         
