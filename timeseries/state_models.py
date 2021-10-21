@@ -309,12 +309,9 @@ class LSEMStateModel(LinearStateModel):
         phi = smoothing_density.slice(range(T))
         
         # E[f(z)f(z)']
-        Ekk = phi.multiply(self.state_density.k_func, update_full=True).multiply(self.state_density.k_func, update_full=True).integrate().reshape((T,
-                                                                                                               self.Dk, 
-                                                                                                               self.Dk))
-        Ekz = phi.multiply(self.state_density.k_func, update_full=True).integrate('x').reshape((T,
-                                                                              self.Dk, 
-                                                                              self.Dz))
+        phi_k = phi.multiply( self.state_density.k_func, update_full=True)
+        Ekk = phi_k.multiply(self.state_density.k_func, update_full=True).integrate().reshape((T, self.Dk, self.Dk))
+        Ekz = phi_k.integrate('x').reshape((T, self.Dk,  self.Dz))
         Eff = numpy.empty((self.Dphi, self.Dphi))
         Eff[:self.Dz,:self.Dz] = numpy.mean(phi.integrate('xx'), axis=0)
         Eff[self.Dz:,self.Dz:] = numpy.mean(Ekk, axis=0) + .0001 * numpy.eye(self.Dk)
@@ -322,7 +319,7 @@ class LSEMStateModel(LinearStateModel):
         Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
         # E[f(z)] b'
         Ez = numpy.mean(phi.integrate('x'), axis=0)
-        Ek = numpy.mean(phi.multiply(self.state_density.k_func, update_full=True).integrate().reshape((T,self.Dk)), axis=0)
+        Ek = numpy.mean(phi_k.integrate().reshape((T,self.Dk)), axis=0)
         Ef = numpy.concatenate([Ez, Ek])
         Ebf = Ef[None] * self.b[:,None]
         # E[z f(z)']
@@ -377,11 +374,11 @@ class LSEMStateModel(LinearStateModel):
         two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func, update_full=True)
         Ekz = numpy.mean(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2*self.Dz)), axis=0)
         #Ek = numpy.mean(two_step_k_measure.integrate().reshape((T, self.Dk)), axis=0)
-        Ek = numpy.mean(smoothing_density.multiply(
-            self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk))[:-1], axis=0)
+        phi_k = smoothing_density.multiply( self.state_density.k_func, update_full=True)
+        Ek = numpy.mean(phi_k.integrate().reshape((T+1, self.Dk))[:-1], axis=0)
         Qz_k_lin_err = numpy.dot(self.A[:,self.Dz:], 
                   (Ekz[:,:self.Dz] - numpy.dot(self.A[:,:self.Dz], Ekz[:,self.Dz:].T).T - Ek[:,None] * self.b[None]))
-        Ekk = smoothing_density.multiply(self.state_density.k_func, update_full=True).multiply(self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk, self.Dk))
+        Ekk = phi_k.multiply(self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk, self.Dk))
         Qz_kk = numpy.dot(numpy.dot(self.A[:,self.Dz:], numpy.mean(Ekk[:-1], axis=0)), self.A[:,self.Dz:].T)
         self.Qz = Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
     
@@ -412,11 +409,11 @@ class LSEMStateModel(LinearStateModel):
         two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func, update_full=True)
         Ekz = numpy.mean(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2*self.Dz)), axis=0)
         #Ek = numpy.mean(two_step_k_measure.integrate().reshape((T, self.Dk)), axis=0)
-        Ek = numpy.mean(smoothing_density.multiply(
-            self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk))[:-1], axis=0)
+        phi_k = smoothing_density.multiply( self.state_density.k_func, update_full=True)
+        Ek = numpy.mean(phi_k.integrate().reshape((T+1, self.Dk))[:-1], axis=0)
         Qz_k_lin_err = numpy.dot(self.A[:,self.Dz:],
                   (Ekz[:,:self.Dz] - numpy.dot(self.A[:,:self.Dz], Ekz[:,self.Dz:].T).T - Ek[:,None] * self.b[None]))
-        Ekk = smoothing_density.multiply(self.state_density.k_func, update_full=True).multiply(self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk, self.Dk))
+        Ekk = phi_k.multiply(self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk, self.Dk))
         Qz_kk = numpy.dot(numpy.dot(self.A[:,self.Dz:], numpy.mean(Ekk[:-1], axis=0)), self.A[:,self.Dz:].T)
         Qfunc_W = .5 * numpy.trace(numpy.dot(self.Qz_inv, Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T))
     
