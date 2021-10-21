@@ -11,7 +11,7 @@ __author__ = "Christian Donner"
 import sys
 sys.path.append('../')
 from autograd import numpy
-from src import factors
+from . import factors, densities
 
 class ConditionalGaussianDensity:
     
@@ -94,13 +94,12 @@ class ConditionalGaussianDensity:
         :return: GaussianDensity
             The density conditioned on x.
         """
-        from src.densities import GaussianDensity
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((self.R * N, self.Dy))
         Sigma_new = numpy.tile(self.Sigma[:,None], (1,N,1,1)).reshape(self.R * N, self.Dy, self.Dy)
         Lambda_new = numpy.tile(self.Lambda[:,None], (1,N,1,1)).reshape(self.R * N, self.Dy, self.Dy)
         ln_det_Sigma_new = numpy.tile(self.ln_det_Sigma[:,None], (1,N)).reshape(self.R * N)
-        return GaussianDensity(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new)
+        return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new)
         
     @staticmethod
     def invert_matrix(A: numpy.ndarray) -> (numpy.ndarray, numpy.ndarray):
@@ -132,7 +131,6 @@ class ConditionalGaussianDensity:
             assert p_x.R == 1 or self.R == 1
         except AssertionError:
             raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
-        from src.densities import GaussianDensity
         R = p_x.R * self.R
         D_xy = p_x.D + self.Dy
         # Mean
@@ -173,7 +171,7 @@ class ConditionalGaussianDensity:
             LSigmaL = numpy.tile(LSigmaL[:,None], (1, p_x.R)).reshape((R, p_x.D, p_x.D))
             delta_ln_det = numpy.linalg.slogdet(Lambda_x - LSigmaL)[1]
             ln_det_Sigma_xy = -(numpy.tile(self.ln_det_Lambda[:,None], (1, p_x.R)).reshape((R,)) + delta_ln_det)
-        return GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
+        return densities.GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
     
     def affine_marginal_transformation(self, p_x: 'ConditionalGaussianDensity') -> 'GaussianDensity':
         """ Returns the marginal density p(y) given  p(y|x) and p(x), 
@@ -191,7 +189,6 @@ class ConditionalGaussianDensity:
             assert p_x.R == 1 or self.R == 1
         except AssertionError:
             raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
-        from src.densities import GaussianDensity
         R = p_x.R * self.R
         # Mean
         mu_y = self.get_conditional_mu(p_x.mu).reshape((R, self.Dy))
@@ -199,7 +196,7 @@ class ConditionalGaussianDensity:
         MSigma_x = numpy.einsum('abc,dce->adbe', self.M, p_x.Sigma) # [R1,R,Dy,D]
         MSigmaM = numpy.einsum('abcd,aed->abce', MSigma_x, self.M)
         Sigma_y = (self.Sigma[:,None] + MSigmaM).reshape((R, self.Dy, self.Dy))
-        return GaussianDensity(Sigma_y, mu_y)
+        return densities.GaussianDensity(Sigma_y, mu_y)
     
     def affine_conditional_transformation(self, p_x: 'ConditionalGaussianDensity') -> 'ConditionalGaussianDensity':
         """ Returns the conditional density p(x|y), given p(y|x) and p(x),           
@@ -413,7 +410,6 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         :return: GaussianDensity
             Returns the joint distribution of x,y.
         """
-        from src.densities import GaussianDensity
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
@@ -424,7 +420,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
         Sigma_xy[:,:self.Dx,self.Dx:] = numpy.swapaxes(cov_yx, axis1=1, axis2=2)
         Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
-        p_xy = GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
+        p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
     
     def affine_conditional_transformation(self, p_x: 'GaussianDensity') -> 'ConditionalGaussianDensity':
@@ -468,9 +464,8 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         :return: GaussianDensity
             Returns the joint distribution of x,y.
         """
-        from src.densities import GaussianDensity
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        p_y = GaussianDensity(Sigma=Sigma_y, mu=mu_y)
+        p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
         return p_y
     
     
@@ -555,11 +550,10 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         :return: GaussianDensity
             The density conditioned on x.
         """
-        from src.densities import GaussianDensity
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
         Sigma_new = self.get_conditional_cov(x)
-        return GaussianDensity(Sigma=Sigma_new, mu=mu_new)
+        return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new)
 
     def integrate_Sigma_x(self, p_x: 'GaussianDensity') -> numpy.ndarray:
         """ Returns the integral
@@ -636,7 +630,6 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         :return: GaussianDensity
             Returns the joint distribution of x,y.
         """
-        from src.densities import GaussianDensity
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
@@ -650,7 +643,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         #Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
         #Sigma_xy[:,:self.Dx,self.Dx:] = numpy.swapaxes(cov_yx, axis1=1, axis2=2)
         #Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
-        p_xy = GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
+        p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
     
     def affine_conditional_transformation(self, p_x: 'GaussianDensity') -> 'ConditionalGaussianDensity':
@@ -694,9 +687,8 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         :return: GaussianDensity
             Returns the joint distribution of x,y.
         """
-        from src.densities import GaussianDensity
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        p_y = GaussianDensity(Sigma=Sigma_y, mu=mu_y)
+        p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
         return p_y
     
     
