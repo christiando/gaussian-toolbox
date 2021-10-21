@@ -10,8 +10,7 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 import numpy as np
-from src_jax import measures
-from src_jax import conditionals
+from . import measures
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     
@@ -167,6 +166,7 @@ class GaussianDensity(measures.GaussianMeasure):
         :return: ConditionalGaussianDensity
             The corresponding conditional Gaussian density p(x|y).
         """
+        from . import conditionals
         dim_xy = jnp.arange(self.D)
         dim_x = dim_xy[jnp.logical_not(jnp.isin(dim_xy, dim_y))]
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
@@ -174,136 +174,6 @@ class GaussianDensity(measures.GaussianMeasure):
         M_x = -jnp.einsum('abc,acd->abd', Sigma_x, self.Lambda[:,dim_x][:,:,dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum('abc,ac->ab', M_x, self.mu[:, dim_y])
         return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
-    
-    def affine_joint_transformation(self, cond_density: 'ConditionalGaussianDensity') -> 'GaussianDensity':
-        """ Returns the joint density 
-        
-            p(x,y) = p(y|x)p(x),
-            
-            where p(x) is the object itself.
-            
-        :param cond_density: ConditionalGaussianDensity
-            The conditional density.
-        
-        :return: GaussianDensity
-            The joint density.
-        """
-        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of multiple marginals
-        # and multiple cond
-        try:
-            assert self.R == 1 or cond_density.R == 1
-        except AssertionError:
-            raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
-        R = self.R * cond_density.R
-        D_xy = self.D + cond_density.Dy
-        # Mean
-        mu_x = jnp.tile(self.mu[None], (cond_density.R, 1, 1,)).reshape((R, self.D))
-        mu_y = cond_density.get_conditional_mu(self.mu).reshape((R, cond_density.Dy))
-        mu_xy = jnp.hstack([mu_x, mu_y])
-        # Sigma
-        Sigma_x = jnp.tile(self.Sigma[None], (cond_density.R, 1, 1, 1)).reshape(R, self.D, self.D)
-        MSigma_x = jnp.einsum('abc,dce->adbe', cond_density.M, self.Sigma) # [R1,R,Dy,D]
-        MSigmaM = jnp.einsum('abcd,aed->abce', MSigma_x, cond_density.M)
-        Sigma_y = (cond_density.Sigma[:,None] + MSigmaM).reshape((R, cond_density.Dy, cond_density.Dy))
-        C_xy = MSigma_x.reshape((R, cond_density.Dy, self.D))
-        # Could be that we need to change here
-        Sigma_xy = jnp.block([[Sigma_x,                 C_xy,
-                                jnp.swapaxes(C_xy, 1, 2), Sigma_y]])
-        # Sigma_xy = jnp.empty((R, D_xy, D_xy))
-        # Sigma_xy[:,:self.D,:self.D] = Sigma_x
-        # Sigma_xy[:,self.D:,self.D:] = Sigma_y
-        # Sigma_xy[:,self.D:,:self.D] = C_xy
-        # Sigma_xy[:,:self.D,self.D:] = jnp.swapaxes(C_xy, 1, 2)
-        # Lambda
-        Lambda_y = jnp.tile(cond_density.Lambda[:,None], (1, self.R, 1, 1)).reshape((R, cond_density.Dy, cond_density.Dy))
-        Lambda_yM = jnp.einsum('abc,abd->acd', cond_density.Lambda, cond_density.M) # [R1,Dy,D]
-        MLambdaM = jnp.einsum('abc,abd->acd', cond_density.M, Lambda_yM)
-        Lambda_x = (self.Lambda[None] + MLambdaM[:,None]).reshape((R, self.D, self.D))
-        L_xy = jnp.tile(-Lambda_yM[:,None], (1, self.R, 1, 1)).reshape((R, cond_density.Dy, self.D))
-        Lambda_xy = jnp.block([[Lambda_x, L_xy,
-                               jnp.swapaxes(L_xy, 1, 2), Lambda_y]])
-        # Lambda_xy = jnp.empty((R, D_xy, D_xy))
-        # Lambda_xy[:,:self.D,:self.D] = Lambda_x
-        # Lambda_xy[:,self.D:,self.D:] = Lambda_y
-        # Lambda_xy[:,self.D:,:self.D] = L_xy
-        # Lambda_xy[:,:self.D,self.D:] = jnp.swapaxes(L_xy, 1, 2)
-        # Log determinant
-        if self.D > cond_density.Dy:
-            CLambda_x = jnp.einsum('abcd,bde->abce', MSigma_x, self.Lambda) # [R1,R,Dy,D]
-            CLambdaC = jnp.einsum('abcd,abed->abce', CLambda_x, MSigma_x) # [R1,R,Dy,Dy]
-            delta_ln_det = jnp.linalg.slogdet(Sigma_y[:,None] - CLambdaC)[1].reshape((R,))
-            ln_det_Sigma_xy = self.ln_det_Sigma + delta_ln_det
-        else:
-            Sigma_yL = jnp.einsum('abc,acd->abd', cond_density.Sigma, -Lambda_yM) # [R1,Dy,Dy] x [R1, Dy, D] = [R1, Dy, D]
-            LSigmaL = jnp.einsum('abc,abd->acd', -Lambda_yM, Sigma_yL) # [R1, Dy, D] x [R1, Dy, D] = [R1, D, D]
-            LSigmaL = jnp.tile(LSigmaL[:,None], (1, self.R)).reshape((R, self.D, self.D))
-            delta_ln_det = jnp.linalg.slogdet(Lambda_x - LSigmaL)[1]
-            ln_det_Sigma_xy = -(jnp.tile(cond_density.ln_det_Lambda[:,None], (1, self.R)).reshape((R,)) + delta_ln_det)
-        return GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
-    
-    def affine_marginal_transformation(self, cond_density: 'ConditionalGaussianDensity') -> 'GaussianDensity':
-        """ Returns the marginal density p(y) given  p(y|x) and p(x), 
-            where p(x) is the object itself.
-            
-        :param cond_density: ConditionalGaussianDensity
-            The conditional density.
-        
-        :return: GaussianDensity
-            The marginal density.
-        """
-        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of multiple marginals
-        # and multiple cond
-        try:
-            assert self.R == 1 or cond_density.R == 1
-        except AssertionError:
-            raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
-        R = self.R * cond_density.R
-        # Mean
-        mu_y = cond_density.get_conditional_mu(self.mu).reshape((R, cond_density.Dy))
-        # Sigma
-        MSigma_x = jnp.einsum('abc,dce->adbe', cond_density.M, self.Sigma) # [R1,R,Dy,D]
-        MSigmaM = jnp.einsum('abcd,aed->abce', MSigma_x, cond_density.M)
-        Sigma_y = (cond_density.Sigma[:,None] + MSigmaM).reshape((R, cond_density.Dy, cond_density.Dy))
-        return GaussianDensity(Sigma_y, mu_y)
-    
-    def affine_conditional_transformation(self, cond_density: 'ConditionalGaussianDensity') -> 'ConditionalGaussianDensity':
-        """ Returns the conditional density p(x|y), given p(y|x) and p(x),           
-            where p(x) is the object itself.
-            
-        :param cond_density: ConditionalGaussianDensity
-            The conditional density.
-        
-        :return: GaussianDensity
-            The marginal density.
-        """
-        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of multiple marginals
-        # and multiple cond
-        try:
-            assert self.R == 1 or cond_density.R == 1
-        except AssertionError:
-            raise RuntimeError('The combination of combining multiple marginals with multiple conditionals is not implemented.')
-        R = self.R * cond_density.R
-        # TODO: Could be flexibly made more effiecient here.
-        # Marginal Sigma y
-        # MSigma_x = jnp.einsum('abc,dce->adbe', cond_density.M, self.Sigma) # [R1,R,Dy,D]
-        # MSigmaM = jnp.einsum('abcd,aed->abce', MSigma_x, cond_density.M)
-        # Sigma_y = (cond_density.Sigma[:,None] + MSigmaM).reshape((R, cond_density.Dy, cond_density.Dy))
-        # Lambda_y, ln_det_Sigma_y = self.invert_matrix(Sigma_y)
-        # Lambda
-        Lambda_yM = jnp.einsum('abc,abd->acd', cond_density.Lambda, cond_density.M) # [R1,Dy,D]
-        MLambdaM = jnp.einsum('abc,abd->acd', cond_density.M, Lambda_yM)
-        Lambda_x = (self.Lambda[None] + MLambdaM[:,None]).reshape((R, self.D, self.D))
-        # Sigma
-        Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
-        # M_x
-        M_Lambda_y = jnp.einsum('abc,abd->acd', cond_density.M, cond_density.Lambda) # [R1, D, Dy]
-        M_x = jnp.einsum('abcd,ade->abce', Sigma_x.reshape((cond_density.R, self.R, self.D, self.D)), M_Lambda_y) #[R1, R, D, Dy]
-        b_x = - jnp.einsum('abcd,ad->abc', M_x, cond_density.b) # [R1, R, D, Dy] x [R1, Dy] = [R1, R, D]
-        b_x += jnp.einsum('abcd,bd->abc', Sigma_x.reshape((cond_density.R, self.R, self.D, self.D)), self.nu).reshape((R, self.D))
-        M_x = M_x.reshape((R, self.D, cond_density.Dy))
-        
-        return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
-
     
 class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
     
