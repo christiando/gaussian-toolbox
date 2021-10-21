@@ -246,7 +246,7 @@ class OneRankFactor(LowRankFactor):
                 # Matrix determinant lemma
                 ln_det_Sigma_new = measure.ln_det_Sigma[:,None] - numpy.log(denominator)
                 ln_det_Sigma_new = ln_det_Sigma_new.reshape((measure.R * self.R))
-                ln_det_Lambda_new = ln_det_Sigma_new
+                ln_det_Lambda_new = -ln_det_Sigma_new
             new_density_dict.update({'Sigma': Sigma_new, 'ln_det_Lambda': ln_det_Lambda_new,
                                      'ln_det_Sigma': ln_det_Sigma_new})
         return new_density_dict
@@ -286,7 +286,7 @@ class OneRankFactor(LowRankFactor):
                 ln_det_Lambda_new = -ln_det_Sigma_new
             new_density_dict.update({'Sigma': Sigma_new, 'ln_det_Lambda': ln_det_Lambda_new,
                                      'ln_det_Sigma': ln_det_Sigma_new})
-            return new_density_dict
+        return new_density_dict
     
 class LinearFactor(ConjugateFactor):
     
