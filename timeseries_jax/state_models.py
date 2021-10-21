@@ -562,11 +562,30 @@ class LSEMStateModel(LinearStateModel):
         #                   options={'disp': True, 'maxiter': 10})
         # self.W = jnp.array(result.x.reshape((self.Dk, self.Dz + 1)))
         phi = smoothing_density.slice(jnp.arange(0,smoothing_density.R - 1))
-        func = jit(lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
-                                  self.Qz_inv, self.ln_det_Qz, self.Dk, self.Dz))
-        result = minimize(func, self.W.flatten(), method='BFGS', options={'maxiter': 20})
-        self.W = result.x.reshape((self.Dk, self.Dz + 1))
-        
+        # func = jit(lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
+        #                           self.Qz_inv, self.ln_det_Qz, self.Dk, self.Dz))
+        # result = minimize(func, self.W.flatten(), method='BFGS', options={'maxiter': 20})
+        # self.W = result.x.reshape((self.Dk, self.Dz + 1))
+        func = jit(value_and_grad(lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
+                                  self.Qz_inv, self.ln_det_Qz, self.Dk, self.Dz)))
+        W = self.W.flatten()
+        # for i in range(10):
+        #     v, g = func(W)
+        #     W = W - 1e-1 * g
+        # self.W = W.reshape((self.Dk, self.Dz + 1))
+
+        opt_init, opt_update, get_params = optimizers.adam(1e-1)
+        opt_state = opt_init(W)
+
+        def step(step, opt_state):
+            value, grads = func(get_params(opt_state))
+            opt_state = opt_update(step, grads, opt_state)
+            return value, opt_state
+
+        for i in range(10):
+            value, opt_state = step(i, opt_state)
+        self.W = get_params(opt_state).reshape((self.Dk, self.Dz + 1))
+
     def update_state_density(self):
         """ Updates the state density.
         """
