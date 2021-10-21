@@ -37,7 +37,7 @@ class StateSpaceEM:
     
     def __init__(self, X: jnp.ndarray, observation_model: observation_models.ObservationModel, 
                  state_model: state_models.StateModel, max_iter: int=100, conv_crit: float=1e-3,
-                 u_x: jnp.ndarray=None, u_z: jnp.ndarray=None):
+                 u_x: jnp.ndarray=None, u_z: jnp.ndarray=None, timeit: bool=False):
         """ Class to fit a state space model with the expectation-maximization procedure.
         
         :param X: jnp.ndarray [T, Dx]
@@ -53,7 +53,9 @@ class StateSpaceEM:
         :param u_x: jnp.ndarray [T,...]
             Control variables for observation model. (Default=None)
         :param u_z: jnp.ndarray [T,...]
-            Control variables for state model. (Default=None)   
+            Control variables for state model. (Default=None)
+        :param timeit: bool
+            If true, prints the timings. (Default=False)
         """
         self.X = X
         self.T, self.Dx = self.X.shape
@@ -65,6 +67,7 @@ class StateSpaceEM:
         self.sm = state_model
         self.max_iter = max_iter
         self.conv_crit = conv_crit
+        self.timeit = timeit
         self.iteration = 0
         self.llk_list = []
         # Setup densities
@@ -95,13 +98,13 @@ class StateSpaceEM:
         while self.iteration < self.max_iter and not converged:
             time_start_total = time.perf_counter()
             self.estep()
-            print('E-step: Run Time %.1f' % (time.perf_counter() - time_start_total))
+            etime = (time.perf_counter() - time_start_total)
             time_start = time.perf_counter()
             self.llk_list.append(self.compute_log_likelihood())
-            print('LLK: Run Time %.1f' % (time.perf_counter() - time_start))
+            llk_time = (time.perf_counter() - time_start)
             time_start = time.perf_counter()
             self.mstep()
-            print('M-step: Run Time %.1f' % (time.perf_counter() - time_start))
+            mtime = (time.perf_counter() - time_start)
             if self.iteration>1:
                 conv = (self.llk_list[-1] - self.llk_list[-2]) / jnp.amax(jnp.array([1,
                                                                              jnp.abs(self.llk_list[-1]), 
@@ -110,8 +113,14 @@ class StateSpaceEM:
             self.iteration += 1
             if self.iteration % 2 == 0:
                 print('Iteration %d - llk=%.1f' %(self.iteration, self.llk_list[-1]))
-            # print('Run Time %.1f' %(time.perf_counter() - time_start))
-            print('Total: Run Time %.1f' % (time.perf_counter() - time_start_total))
+            tot_time = (time.perf_counter() - time_start_total)
+            if self.timeit:
+                print('###################### \n' +
+                      'E-step: Run Time %.1f \n' % etime +
+                      'LLK: Run Time %.1f \n' % llk_time +
+                      'M-step: Run Time %.1f \n' % mtime +
+                      'Total: Run Time %.1f \n' % tot_time +
+                      '###################### \n')
         if not converged:
             print('EM reached the maximal number of iterations.')
         else:

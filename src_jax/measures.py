@@ -259,6 +259,18 @@ class GaussianMeasure(factors.ConjugateFactor):
             All parameters, that are required to evaluate the expression.
         """
         return self.integration_dict[expr](**kwargs)
+
+    def log_integral_light(self) -> jnp.ndarray:
+        """ Computes the log integral of the exponential term.
+
+        log \int u(x) dx.
+
+        :return: jnp.ndarray [R]
+            Log integral
+        """
+        if self.lnZ is None:
+            self.compute_lnZ()
+        return self.lnZ + self.ln_beta
     
     def log_integral(self) -> jnp.ndarray:
         """ Computes the log integral of the exponential term.
@@ -270,6 +282,16 @@ class GaussianMeasure(factors.ConjugateFactor):
         """
         self._prepare_integration()
         return self.lnZ + self.ln_beta
+
+    def integral_light(self) -> jnp.ndarray:
+        """ Computes the log integral of the exponential term.
+
+        \int u(x) dx.
+
+        :return: jnp.ndarray [R]
+            Integral
+        """
+        return jnp.exp(self.log_integral_light())
     
     def integral(self) -> jnp.ndarray:
         """ Computes the log integral of the exponential term.
