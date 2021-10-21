@@ -9,7 +9,7 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
-from src_jax import factors
+from . import factors
 from jax.scipy.special import logsumexp
 
 class GaussianMixtureMeasure:
@@ -137,7 +137,8 @@ class GaussianMixtureMeasure:
     
 class GaussianMeasure(factors.ConjugateFactor):
     
-    def __init__(self, Lambda: jnp.ndarray, nu: jnp.ndarray=None, ln_beta: jnp.ndarray=None):
+    def __init__(self, Lambda: jnp.ndarray, nu: jnp.ndarray=None, ln_beta: jnp.ndarray=None,
+                 Sigma: jnp.ndarray=None, ln_det_Lambda: jnp.ndarray=None, ln_det_Sigma: jnp.ndarray=None):
         """ A measure with a Gaussian form.
         
         u(x) = beta * exp(- 0.5 * x'Lambda x + x'nu),
@@ -150,12 +151,18 @@ class GaussianMeasure(factors.ConjugateFactor):
             Information vector of a Gaussian distribution. If None all zeros. (Default=None)
         :param ln_beta: jnp.ndarray [R]
             The log constant factor of the factor. If None all zeros. (Default=None)
+        param Sigma: jnp.ndarray [R, D, D]
+            Covariance matrix of the Gaussian distributions. Needs to be positive definite. (Default=None)
+        :param ln_det_Lambda: jnp.ndarray [R]
+            Log determinant of Lambda. (Default=None)
+        :param ln_det_Sigma: jnp.ndarray [R]
+            Log determinant of Sigma. (Default=None)
         """
         
         super().__init__(Lambda, nu, ln_beta)
-        self.Sigma = None
-        self.ln_det_Lambda = None
-        self.ln_det_Sigma = None
+        self.Sigma = Sigma
+        self.ln_det_Lambda = ln_det_Lambda
+        self.ln_det_Sigma = ln_det_Sigma
         self.lnZ = None
         self.mu = None
         self.integration_dict = {'1': self.integral,
@@ -222,7 +229,8 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        return factor.multiply_with_measure(self, update_full=update_full)
+        new_measure_dict = factor._multiply_with_measure(self, update_full=update_full)
+        return GaussianMeasure(**new_measure_dict)
     
     def hadamard(self, factor: factors.ConjugateFactor, update_full: bool=False) -> 'GaussianMeasure':
         """ Computes the hadamard (componentwise) product between the measure u and a conjugate factor f
@@ -239,8 +247,9 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: GaussianMeasure
             Returns the resulting GaussianMeasure.
         """
-        return factor.hadamard_with_measure(self, update_full=update_full)
-    
+        new_measure_dict = factor._hadamard_with_measure(self, update_full=update_full)
+        return GaussianMeasure(**new_measure_dict)
+
     def integrate(self, expr:str='1', **kwargs) -> jnp.ndarray:
         """ Integrates the indicated expression with respect to the Gaussian measure.
         
