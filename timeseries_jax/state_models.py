@@ -448,7 +448,7 @@ class LSEMStateModel(LinearStateModel):
         two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func, update_full=True)
         Ekz = jnp.mean(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2*self.Dz)), axis=0)
         Ek = jnp.mean(smoothing_density.multiply(
-            self.state_density.k_func).integrate().reshape((T+1, self.Dk))[:-1], axis=0)
+            self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk))[:-1], axis=0)
         Qz_k_lin_err = jnp.dot(self.A[:,self.Dz:], 
                   (Ekz[:,:self.Dz] - jnp.dot(self.A[:,:self.Dz], Ekz[:,self.Dz:].T).T - Ek[:,None] * self.b[None]))
         Ekk = smoothing_density.multiply(self.state_density.k_func, update_full=True).multiply(self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk, self.Dk))
