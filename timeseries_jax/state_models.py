@@ -24,7 +24,6 @@ from jax.scipy.optimize import minimize
 from jax.experimental import optimizers
 
 from src_jax import densities, conditionals, factors
-import time
 
 
 class StateModel:
@@ -291,12 +290,13 @@ class LSEMStateModel(LinearStateModel):
         :param two_step_smoothing_density: Gaussian Density
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
-        self.Qz = jit(self.update_Qz, static_argnums=(0,1))(smoothing_density, two_step_smoothing_density)
-        self.update_state_density()
-        self.A = jit(self.update_A, static_argnums=(0,1))(smoothing_density, two_step_smoothing_density)
-        self.b = jit(self.update_b, static_argnums=(0))(smoothing_density)
+        # self.Qz = jit(self.update_Qz, static_argnums=(0,1))(smoothing_density, two_step_smoothing_density)
+        # self.update_state_density()
+        # self.A = jit(self.update_A, static_argnums=(0,1))(smoothing_density, two_step_smoothing_density)
+        # self.b = jit(self.update_b, static_argnums=(0))(smoothing_density)
         # time_start = time.perf_counter()
-        # self.A, self.b, self.Qz = jit(self.update_AbQ, static_argnums=(0,1))(smoothing_density, two_step_smoothing_density)
+        self.A, self.b, self.Qz = self.update_AbQ(smoothing_density, two_step_smoothing_density)
+        # print(self.b)
         # print('AbQ: Run Time %.1f' % (time.perf_counter() - time_start))
         # time_start = time.perf_counter()
         self.update_state_density()
@@ -316,36 +316,9 @@ class LSEMStateModel(LinearStateModel):
         :param two_step_smoothing_density: Gaussian Density
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
-        T = two_step_smoothing_density.R
+        T = smoothing_density.R - 1
         phi = smoothing_density.slice(jnp.arange(T))
 
-        # E[f(z)f(z)']
-        Ekk = phi.multiply(self.state_density.k_func).multiply(self.state_density.k_func).integrate().reshape((T,
-                                                                                                               self.Dk,
-                                                                                                               self.Dk))
-        Ekz = phi.multiply(self.state_density.k_func).integrate('x').reshape((T,
-                                                                              self.Dk,
-                                                                              self.Dz))
-        mean_Ekz = jnp.mean(Ekz, axis=0)
-        mean_Ezz = jnp.mean(phi.integrate('xx'), axis=0)
-        Eff = jnp.block([[mean_Ezz, mean_Ekz.T],
-                         [mean_Ekz, jnp.mean(Ekk, axis=0) + .0001 * jnp.eye(self.Dk)]])
-        # E[f(z)] b'
-        Ez = jnp.mean(phi.integrate('x'), axis=0)
-        Ek = jnp.mean(phi.multiply(self.state_density.k_func).integrate().reshape((T, self.Dk)), axis=0)
-        Ef = jnp.concatenate([Ez, Ek])
-        Ebf = Ef[:,None] * self.b[None]
-        # E[z f(z)']
-        v_joint = jnp.block([jnp.zeros([self.Dk, int(self.Dz)]),
-                             self.state_density.k_func.v])
-        nu_joint = jnp.block([jnp.zeros([self.Dk, int(self.Dz)]),
-                              self.state_density.k_func.nu])
-        ln_beta = self.state_density.k_func.ln_beta
-        joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=ln_beta)
-        Ezz_cross = jnp.mean(two_step_smoothing_density.integrate('xx')[:, self.Dz:, :self.Dz], axis=0)
-        Ezk = jnp.mean(two_step_smoothing_density.multiply(joint_k_func).integrate('x').reshape((T, self.Dk,
-                                                                                                 (2 * self.Dz))), axis=0)
-        Ezf = jnp.concatenate([Ezz_cross, Ezk[:, :self.Dz]], axis=0)
         A_tilde = jnp.block([[jnp.eye(self.Dz, self.Dz)], [-self.A[:, :self.Dz].T]])
         b_tilde = -self.b
         Qz_lin = jnp.mean(two_step_smoothing_density.integrate('Ax_aBx_b_outer',
@@ -353,14 +326,50 @@ class LSEMStateModel(LinearStateModel):
                                                                a_vec=b_tilde,
                                                                B_mat=A_tilde.T,
                                                                b_vec=b_tilde), axis=0)
+        # v_joint = jnp.block([jnp.zeros([self.Dk, int(self.Dz)]),
+        #                      self.state_density.k_func.v])
+        # nu_joint = jnp.block([jnp.zeros([self.Dk, int(self.Dz)]),
+        #                       self.state_density.k_func.nu])
+        zero_arr = jnp.zeros([self.Dk, 2 * self.Dz])
+        v_joint = zero_arr.at[:, self.Dz:].set(self.state_density.k_func.v)
+        nu_joint = zero_arr.at[:, self.Dz:].set(self.state_density.k_func.nu)
+        joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta)
+        two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func, update_full=True)
+        Ekz = jnp.mean(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2 * self.Dz)), axis=0)
+        Ekz_future, Ekz_past = Ekz[:, :self.Dz], Ekz[:, self.Dz:]
+        phi_k = phi.multiply(self.state_density.k_func, update_full=True)
+        Ek = jnp.mean(phi_k.integral_light().reshape((T, self.Dk)), axis=0)
         Qz_k_lin_err = jnp.dot(self.A[:, self.Dz:],
-                               (Ezk[:, :self.Dz] - jnp.dot(self.A[:, :self.Dz], Ezk[:, self.Dz:].T).T - Ek[:, None] * self.b[
-                                   None]))
-        Qz_kk = jnp.dot(jnp.dot(self.A[:, self.Dz:], jnp.mean(Ekk[:-1], axis=0)), self.A[:, self.Dz:].T)
-        Qz = Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
-        A = jnp.linalg.solve(Eff, (Ezf - Ebf)).T
-        b = jnp.mean(smoothing_density.mu[1:], axis=0) - jnp.dot(A, Ef).T
+                               (Ekz_future - jnp.dot(self.A[:, :self.Dz], Ekz_past.T).T - Ek[:, None] *
+                                self.b[None]))
+        mean_Ekk = jnp.mean(phi_k.multiply(self.state_density.k_func, update_full=True).integral_light().reshape(
+            (T, self.Dk, self.Dk)), axis=0)
+        Qz_kk = jnp.dot(jnp.dot(self.A[:, self.Dz:], mean_Ekk), self.A[:, self.Dz:].T)
+        Qz =  Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
 
+        # E[f(z)f(z)']
+        Ekk = phi_k.multiply(self.state_density.k_func, update_full=True).integral_light().reshape((T, self.Dk, self.Dk))
+        Ekz = phi_k.integrate('x').reshape((T, self.Dk, self.Dz))
+        mean_Ekz = jnp.mean(Ekz, axis=0)
+        mean_Ezz = jnp.mean(phi.integrate('xx'), axis=0)
+        mean_Ekk = jnp.mean(Ekk, axis=0) + .0001 * jnp.eye(self.Dk)
+        Eff = jnp.block([[mean_Ezz, mean_Ekz.T],
+                         [mean_Ekz, mean_Ekk]])
+
+        # mean_Ekk_reg = mean_Ekk + .0001 * jnp.eye(self.Dk)
+        # mean_Ezz = jnp.mean(phi.integrate('xx'), axis=0)
+        # Eff = jnp.block([[mean_Ezz, Ekz_past.T],
+        #                  [Ekz_past, mean_Ekk_reg]])
+        Ez = jnp.mean(phi.integrate('x'), axis=0)
+        Ef = jnp.concatenate([Ez, Ek])
+        Ebf = Ef[None] * self.b[:, None]
+        # E[z f(z)']
+        Ezz_cross = jnp.mean(two_step_smoothing_density.integrate('xx')[:, self.Dz:, :self.Dz], axis=0)
+        Ezf = jnp.concatenate([Ezz_cross.T, Ekz_future.T], axis=1)
+        A = jnp.linalg.solve(Eff / T, (Ezf - Ebf).T / T).T
+        b =  jnp.mean(smoothing_density.mu[1:], axis=0) - jnp.dot(A, Ef).T
+        # A = self.A
+        # b = self.b
         return A, b, Qz
 
     def update_A(self, smoothing_density: 'GaussianDensity',
