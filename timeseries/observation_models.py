@@ -555,7 +555,7 @@ class HCCovObservationModel(LinearObservationModel):
         
         U = x[:self.Du * self.Dx].reshape((self.Dx, self.Du))
         lagrange_multipliers = x[self.Du * self.Dx:].reshape((self.Du, self.Du))
-        dL_dU = -numpy.einsum('abc,ca->ab', R, self.U) + numpy.dot(U, lagrange_multipliers).T
+        dL_dU = - numpy.einsum('abc,ca->ab', R, self.U) + numpy.dot(U, lagrange_multipliers).T
         dL_dmultipliers = numpy.dot(U.T, U) - numpy.eye(self.Du)
         objective = numpy.sum(dL_dU ** 2) + numpy.sum(dL_dmultipliers ** 2)
         return objective
@@ -569,7 +569,7 @@ class HCCovObservationModel(LinearObservationModel):
         phi = smoothing_density.slice(range(1,T+1))
         for iu in range(self.Du):
             R[iu] = self.get_lb_i(iu, phi, X, update='U')
-            R[iu] /= numpy.amax(R[iu])
+            # R[iu] /= numpy.amax(R[iu])
         objective = lambda x: self._U_lagrange_func(x, R)
         result = minimize(value_and_grad(objective), x0,
                           method='L-BFGS-B', jac=True, options={'disp': False})
@@ -715,7 +715,7 @@ class HCCovObservationModel(LinearObservationModel):
         # determinant part
         Qm -= .5 * E_ln_sigma2_f + .5 * T * (self.Dx - self.Du) * numpy.log(self.sigma_x ** 2)
         # constant part
-        Qm -= T * self.Dx * numpy.log(2 * numpy.pi)
+        # Qm -= T * self.Dx * numpy.log(2 * numpy.pi)
         return -Qm
     
     def update_parameters_C(self, params):

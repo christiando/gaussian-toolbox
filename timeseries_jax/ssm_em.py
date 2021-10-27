@@ -375,9 +375,8 @@ class StateSpaceEM:
             #p0 = self.filter_density.slice([0])
             p0 = densities.GaussianDensity(Sigma=jnp.array([jnp.eye(self.Dz)]), 
                                            mu=jnp.zeros((1,self.Dz)))
-        prediction_density = self._setup_density(T=T+1)
         filter_density = self._setup_density(T=T+1)
-        filter_density.update([0], p0)
+        filter_density.update(jnp.array([0]), p0)
 
         Sigma_p, mu_p, Lambda_p, ln_det_Sigma_p = np.array(self.prediction_density.Sigma), \
                                                   np.array(self.prediction_density.mu), \
@@ -424,7 +423,7 @@ class StateSpaceEM:
             p0 = densities.GaussianDensity(Sigma=jnp.array([jnp.eye(self.Dz)]), 
                                            mu=jnp.zeros((1,self.Dz)))
         filter_density = self._setup_density(T=T+1)
-        filter_density.update([0], p0)
+        filter_density.update(jnp.array([0]), p0)
 
         Sigma_f, mu_f, Lambda_f, ln_det_Sigma_f = np.array(filter_density.Sigma), \
                                                   np.array(filter_density.mu), \
@@ -433,7 +432,7 @@ class StateSpaceEM:
 
         mu_unobserved = np.copy(X)
         std_unobserved = np.zeros(X.shape)
-        cur_filter_density = filter_density.slice([0])
+        cur_filter_density = filter_density.slice(jnp.array([0]))
         # Filtering
         for t in range(1, T+1):
             # Filter
