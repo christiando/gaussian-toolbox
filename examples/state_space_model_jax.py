@@ -62,11 +62,13 @@ def _generate_heteroscedastic_data(T, Dx, Dz, Du, sigma_z=.02, sigma_x=.02):
 def load_synthetic_data(Dz: int = 2, Dx: int = 7, Du: int = 3, T: int = 10000, sigma_x: float = .01, seed=1):
     numpy.random.seed(seed)
     var_names = ['x_%d' % i for i in range(Dx)]
-    return pandas.DataFrame(data=_generate_heteroscedastic_data(T, Dx, Dz, Du, sigma_x=sigma_x)[0], columns=var_names)
+    X, Z, params_dict = _generate_heteroscedastic_data(T, Dx, Dz, Du, sigma_x=sigma_x)
+    return pandas.DataFrame(data=X, columns=var_names), params_dict
 
 # %%
 if __name__=='__main__':
-    X = load_synthetic_data().to_numpy()
+    X, params_dict = load_synthetic_data()
+    X = X.to_numpy()
     # pyplot.plot(X[:1000,0])
     # pyplot.show()
 
@@ -77,21 +79,37 @@ if __name__=='__main__':
     from jax import numpy as jnp
 
     from jax import value_and_grad, jit
+    dz = 2
+    dk = 10
+    du = 3
 
-
-    dz = 3
-    dk = 50
     dx = X.shape[1]
-    sm = state_models.LSEMStateModel(dz, dk)
-    # sm = state_models.LinearStateModel(dz)
-    om = observation_models.LinearObservationModel(dx, dz, noise_x=1.)
-
-
-    ssm_em_lin = StateSpaceEM(jnp.array(X), observation_model=om, state_model=sm)
+    # sm = state_models.LSEMStateModel(dz, dk)
+    sm = state_models.LinearStateModel(dz)
+    # om = observation_models.LinearObservationModel(dx, dz, noise_x=1.)
+    om = observation_models.HCCovObservationModel(Dx=dx, Dz=dz, Du=du, noise_x=.1)
+    # om.pca_init(X, 50)
+    # om.U = jnp.array(params_dict['U'])
+    # om.W = om.W.at[:,1:].set(jnp.array(params_dict['w']))
+    # om.W = om.W.at[:,0].set(jnp.array(params_dict['b_w']))
+    # om.beta = jnp.array(params_dict['beta'])
+    # om.sigma_x = jnp.array(params_dict['sigma_x'])
+    # om.update_emission_density()
+    # om.C = jnp.array(params_dict['C'])
+    # om.C = jnp.array(params_dict['d'])
+    # ssm_em_lin = StateSpaceEM(jnp.array(X[:10000]), observation_model=om, state_model=sm, timeit=True)
+    # ssm_em_lin.run()
+    # om = observation_models.HCCovObservationModel(Dx=dx, Dz=dz, Du=du, noise_x=.1)
+    # om.C = ssm_em_lin.om.C
+    # om.d = ssm_em_lin.om.d
+    # om.update_emission_density()
+    ssm_em_lin = StateSpaceEM(jnp.array(X[:8000]), observation_model=om, state_model=sm, timeit=True)
+    ssm_em_lin.run()
     # ssm_em_lin.estep()
+    # ssm_em_lin.mstep()
     # smoothing_density = ssm_em_lin.smoothing_density
     # two_step_smoothing_density = ssm_em_lin.twostep_smoothing_density
-    # self = ssm_em_lin.sm
+    # self = ssm_em_lin.om
     # ssm_em_lin.estep()
     # ssm_em_lin.mstep()
 

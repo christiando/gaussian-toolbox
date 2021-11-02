@@ -352,10 +352,12 @@ class HCCovObservationModel(LinearObservationModel):
             Intial isoptropic std. on the observations.
         """
         self.Dx, self.Dz, self.Du = Dx, Dz, Du
-        if Dx == Dz:
-            self.C = jnp.eye(Dx)
+        if Dx >= Dz:
+            self.C = jnp.eye(Dx)[:,:Dz]
         else:
             self.C = jnp.array(np.random.randn(Dx, Dz))
+            self.C = self.C / jnp.sqrt(jnp.sum(self.C ** 2, axis=0))[None]
+            self.C = self.C / jnp.sqrt(jnp.sum(self.C ** 2, axis=0))[None]
         self.d = jnp.zeros(Dx)
         self.U = jnp.eye(Dx)[:,:Du]
         self.W = 1e-3 * jnp.array(np.random.randn(self.Du, self.Dz + 1))
@@ -455,7 +457,7 @@ class HCCovObservationModel(LinearObservationModel):
                                                                     get_omegas)
         objective(x0)
         # objective = jit(lambda x: value_and_grad(self.parameter_optimization_C(x, phi, X)))
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', options={'disp': False, 'maxiter': 10})
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', options={'disp': False, 'maxiter': 5})
         self.C = jnp.array(result.x.reshape((self.Dx, self.Dz)))
 
     def update_d(self, phi: 'GaussianDensity', X: jnp.ndarray, get_omegas):
@@ -552,7 +554,6 @@ class HCCovObservationModel(LinearObservationModel):
         result = minimize(objective, x0, method='SLSQP', jac=True, constraints=constraint, options={'disp': True})
         U_new = jnp.array(result.x.reshape((self.Dx, self.Du)))
         self.U = U_new
-        print(jnp.dot(self.U.T, self.U))
 
     @staticmethod
     def value_and_grad_QU(params, Du, Dx, R):
@@ -617,7 +618,7 @@ class HCCovObservationModel(LinearObservationModel):
         objective = lambda params: self.value_and_grad_Qfunc_sigma_beta_W(params, phi, X, self.U, self.C,
                                                                     self.d, self.Dx, self.Dz, self.Du, get_omegas)
         # objective = jit(lambda x: value_and_grad(self.parameter_optimization_C(x, phi, X)))
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False, 'maxiter': 10})
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False, 'maxiter': 5})
         # result = minimize(objective, x0, jac=True, method='L-BFGS-B',
         #                   options={'disp': True, 'maxiter': 10})
         opt_params = result.x
@@ -940,7 +941,7 @@ class HCCovObservationModel(LinearObservationModel):
         R_minus = exp_phi_minus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
         R = R_plus + R_minus
         R = jnp.mean(R, axis=0)
-        # R = R / jnp.amax(R)
+        R = R / beta
         return R
 
     @staticmethod
