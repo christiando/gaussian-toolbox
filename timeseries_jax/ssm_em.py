@@ -105,10 +105,10 @@ class StateSpaceEM:
             time_start = time.perf_counter()
             self.mstep()
             mtime = (time.perf_counter() - time_start)
-            if self.iteration>1:
-                conv = (self.llk_list[-1] - self.llk_list[-2]) / jnp.amax(jnp.array([1,
+            if self.iteration>3:
+                conv = (self.llk_list[-1] - self.llk_list[-4]) / jnp.amax(jnp.array([1,
                                                                              jnp.abs(self.llk_list[-1]), 
-                                                                             jnp.abs(self.llk_list[-2])]))
+                                                                             jnp.abs(self.llk_list[-4])]))
                 converged = jnp.abs(conv) < self.conv_crit
             self.iteration += 1
             if self.iteration % 2 == 0:

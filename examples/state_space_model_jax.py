@@ -77,7 +77,7 @@ if __name__=='__main__':
     from timeseries_jax import observation_models
     from timeseries_jax.ssm_em import StateSpaceEM
     from jax import numpy as jnp
-
+    llk_list = []
     from jax import value_and_grad, jit
     dz = 2
     dk = 10
@@ -85,6 +85,14 @@ if __name__=='__main__':
 
     dx = X.shape[1]
     # sm = state_models.LSEMStateModel(dz, dk)
+    # for i in range(10):
+    #     numpy.random.seed(i)
+    #     sm = state_models.LinearStateModel(dz)
+    #     om = observation_models.HCCovObservationModel(Dx=dx, Dz=dz, Du=du)
+    #     ssm_em_lin = StateSpaceEM(jnp.array(X[:8000]), observation_model=om, state_model=sm, timeit=True)
+    #     ssm_em_lin.run()
+    #     llk_list.append(ssm_em_lin.llk_list[-1])
+
     sm = state_models.LinearStateModel(dz)
     # om = observation_models.LinearObservationModel(dx, dz, noise_x=1.)
     om = observation_models.HCCovObservationModel(Dx=dx, Dz=dz, Du=du, noise_x=.1)
@@ -97,14 +105,15 @@ if __name__=='__main__':
     # om.update_emission_density()
     # om.C = jnp.array(params_dict['C'])
     # om.C = jnp.array(params_dict['d'])
-    # ssm_em_lin = StateSpaceEM(jnp.array(X[:10000]), observation_model=om, state_model=sm, timeit=True)
-    # ssm_em_lin.run()
-    # om = observation_models.HCCovObservationModel(Dx=dx, Dz=dz, Du=du, noise_x=.1)
+    ssm_em_lin = StateSpaceEM(jnp.array(X[:8000]), observation_model=om, state_model=sm, timeit=True)
+    ssm_em_lin.run()
+    # om = observation_models.HCCovObservationModel(Dx=dx, Dz=dz, Du=du)
+    # om.pca_init(X, 50)
     # om.C = ssm_em_lin.om.C
     # om.d = ssm_em_lin.om.d
     # om.update_emission_density()
-    ssm_em_lin = StateSpaceEM(jnp.array(X[:8000]), observation_model=om, state_model=sm, timeit=True)
-    ssm_em_lin.run()
+    # ssm_em_lin = StateSpaceEM(jnp.array(X[:8000]), observation_model=om, state_model=sm, timeit=True)
+    # ssm_em_lin.run()
     # ssm_em_lin.estep()
     # ssm_em_lin.mstep()
     # smoothing_density = ssm_em_lin.smoothing_density
