@@ -25,8 +25,10 @@ from jax import numpy as jnp
 import numpy as np
 from jax import lax
 from jax import jit, value_and_grad, vmap
+from functools import partial
 
 from src_jax import densities, conditionals, factors
+from pathos.multiprocessing import ProcessingPool as Pool
 
 
 def recommend_dims(X, smooth_window=20, cut_off=.99):
@@ -363,7 +365,7 @@ class HCCovObservationModel(LinearObservationModel):
         Q, R = np.linalg.qr(rand_mat)
         self.U = jnp.array(Q[:,:self.Du])
         # self.U = jnp.eye(Dx)[:, :Du]
-        W = 1e-2 * np.random.randn(self.Du, self.Dz + 1)
+        W = 1e-8 * np.random.randn(self.Du, self.Dz + 1)
         W[:,0] = 0
         self.W = jnp.array(W)
         self.beta = noise_x ** 2 * jnp.ones(self.Du)
@@ -422,6 +424,10 @@ class HCCovObservationModel(LinearObservationModel):
             The observations.
         """  
 
+        if iteration < 30:
+            num_resets = 10
+        else:
+            num_resets = 10
         phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
         get_omegas = jit(vmap(HCCovObservationModel.get_omegas_i, in_axes=(None, None, 0, 1, 0, None, None, None),
                           out_axes=(0,0), axis_name='i'), static_argnums=(0))
@@ -430,7 +436,7 @@ class HCCovObservationModel(LinearObservationModel):
             self.update_d(phi, X, get_omegas)
         elif iteration % 3 == 1:
             if self.Dx > 1:
-                self.update_U3(phi, X, get_omegas)
+                self.update_U3(phi, X, get_omegas, num_resets)
                 # if iteration % 2 == 0:
                 #     self.update_U3(phi, X, get_omegas)
                 # else:
@@ -440,10 +446,11 @@ class HCCovObservationModel(LinearObservationModel):
             # if iteration > 20:
             #     self.update_W(phi, X, get_omegas)
         else:
-            # if iteration > 15:
-            self.update_sigma_beta_W(phi, X, get_omegas)
-            # else:
+            # if iteration < 100:
             #     self.update_sigma_beta(phi, X, get_omegas)
+            #     self.update_W(phi, X, get_omegas)
+            # else:
+            self.update_sigma_beta_W(phi, X, get_omegas, num_resets)
         #
         self.update_emission_density()
         
@@ -551,7 +558,7 @@ class HCCovObservationModel(LinearObservationModel):
             self.U = U_new
             print(jnp.dot(self.U.T, self.U))
 
-    def update_U3(self, phi: 'GaussianDensity', X: jnp.ndarray, get_omegas):
+    def update_U3(self, phi: 'GaussianDensity', X: jnp.ndarray, get_omegas, num_resets=1):
         x0 = np.array(self.U.flatten())
         triu_indices = np.triu_indices(self.Du)
 
@@ -561,13 +568,23 @@ class HCCovObservationModel(LinearObservationModel):
 
         constraint = {'type': 'eq', 'fun': constraint_fun}
 
-        get_R = lambda U, omega_star: vmap(HCCovObservationModel.get_R, in_axes=(None, None, 0, 0, 1, 0, None, None, None), axis_name='i')(phi, X, self.W, self.beta, U, omega_star, self.C, self.d, self.sigma_x)
+        get_R = jit(lambda U, omega_star: vmap(HCCovObservationModel.get_R, in_axes=(None, None, 0, 0, 1, 0, None, None, None), axis_name='i')(phi, X, self.W, self.beta, U, omega_star, self.C, self.d, self.sigma_x))
         get_omegas_U = lambda U: get_omegas(phi, X, self.W, U, self.beta, self.C, self.d, self.sigma_x)[1]
-        omega_star = get_omegas_U(self.U)
-        R = get_R(self.U, omega_star)
+        # omega_star = get_omegas_U(self.U)
+        # R = get_R(self.U, omega_star)
         objective = lambda x: HCCovObservationModel.value_and_grad_QU(x, self.Du, self.Dx, get_R, get_omegas_U)
-        result = minimize(objective, x0, method='SLSQP', jac=True, constraints=constraint, options={'disp': True})
-        U_new = jnp.array(result.x.reshape((self.Dx, self.Du)))
+        opt_fun = np.inf
+        for i in range(num_resets):
+            if i == 0:
+                x0 = np.array(self.U.flatten())
+            else:
+                rand_mat = np.random.rand(self.Dx, self.Dx) - .5
+                Q, R = np.linalg.qr(rand_mat)
+                x0 = Q[:, :self.Du].flatten()
+            result = minimize(objective, x0, method='SLSQP', jac=True, constraints=constraint, options={'disp': True, 'maxiter': 1000})
+            if result.fun < opt_fun:
+                opt_fun = result.fun
+                U_new = jnp.array(result.x.reshape((self.Dx, self.Du)))
         self.U = U_new
 
     def update_U5(self, phi: 'GaussianDensity', X: jnp.ndarray, get_omegas):
@@ -682,7 +699,7 @@ class HCCovObservationModel(LinearObservationModel):
         L_U = jnp.sum(dL_dU ** 2) + jnp.sum(dL_dmultipliers ** 2)
         return L_U
 
-    def update_sigma_beta_W(self, phi: 'GaussianDensity', X: jnp.ndarray, get_omegas):
+    def update_sigma_beta_W(self, phi: 'GaussianDensity', X: jnp.ndarray, get_omegas, num_resets=1):
         """ Updates the `sigma_x`, `beta`, and `W` by maximizing the Q-function numerically (by L-BFGS-B).
 
         :param smoothing_density: GaussianDensity
@@ -696,13 +713,28 @@ class HCCovObservationModel(LinearObservationModel):
         # x0 = np.array(self.W.flatten())
         bounds = [(None, 10)] + [(np.log(.25), 10)] * self.Du + [(None, None)] * (self.Du * (self.Dz + 1))
         # omega_dagger, omega_star = get_omegas(phi, X, self.W, self.U, self.beta, self.C, self.d, self.sigma_x)
-        objective = lambda params: self.value_and_grad_Qfunc_sigma_beta_W(params, phi, X, self.U, self.C,
+        objective = lambda params: HCCovObservationModel.value_and_grad_Qfunc_sigma_beta_W(params, phi, X, self.U, self.C,
                                                                     self.d, self.Dx, self.Dz, self.Du, get_omegas)
         # objective = jit(lambda x: value_and_grad(self.parameter_optimization_C(x, phi, X)))
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False})
+        W_init = 1e-2 * np.random.randn(num_resets, self.Du, self.Dz + 1)
+        W_init[:,:,0] = 0
+        def par_func(i):
+            x0_tmp = np.copy(x0)
+            if i > 0:
+                x0_tmp[self.Du + 1:] = W_init[i].flatten()
+            result = minimize(objective, x0_tmp, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False})
+            return result
+        # pool = Pool(6)
+        # results = pool.map(par_func, range(6))
+        opt_fun = np.inf
+        for i in range(num_resets):
+            result = par_func(i)
+            print(result.fun)
+            if result.fun < opt_fun:
+                opt_fun = result.fun
+                opt_params = result.x
         # result = minimize(objective, x0, jac=True, method='L-BFGS-B',
         #                   options={'disp': True, 'maxiter': 10})
-        opt_params = result.x
         self.sigma_x = jnp.array(np.exp(.5 * opt_params[0]))
         self.beta = jnp.array(np.exp(opt_params[1:self.Du + 1] + opt_params[0]))
         self.W = jnp.array(opt_params[self.Du + 1:].reshape((self.Du, self.Dz + 1)))
@@ -721,11 +753,12 @@ class HCCovObservationModel(LinearObservationModel):
         # x0 = np.array(self.W.flatten())
         # bounds = [(None, 10)] + [(np.log(.25), 10)] * self.Du + [(None, None)] * (self.Du * (self.Dz + 1))
         # bounds = [(None, 10)] + [(np.log(.25), 10)] * self.Du
+        bounds = [(-1e-1, 1e-1)] * (self.Du * (self.Dz + 1))
         # omega_dagger, omega_star = get_omegas(phi, X, self.W, self.U, self.beta, self.C, self.d, self.sigma_x)
         objective = lambda params: self.value_and_grad_Qfunc_W(params, phi, X, self.U, self.sigma_x, self.beta, self.C,
                                                                     self.d, self.Dx, self.Dz, self.Du, get_omegas)
         # objective = jit(lambda x: value_and_grad(self.parameter_optimization_C(x, phi, X)))
-        result = minimize(objective, x0, jac=True, method='L-BFGS-B', options={'disp': False})
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False})
         # result = minimize(objective, x0, jac=True, method='L-BFGS-B',
         #                   options={'disp': True, 'maxiter': 10})
         opt_params = result.x
@@ -806,7 +839,9 @@ class HCCovObservationModel(LinearObservationModel):
 
 
     ####################### FUNCTIONS FOR OPTIMIZING sigma_x, beta, and W ##############################################
+
     @staticmethod
+    @partial(jit, static_argnums=(1,8,9,10))
     def Qfunc_sigma_beta_W(params: jnp.ndarray, phi: 'GaussianDensity', X: jnp.ndarray, U: jnp.ndarray, omega_dagger, omega_star, C: jnp.array,
                            d: jnp.ndarray, Dx: int, Dz: int, Du: int):
         sigma_x = jnp.exp(.5 * params[0])
@@ -817,14 +852,14 @@ class HCCovObservationModel(LinearObservationModel):
 
         vec = X - d
         E_epsilon2 = jnp.sum(phi.integrate('Ax_aBx_b_inner', A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec), axis=0)
-        get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None),
-                      out_axes=(0, 0))
-        uRu, log_lb_sum = get_lb(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
+        # get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None),
+        #               out_axes=(0, 0))
+        uRu, log_lb_sum = HCCovObservationModel.get_lb_i(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
         E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
         Qm = -.5 * (E_epsilon2 - E_D_inv_epsilon2) / sigma_x ** 2
         # determinant part
-        Qm = Qm - .5 * E_ln_sigma2_f + .5 * T * (0 * Du - Dx) * jnp.log(sigma_x ** 2)
+        Qm = Qm - .5 * E_ln_sigma2_f + .5 * T * (Du - Dx) * jnp.log(sigma_x ** 2)
         # constant part
         # Qm -= T * Dx * jnp.log(2 * jnp.pi)
         return - Qm / T
@@ -838,9 +873,9 @@ class HCCovObservationModel(LinearObservationModel):
 
         vec = X - d
         E_epsilon2 = jnp.sum(phi.integrate('Ax_aBx_b_inner', A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec), axis=0)
-        get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None),
-                      out_axes=(0, 0))
-        uRu, log_lb_sum = get_lb(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
+        # get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None),
+        #               out_axes=(0, 0))
+        uRu, log_lb_sum = HCCovObservationModel.get_lb_i(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
         E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
         Qm = -.5 * (E_epsilon2 - E_D_inv_epsilon2) / sigma_x ** 2
@@ -860,9 +895,9 @@ class HCCovObservationModel(LinearObservationModel):
 
         vec = X - d
         E_epsilon2 = jnp.sum(phi.integrate('Ax_aBx_b_inner', A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec), axis=0)
-        get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None),
-                      out_axes=(0, 0))
-        uRu, log_lb_sum = get_lb(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
+        # get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None),
+        #               out_axes=(0, 0))
+        uRu, log_lb_sum = HCCovObservationModel.get_lb_i(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
         E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
         Qm = -.5 * (E_epsilon2 - E_D_inv_epsilon2) / sigma_x ** 2
@@ -922,6 +957,7 @@ class HCCovObservationModel(LinearObservationModel):
         return val, np.array(grad)
 
     @staticmethod
+    @partial(jit, static_argnums=(1,10,11,12))
     def Qfunc_C(params: jnp.ndarray, phi: 'GaussianDensity', X: jnp.ndarray, W: jnp.ndarray, U: jnp.ndarray, beta: jnp.ndarray,
                 omega_dagger, omega_star, d: jnp.ndarray, sigma_x: float, Dx: int, Dz: int, Du: int):
         """ Computes (negative) Q-function (only terms depending on `sigma_x`, `beta`, and `W`) and the 
@@ -942,8 +978,8 @@ class HCCovObservationModel(LinearObservationModel):
         # E[epsilon(z)^2]
         vec = X - d
         E_epsilon2 = jnp.sum(phi.integrate('Ax_aBx_b_inner', A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec), axis=0)
-        get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None), out_axes=(0, 0))
-        uRu, log_lb_sum = get_lb(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
+        # get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None), out_axes=(0, 0))
+        uRu, log_lb_sum = HCCovObservationModel.get_lb_i(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
         # data part
         E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
@@ -961,7 +997,7 @@ class HCCovObservationModel(LinearObservationModel):
         T = X.shape[0]
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
-        b_i = W_i[:1]
+        b_i = 0 * W_i[:1]
         u_i = u_i.reshape((-1, 1))
         uC = jnp.dot(u_i.T, -C)
         ux_d = jnp.dot(u_i.T, (X - d).T)
@@ -1020,13 +1056,14 @@ class HCCovObservationModel(LinearObservationModel):
         return omega_dagger, omega_star
 
     @staticmethod
+    @partial(vmap, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None), out_axes=(0, 0))
     def get_lb_i(phi: densities.GaussianDensity, X: jnp.ndarray, W_i, u_i, beta, omega_dagger, omega_star, C, d, sigma_x):
         # beta = self.beta[iu:iu + 1]
         # Lower bound for E[ln (sigma_x^2 + f(h))]
         T = X.shape[0]
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
-        b_i = W_i[:1]
+        b_i = 0 * W_i[:1]
         u_i = u_i.reshape((-1, 1))
         # uC = jnp.dot(u_i.T, -C)
         # ux_d = jnp.dot(u_i.T, (X - d).T)
@@ -1096,7 +1133,7 @@ class HCCovObservationModel(LinearObservationModel):
         T = X.shape[0]
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
-        b_i =  W_i[:1]
+        b_i = 0 * W_i[:1]
         # u_i = u_i.reshape((-1, 1))
         # uC = jnp.dot(u_i.T, -C)
         # ux_d = jnp.dot(u_i.T, (X - d).T)
@@ -1157,7 +1194,7 @@ class HCCovObservationModel(LinearObservationModel):
         T = X.shape[0]
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
-        b_i = W_i[:1]
+        b_i = 0 * W_i[:1]
         # beta = self.beta[iu:iu + 1]
         # Lower bound for E[ln (sigma_x^2 + f(h))]
 
