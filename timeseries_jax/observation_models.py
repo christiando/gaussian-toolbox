@@ -562,25 +562,39 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = np.array(self.U.flatten())
         triu_indices = np.triu_indices(self.Du)
 
+
+        # def constraint_fun(params):
+        #     U = params.reshape((self.Dx, self.Du))
+        #     return (np.eye(self.Du)-np.dot(U.T, U))[triu_indices]
+        @jit
         def constraint_fun(params):
             U = params.reshape((self.Dx, self.Du))
-            return (np.eye(self.Du)-np.dot(U.T, U))[triu_indices]
+            return (jnp.eye(self.Du)-jnp.dot(U.T, U))[triu_indices]
 
         constraint = {'type': 'eq', 'fun': constraint_fun}
 
-        get_R = jit(lambda U, omega_star: vmap(HCCovObservationModel.get_R, in_axes=(None, None, 0, 0, 1, 0, None, None, None), axis_name='i')(phi, X, self.W, self.beta, U, omega_star, self.C, self.d, self.sigma_x))
+        get_R = lambda U, omega_star: vmap(HCCovObservationModel.get_R, in_axes=(None, None, 0, 0, 1, 0, None, None, None), axis_name='i')(phi, X, self.W, self.beta, U, omega_star, self.C, self.d, self.sigma_x)
         get_omegas_U = lambda U: get_omegas(phi, X, self.W, U, self.beta, self.C, self.d, self.sigma_x)[1]
         # omega_star = get_omegas_U(self.U)
         # R = get_R(self.U, omega_star)
-        objective = lambda x: HCCovObservationModel.value_and_grad_QU(x, self.Du, self.Dx, get_R, get_omegas_U)
+        # objective = lambda x: HCCovObservationModel.value_and_grad_QU(x, self.Du, self.Dx, get_R, get_omegas_U)
+        @jit
+        def objective(params):
+            U = params.reshape((self.Dx, self.Du))
+            omega_star = get_omegas_U(U)
+            R = get_R(U, omega_star)
+            val, grad = value_and_grad(HCCovObservationModel.Qfunc_U)(params, R, self.Du, self.Dx)
+            return val, grad
         opt_fun = np.inf
         for i in range(num_resets):
             if i == 0:
-                x0 = np.array(self.U.flatten())
+                # x0 = np.array(self.U.flatten())
+                x0 = jnp.array(self.U.flatten())
             else:
                 rand_mat = np.random.rand(self.Dx, self.Dx) - .5
                 Q, R = np.linalg.qr(rand_mat)
-                x0 = Q[:, :self.Du].flatten()
+                # x0 = Q[:, :self.Du].flatten()
+                x0 = jnp.array(Q[:, :self.Du].flatten())
             result = minimize(objective, x0, method='SLSQP', jac=True, constraints=constraint, options={'disp': True, 'maxiter': 1000})
             if result.fun < opt_fun:
                 opt_fun = result.fun
@@ -707,22 +721,43 @@ class HCCovObservationModel(LinearObservationModel):
         :param X: jnp.ndarray [T, Dx]
             Data.
         """
-        x0 = np.array(jnp.concatenate(
+        # x0 = np.array(jnp.concatenate(
+        #     [jnp.array([jnp.log(self.sigma_x ** 2)]), jnp.log(self.beta) - jnp.log(self.sigma_x ** 2),
+        #      self.W.flatten()]))
+        x0 = jnp.concatenate(
             [jnp.array([jnp.log(self.sigma_x ** 2)]), jnp.log(self.beta) - jnp.log(self.sigma_x ** 2),
-             self.W.flatten()]))
+             self.W.flatten()])
         # x0 = np.array(self.W.flatten())
-        bounds = [(None, 10)] + [(np.log(.25), 10)] * self.Du + [(None, None)] * (self.Du * (self.Dz + 1))
+        bounds = [(None, 10.)] + [(np.log(.25), 10.)] * self.Du + [(None, None)] * (self.Du * (self.Dz + 1))
         # omega_dagger, omega_star = get_omegas(phi, X, self.W, self.U, self.beta, self.C, self.d, self.sigma_x)
-        objective = lambda params: HCCovObservationModel.value_and_grad_Qfunc_sigma_beta_W(params, phi, X, self.U, self.C,
-                                                                    self.d, self.Dx, self.Dz, self.Du, get_omegas)
+        @jit
+        def objective(params):
+            sigma_x = jnp.exp(.5 * params[0])
+            beta = jnp.exp(params[1:self.Du + 1] + params[0])
+            W = params[self.Du + 1:].reshape((self.Du, self.Dz + 1))
+            # W = params_jax.reshape((Du, Dz + 1))
+            omega_dagger, omega_star = get_omegas(phi, X, W, self.U, beta, self.C, self.d, sigma_x)
+            v, g = value_and_grad(HCCovObservationModel.Qfunc_sigma_beta_W)(params, phi, X, self.U, omega_dagger,
+                                                          omega_star, self.C, self.d, self.Dx, self.Dz, self.Du)
+            return jnp.array(v, dtype=jnp.float64), jnp.array(g, dtype=jnp.float64)
+
+        def np_objective(params):
+            params_jax = jnp.array(params)
+            v_jax, g_jax = objective(params_jax)
+            return np.array(v_jax), np.array(g_jax)
+
+        # objective = lambda params: HCCovObservationModel.value_and_grad_Qfunc_sigma_beta_W(params, phi, X, self.U, self.C,
+        #                                                             self.d, self.Dx, self.Dz, self.Du, get_omegas)
         # objective = jit(lambda x: value_and_grad(self.parameter_optimization_C(x, phi, X)))
         W_init = 1e-2 * np.random.randn(num_resets, self.Du, self.Dz + 1)
         W_init[:,:,0] = 0
+        # v,g = objective(jnp.array(x0))
+        # print(v.dtype, g.dtype)
         def par_func(i):
             x0_tmp = np.copy(x0)
             if i > 0:
                 x0_tmp[self.Du + 1:] = W_init[i].flatten()
-            result = minimize(objective, x0_tmp, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False})
+            result = minimize(np_objective, x0_tmp, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False})
             return result
         # pool = Pool(6)
         # results = pool.map(par_func, range(6))
@@ -842,8 +877,8 @@ class HCCovObservationModel(LinearObservationModel):
 
     @staticmethod
     @partial(jit, static_argnums=(1,8,9,10))
-    def Qfunc_sigma_beta_W(params: jnp.ndarray, phi: 'GaussianDensity', X: jnp.ndarray, U: jnp.ndarray, omega_dagger, omega_star, C: jnp.array,
-                           d: jnp.ndarray, Dx: int, Dz: int, Du: int):
+    def Qfunc_sigma_beta_W(params: jnp.ndarray, phi: 'GaussianDensity', X: jnp.ndarray, U: jnp.ndarray, omega_dagger,
+                           omega_star, C: jnp.array, d: jnp.ndarray, Dx: int, Dz: int, Du: int):
         sigma_x = jnp.exp(.5 * params[0])
         beta = jnp.exp(params[1:Du + 1] + params[0])
         W = params[Du + 1:].reshape((Du, Dz + 1))
@@ -852,8 +887,6 @@ class HCCovObservationModel(LinearObservationModel):
 
         vec = X - d
         E_epsilon2 = jnp.sum(phi.integrate('Ax_aBx_b_inner', A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec), axis=0)
-        # get_lb = vmap(HCCovObservationModel.get_lb_i, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None),
-        #               out_axes=(0, 0))
         uRu, log_lb_sum = HCCovObservationModel.get_lb_i(phi, X, W, U, beta, omega_dagger, omega_star, C, d, sigma_x)
         E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
@@ -1042,16 +1075,12 @@ class HCCovObservationModel(LinearObservationModel):
 
         def cond_fun(omegas):
             omega_star, omega_old, num_iter = omegas
-            return jnp.logical_and(lax.pmax(jnp.amax(jnp.abs(omega_star - omega_old) / omega_star), 'i') > conv_crit, num_iter < 1000)
+            return jnp.logical_and(lax.pmax(jnp.amax(jnp.abs(omega_star - omega_old) / omega_star), 'i') > conv_crit,
+                                   num_iter < 100)
 
         num_iter = 0
         init_val = (omega_star, omega_old, num_iter)
         omega_star = lax.while_loop(cond_fun, body_fun, init_val)[0]
-        #
-        # val = init_val
-        # while cond_fun(val):
-        #     val = body_fun(val)
-        # omega_star = val[0]
 
         return omega_dagger, omega_star
 
@@ -1073,7 +1102,6 @@ class HCCovObservationModel(LinearObservationModel):
 
         f_omega_dagger = HCCovObservationModel.f(omega_dagger, beta)
         log_lb = jnp.log(sigma_x ** 2 + f_omega_dagger)
-        """
         g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
         nu_plus = (1. - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1. - g_omega[:, None] * b_i) * w_i
@@ -1087,33 +1115,6 @@ class HCCovObservationModel(LinearObservationModel):
         # Create the two measures
         exp_phi_plus = phi.hadamard(exp_factor_plus, update_full=True)
         exp_phi_minus = phi.hadamard(exp_factor_minus, update_full=True)
-        # Fourth order integrals E[h^2 (x-Cz-d)^2]
-        quart_int_plus = exp_phi_plus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC,
-                                                b_vec=ux_d.T,
-                                                C_mat=w_i, c_vec=b_i, D_mat=w_i, d_vec=b_i)
-        quart_int_minus = exp_phi_minus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC,
-                                                  b_vec=ux_d.T,
-                                                  C_mat=w_i, c_vec=b_i, D_mat=w_i, d_vec=b_i)
-        quart_int = quart_int_plus + quart_int_minus
-        # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
-        quad_int_plus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T)
-        quad_int_minus = exp_phi_minus.integrate('Ax_aBx_b_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T)
-        quad_int = quad_int_plus + quad_int_minus
-        omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
-        """
-        g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
-        nu_plus = (1. - g_omega[:, None] * b_i) * w_i
-        nu_minus = (-1. - g_omega[:, None] * b_i) * w_i
-        ln_beta = - jnp.log(sigma_x ** 2 + HCCovObservationModel.f(omega_star, beta)) - .5 * g_omega * (
-                b_i ** 2 - omega_star ** 2) + jnp.log(beta)
-        ln_beta_plus = ln_beta + b_i
-        ln_beta_minus = ln_beta - b_i
-        # Create OneRankFactors
-        exp_factor_plus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus)
-        exp_factor_minus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus)
-        # Create the two measures
-        exp_phi_plus = phi.hadamard(exp_factor_plus)
-        exp_phi_minus = phi.hadamard(exp_factor_minus)
         mat1 = -C
         vec1 = X - d
         R_plus = exp_phi_plus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
@@ -1134,38 +1135,6 @@ class HCCovObservationModel(LinearObservationModel):
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
         b_i = 0 * W_i[:1]
-        # u_i = u_i.reshape((-1, 1))
-        # uC = jnp.dot(u_i.T, -C)
-        # ux_d = jnp.dot(u_i.T, (X - d).T)
-
-        """
-        g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
-        nu_plus = (1. - g_omega[:, None] * b_i) * w_i
-        nu_minus = (-1. - g_omega[:, None] * b_i) * w_i
-        ln_beta = - jnp.log(sigma_x ** 2 + HCCovObservationModel.f(omega_star, beta)) - .5 * g_omega * (
-                b_i ** 2 - omega_star ** 2) + jnp.log(beta)
-        ln_beta_plus = ln_beta + b_i
-        ln_beta_minus = ln_beta - b_i
-        # Create OneRankFactors
-        exp_factor_plus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus)
-        exp_factor_minus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus)
-        # Create the two measures
-        exp_phi_plus = phi.hadamard(exp_factor_plus, update_full=True)
-        exp_phi_minus = phi.hadamard(exp_factor_minus, update_full=True)
-        # Fourth order integrals E[h^2 (x-Cz-d)^2]
-        quart_int_plus = exp_phi_plus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC,
-                                                b_vec=ux_d.T,
-                                                C_mat=w_i, c_vec=b_i, D_mat=w_i, d_vec=b_i)
-        quart_int_minus = exp_phi_minus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC,
-                                                  b_vec=ux_d.T,
-                                                  C_mat=w_i, c_vec=b_i, D_mat=w_i, d_vec=b_i)
-        quart_int = quart_int_plus + quart_int_minus
-        # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
-        quad_int_plus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T)
-        quad_int_minus = exp_phi_minus.integrate('Ax_aBx_b_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T)
-        quad_int = quad_int_plus + quad_int_minus
-        omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
-        """
         g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
         nu_plus = (1. - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1. - g_omega[:, None] * b_i) * w_i
@@ -1325,149 +1294,6 @@ class HCCovObservationModel(LinearObservationModel):
             Scaling factor.
         """
         return HCCovObservationModel.f_prime(omega, beta) / (sigma_x ** 2 + HCCovObservationModel.f(omega, beta)) / jnp.abs(omega)
-
-'''
-    def get_lb_i(self, iu: int, phi: densities.GaussianDensity, X: jnp.ndarray, conv_crit: float=1e-4, update: str=None):
-        """ Computes the variational lower bounds for the log determinant and inverse term. In addition it provides terms, 
-        that are needed for updating different model parameters.
-        
-        :param iu: int
-            Index of the component the bound should be computed for.
-        :param phi: GaussianDensity
-            Density over latent variables.
-        :param X: jnp.ndarray [T, Dx]
-            Data.
-        :param conv_crit: float
-            When bounds are considered to be converged (max. change in omega, Default=1e-4).
-        :param update: str
-            Determines which additional terms should be provided. If None only the lower bounds for the inverse term and the log determinant are provided. If
-            `sigma_beta_W`, `C`, `d`, `U` terms that are required for updating the corresponding model parameters are provided. (Default=None)
-            
-        :return: tuple
-            Returns terms for lower bound or for its gradients.
-        """
-        T = X.shape[0]
-        w_i = self.W[iu:iu+1,1:]
-        v = jnp.tile(w_i, (T, 1))
-        b_i = self.W[iu:iu+1,0]
-        u_i = self.U[:,iu:iu+1]
-        beta = self.beta[iu:iu+1]
-        uC = jnp.dot(u_i.T, -self.C)
-        ux_d = jnp.dot(u_i.T, X.T-self.d[:,None])
-        # Lower bound for E[ln (sigma_x^2 + f(h))]
-        omega_dagger = jnp.sqrt(phi.integrate('Ax_aBx_b_inner', A_mat=w_i, a_vec=b_i,
-                                                                  B_mat=w_i, b_vec=b_i))
-        f_omega_dagger = self.f(omega_dagger, beta)
-        log_lb = jnp.log(self.sigma_x ** 2 + f_omega_dagger)
-        # Lower bound for E[f(h) / (sigma_x^2 + f(h)) * (u'epsilon(z))^2]
-        omega_star = jnp.ones(T)
-        converged = False
-        num_iter = 0
-        while not converged and num_iter < 50:
-            # From the lower bound term
-            g_omega = self.g(omega_star, beta)
-            nu_plus = (1. - g_omega[:,None] * b_i) * w_i
-            nu_minus = (-1. - g_omega[:,None] * b_i) * w_i
-            ln_beta = - jnp.log(self.sigma_x ** 2 + self.f(omega_star, beta)) - .5 * g_omega * (b_i ** 2 - omega_star ** 2) + jnp.log(beta)
-            ln_beta_plus = ln_beta + b_i
-            ln_beta_minus = ln_beta - b_i
-            # Create OneRankFactors
-            exp_factor_plus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus)
-            exp_factor_minus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus)
-            # Create the two measures
-            exp_phi_plus = phi.hadamard(exp_factor_plus)
-            exp_phi_minus = phi.hadamard(exp_factor_minus)
-            # Fourth order integrals E[h^2 (x-Cz-d)^2]
-            mat1 = uC
-            vec1 = ux_d.T
-            mat2 = w_i
-            vec2 = b_i
-            quart_int_plus = exp_phi_plus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1, 
-                                                                              C_mat=mat2, c_vec=vec2, D_mat=mat2, d_vec=vec2)
-            quart_int_minus = exp_phi_minus.integrate('Ax_aBx_bCx_cDx_d_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1, 
-                                                                              C_mat=mat2, c_vec=vec2, D_mat=mat2, d_vec=vec2)
-            quart_int = quart_int_plus + quart_int_minus
-            # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
-            quad_int_plus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
-            quad_int_minus = exp_phi_minus.integrate('Ax_aBx_b_inner', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
-            quad_int = quad_int_plus + quad_int_minus
-            omega_old = omega_star
-            #omega_star = jnp.amin([jnp.amax([jnp.sqrt(quart_int / quad_int), 1e-10]), 1e2])
-            #quad_int[quad_int < 1e-10] = 1e-10
-            omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
-            # For numerical stability
-            #omega_star[omega_star < 1e-10] = 1e-10
-            #omega_star[omega_star > 30] = 30
-            #print(jnp.amax(jnp.abs(omega_star - omega_old)))
-            converged = jnp.amax(jnp.abs(omega_star - omega_old)) < conv_crit
-            num_iter += 1
-        #print(jnp.amax(jnp.abs(omega_star - omega_old)))
-        mat1 = -self.C
-        vec1 = X - self.d[None]
-        R_plus = exp_phi_plus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
-        R_minus = exp_phi_minus.integrate('Ax_aBx_b_outer', A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1)
-        R = R_plus + R_minus
-        uRu = jnp.sum(u_i * jnp.dot(jnp.sum(R, axis=0), u_i))
-        log_lb_sum = jnp.sum(log_lb)
-        if update == 'sigma_beta_W':
-            uRu = jnp.sum(u_i * jnp.dot(jnp.sum(R, axis=0), u_i))
-            ##### w_i gradiend ######################################################################
-            # E[f'(h)exp(-k(h,omega^*)) dh/dw (u'epsilon(z))^2]
-            # Matrix and vector for dh/dw
-            dW = jnp.zeros((self.Dz + 1, self.Dz))
-            dW[1:] = jnp.eye(self.Dz)
-            db = jnp.zeros(self.Dz + 1)
-            db[0] = 1
-            dw_i = jnp.sum(exp_phi_plus.integrate('Ax_aBx_bCx_c_outer', A_mat=uC, a_vec=ux_d.T,
-                                                    B_mat=uC, b_vec=ux_d.T, C_mat=dW, c_vec=db), axis=0)
-            dw_i -= jnp.sum(exp_phi_minus.integrate('Ax_aBx_bCx_c_outer', A_mat=uC, a_vec=ux_d.T, 
-                                                      B_mat=uC, b_vec=ux_d.T, C_mat=dW, c_vec=db), axis=0)
-            # -g(omega) * E[f(h)exp(-k(h,omega^*)) h dh/dw (u'epsilon(z))^2]
-            dw_i -= jnp.einsum('a,ab->b', g_omega, exp_phi_plus.integrate('Ax_aBx_bCx_cDx_d_outer', A_mat=w_i, a_vec=b_i,
-                                                                            B_mat=uC, b_vec=ux_d.T, C_mat=uC, c_vec=ux_d.T,
-                                                                            D_mat=dW, d_vec=db)[:,0])
-            dw_i -= jnp.einsum('a,ab->b', g_omega, exp_phi_minus.integrate('Ax_aBx_bCx_cDx_d_outer', A_mat=w_i, a_vec=b_i,
-                                                                             B_mat=uC, b_vec=ux_d.T, C_mat=uC, c_vec=ux_d.T,
-                                                                             D_mat=dW, d_vec=db)[:,0])
-            dw_i /= self.sigma_x ** 2
-            # g(omega^+)E[h dh/dw]
-            dw_i -= jnp.einsum('a,ab->b', self.g(omega_dagger, beta), phi.integrate('Ax_aBx_b_outer', A_mat=w_i, a_vec=b_i, 
-                                                                                      B_mat=dW, b_vec=db)[:,0])
-            dw_i /= 2.
-            ###########################################################################################
-            ##### beta_i gradient #####################################################################
-            weighted_R = jnp.einsum('abc,a->bc', R, 1. / (self.sigma_x ** 2 + self.f(omega_star, beta))) 
-            #  u'R u / (sigma_x^2 + f(omega^*))
-            dln_beta_i = jnp.sum(u_i * jnp.dot(weighted_R, u_i))
-            dln_beta_i -= jnp.sum(f_omega_dagger / (self.sigma_x ** 2 + f_omega_dagger))
-            dln_beta_i /= 2.
-            ##### sigma_x ** 2 gradient ###############################################################
-            dlnsigma2 =  - uRu / self.sigma_x ** 2
-            dlnsigma2 -= jnp.sum(u_i * jnp.dot(weighted_R, u_i))
-            dlnsigma2 -= jnp.sum(self.sigma_x ** 2 / (self.sigma_x ** 2 + f_omega_dagger))
-            dlnsigma2 /= 2.
-            return uRu, log_lb_sum, dw_i, dln_beta_i, dlnsigma2
-        elif update == 'C':
-            intD_inv_zz_plus = exp_phi_plus.integrate('xx')
-            intD_inv_zz_minus = exp_phi_minus.integrate('xx')
-            intD_inv_zz = intD_inv_zz_plus + intD_inv_zz_minus
-            intD_inv_z_plus = exp_phi_plus.integrate('x')
-            intD_inv_z_minus = exp_phi_minus.integrate('x')
-            intD_inv_z = intD_inv_z_plus + intD_inv_z_minus
-            return intD_inv_z, intD_inv_zz
-        elif update == 'd':
-            intD_inv_z_plus = exp_phi_plus.integrate('x')
-            intD_inv_z_minus = exp_phi_minus.integrate('x')
-            intD_inv_z = intD_inv_z_plus + intD_inv_z_minus
-            intD_inv_plus = exp_phi_plus.integrate()
-            intD_inv_minus = exp_phi_minus.integrate()
-            intD_inv = intD_inv_plus + intD_inv_minus
-            return intD_inv, intD_inv_z
-        elif update == 'U':
-            return jnp.sum(R, axis=0)
-        else:
-            return uRu, log_lb_sum
-'''
 
 class BernoulliObservationModel(ObservationModel):
     
