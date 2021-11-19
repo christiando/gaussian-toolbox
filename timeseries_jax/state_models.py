@@ -566,12 +566,13 @@ class LSEMStateModel(LinearStateModel):
         phi = smoothing_density.slice(jnp.arange(0, smoothing_density.R - 1))
         func = jit(value_and_grad(lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
                                                         self.Qz_inv, self.ln_det_Qz, self.Dk, self.Dz)))
+        jax_dtype = self.W.dtype
         def objective(W):
-            obj, grads = func(jnp.array(W))
-            return obj, np.array(grads)
-        result = minimize_sc(objective, np.array(self.W.flatten()), method='L-BFGS-B', jac=True,
+            obj, grads = func(jnp.array(W, dtype=jax_dtype))
+            return np.array(obj, dtype=np.float64), np.array(grads, dtype=np.float64).flatten()
+        result = minimize_sc(objective, np.array(self.W.flatten(), dtype=np.float64), method='L-BFGS-B', jac=True,
                           options={'disp': False, 'maxiter': 10})
-        self.W = jnp.array(result.x.reshape((self.Dk, self.Dz + 1)))
+        self.W = jnp.array(result.x.reshape((self.Dk, self.Dz + 1)), dtype=jax_dtype)
         phi = smoothing_density.slice(jnp.arange(0,smoothing_density.R - 1))
         func = jit(lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
                                   self.Qz_inv, self.ln_det_Qz, self.Dk, self.Dz))
