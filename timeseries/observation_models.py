@@ -23,8 +23,8 @@ from scipy.optimize import minimize
 from autograd import numpy
 from autograd import value_and_grad
 import sys
-sys.path.append('../src/')
-import densities, conditionals, factors
+sys.path.append('../')
+from src import densities, conditionals, factors
 
 
 def recommend_dims(X, smooth_window=20, cut_off=.99):
@@ -145,8 +145,8 @@ class LinearObservationModel(ObservationModel):
                                              mode='same')
         eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X_smoothed-self.d[None]).T, 
                                                          X_smoothed-self.d[None]), 
-                                               eigvals=(self.Dx-self.Dz, self.Dx-1))
-        self.C =  eig_vecs * eig_vals / T
+                                               eigvals=(self.Dx-numpy.amin([self.Dz,self.Dx]), self.Dx-1))
+        self.C[:,:numpy.amin([self.Dz,self.Dx])] =  eig_vecs * eig_vals / T
         z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
         self.Qx = numpy.dot(delta_X.T, delta_X)
@@ -379,8 +379,8 @@ class HCCovObservationModel(LinearObservationModel):
                                              mode='same')
         eig_vals, eig_vecs = scipy.linalg.eigh(numpy.dot((X_smoothed-self.d[None]).T, 
                                                          X_smoothed-self.d[None]), 
-                                               eigvals=(self.Dx-self.Dz, self.Dx-1))
-        self.C =  eig_vecs * eig_vals / T
+                                               eigvals=(self.Dx-numpy.amin([self.Dz,self.Dx]), self.Dx-1))
+        self.C[:,:numpy.amin([self.Dz,self.Dx])] =  eig_vecs * eig_vals / T
         z_hat = numpy.dot(numpy.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - numpy.dot(z_hat, self.C.T) - self.d
         cov = numpy.dot(delta_X.T, delta_X)
@@ -523,7 +523,12 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta) - numpy.log(self.sigma_x ** 2), self.W.flatten()])
         bounds = [(None, 10)] + [(numpy.log(.25), 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
+<<<<<<< HEAD
         result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False, 'maxiter': 10})
+=======
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds,
+                          options={'disp': False, 'maxiter': 10})
+>>>>>>> jax
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')
@@ -554,7 +559,7 @@ class HCCovObservationModel(LinearObservationModel):
         
         U = x[:self.Du * self.Dx].reshape((self.Dx, self.Du))
         lagrange_multipliers = x[self.Du * self.Dx:].reshape((self.Du, self.Du))
-        dL_dU = -numpy.einsum('abc,ca->ab', R, self.U) + numpy.dot(U, lagrange_multipliers).T
+        dL_dU = - numpy.einsum('abc,ca->ab', R, self.U) + numpy.dot(U, lagrange_multipliers).T
         dL_dmultipliers = numpy.dot(U.T, U) - numpy.eye(self.Du)
         objective = numpy.sum(dL_dU ** 2) + numpy.sum(dL_dmultipliers ** 2)
         return objective
@@ -568,7 +573,7 @@ class HCCovObservationModel(LinearObservationModel):
         phi = smoothing_density.slice(range(1,T+1))
         for iu in range(self.Du):
             R[iu] = self.get_lb_i(iu, phi, X, update='U')
-            R[iu] /= numpy.amax(R[iu])
+            # R[iu] /= numpy.amax(R[iu])
         objective = lambda x: self._U_lagrange_func(x, R)
         result = minimize(value_and_grad(objective), x0,
                           method='L-BFGS-B', jac=True, options={'disp': False})
@@ -714,7 +719,7 @@ class HCCovObservationModel(LinearObservationModel):
         # determinant part
         Qm -= .5 * E_ln_sigma2_f + .5 * T * (self.Dx - self.Du) * numpy.log(self.sigma_x ** 2)
         # constant part
-        Qm -= T * self.Dx * numpy.log(2 * numpy.pi)
+        # Qm -= T * self.Dx * numpy.log(2 * numpy.pi)
         return -Qm
     
     def update_parameters_C(self, params):

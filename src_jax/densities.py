@@ -7,15 +7,14 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
-import sys
-sys.path.append('../')
 
-from autograd import numpy
+from jax import numpy as jnp
+import numpy as np
 from . import measures
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     
-    def __init__(self, components: ['GaussianDensities'], weights: numpy.ndarray=None):
+    def __init__(self, components: ['GaussianDensities'], weights: jnp.ndarray=None):
         """ Class of mixture of Gaussian measures
         
             u(x) = sum_i w_i * u_i(x)
@@ -24,7 +23,7 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
             
         :param components: list
             List of Gaussian densities.
-        :param weights: numpy.ndarray [num_components] or None
+        :param weights: jnp.ndarray [num_components] or None
             Weights of the components, that must be positive. If None they are assumed to be 1/num_components. (Default=None)
         """
         super().__init__(components, weights)
@@ -33,23 +32,23 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     def normalize(self):
         """ Normalizes the mixture (assuming, that its components are already normalized).
         """
-        self.weights /= numpy.sum(self.weights)
+        self.weights /= jnp.sum(self.weights)
         
-    def sample(self, num_samples: int) -> numpy.ndarray:
+    def sample(self, num_samples: int) -> jnp.ndarray:
         """ Generates samples from the Gaussian mixture density.
         
         :param num_samples: int
             Number of samples that are generated.
         
-        :return: numpy.ndarray [num_samples, R, D]
+        :return: jnp.ndarray [num_samples, R, D]
             The samples.
         """
-        cum_weights = numpy.cumsum(self.weights)
-        rand_nums = numpy.random.rand(num_samples)
-        comp_samples = numpy.searchsorted(cum_weights, rand_nums)
-        samples = numpy.empty((num_samples, self.R, self.D))
+        cum_weights = jnp.cumsum(self.weights)
+        rand_nums = jnp.random.rand(num_samples)
+        comp_samples = jnp.searchsorted(cum_weights, rand_nums)
+        samples = jnp.empty((num_samples, self.R, self.D))
         for icomp in range(self.num_components):
-            comp_idx = numpy.where(comp_samples==icomp)[0]
+            comp_idx = jnp.where(comp_samples==icomp)[0]
             samples[comp_idx] = self.components[icomp].sample(len(comp_idx))
         return samples
     
@@ -71,43 +70,46 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
 
 class GaussianDensity(measures.GaussianMeasure):
     
-    def __init__(self, Sigma: numpy.ndarray, mu: numpy.ndarray, Lambda: numpy.ndarray=None, ln_det_Sigma: numpy.ndarray=None):
+    def __init__(self, Sigma: jnp.ndarray, mu: jnp.ndarray, Lambda: jnp.ndarray=None, ln_det_Sigma: jnp.ndarray=None):
         """ A normalized Gaussian density, with specified mean and covariance matrix.
         
-        :param Sigma: numpy.ndarray [R, D, D]
+        :param Sigma: jnp.ndarray [R, D, D]
             Covariance matrices of the Gaussian densities.
-        :param mu: numpy.ndarray [R, D]
+        :param mu: jnp.ndarray [R, D]
             Mean of the Gaussians.
-        :param Lambda: numpy.ndarray [R, D, D] or None
+        :param Lambda: jnp.ndarray [R, D, D] or None
             Information (precision) matrix of the Gaussians. (Default=None)
-        :param ln_det_Sigma: numpy.ndarray [R] or None
+        :param ln_det_Sigma: jnp.ndarray [R] or None
             Log determinant of the covariance matrix. (Default=None)
         """
         if Lambda is None:
             Lambda, ln_det_Sigma = self.invert_matrix(Sigma)
         elif ln_det_Sigma is None:
-            ln_det_Sigma = numpy.linalg.slogdet(Sigma)[1]
-        nu = numpy.einsum('abc,ab->ac', Lambda, mu)
-        super().__init__(Lambda=Lambda, nu=nu, Sigma=Sigma, ln_det_Lambda=-ln_det_Sigma, ln_det_Sigma=ln_det_Sigma)
+            ln_det_Sigma = jnp.linalg.slogdet(Sigma)[1]
+        nu = jnp.einsum('abc,ab->ac', Lambda, mu)
+        super().__init__(Lambda=Lambda, nu=nu)
+        self.Sigma = Sigma
         self.mu = mu
+        self.ln_det_Sigma = ln_det_Sigma
+        self.ln_det_Lambda = -ln_det_Sigma
         self._prepare_integration()
         self.normalize()
         
-    def sample(self, num_samples: int) -> numpy.ndarray:
+    def sample(self, num_samples: int) -> jnp.ndarray:
         """ Generates samples from the Gaussian density.
         
         :param num_samples: int
             Number of samples that are generated.
         
-        :return: numpy.ndarray [num_samples, R, D]
+        :return: jnp.ndarray [num_samples, R, D]
             The samples.
         """
-        L = numpy.linalg.cholesky(self.Sigma)
-        rand_nums = numpy.random.randn(num_samples, self.R, self.D)
-        x_samples = self.mu[None] + numpy.einsum('abc,dac->dab', L, rand_nums)
+        L = jnp.linalg.cholesky(self.Sigma)
+        rand_nums = jnp.random.randn(num_samples, self.R, self.D)
+        x_samples = self.mu[None] + jnp.einsum('abc,dac->dab', L, rand_nums)
         return x_samples
     
-    def slice(self, indices: list) -> 'GaussianDensity':
+    def slice(self, indices: jnp.array) -> 'GaussianDensity':
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -123,7 +125,7 @@ class GaussianDensity(measures.GaussianMeasure):
         new_measure = GaussianDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
     
-    def update(self, indices: list, density: 'GaussianDensity'):
+    def update(self, indices: jnp.array, density: 'GaussianDensity'):
         """ Updates densities at indicated entries.
         
         :param indices: list
@@ -131,13 +133,13 @@ class GaussianDensity(measures.GaussianMeasure):
         :param density: GaussianDensity
             New densities.
         """
-        self.Lambda[indices] = density.Lambda
-        self.Sigma[indices] = density.Sigma
-        self.mu[indices] = density.mu
-        self.ln_det_Sigma[indices] = density.ln_det_Sigma
-        self.lnZ[indices] = density.lnZ
-        self.nu[indices] = density.nu
-        self.ln_beta[indices] = density.ln_beta
+        self.Lambda = self.Lambda.at[indices].set(density.Lambda)
+        self.Sigma = self.Sigma.at[indices].set(density.Sigma)
+        self.mu = self.mu.at[indices].set(density.mu)
+        self.ln_det_Sigma = self.ln_det_Sigma.at[indices].set(density.ln_det_Sigma)
+        self.lnZ = self.lnZ.at[indices].set(density.lnZ)
+        self.nu = self.nu.at[indices].set(density.nu)
+        self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)
     
     def get_marginal(self, dim_x: list) -> 'GaussianDensity':
         """ Gets the marginal of the indicated dimensions.
@@ -148,8 +150,10 @@ class GaussianDensity(measures.GaussianMeasure):
         :return: GaussianDensity
             The resulting marginal Gaussian density.
         """
-        Sigma_new = self.Sigma[:,dim_x][:,:,dim_x]
-        mu_new = self.mu[:,dim_x]
+        idx = jnp.ix_(jnp.arange(self.Sigma.shape[0]), dim_x, dim_x)
+        Sigma_new = self.Sigma[idx]
+        idx = jnp.ix_(jnp.arange(self.mu.shape[0]), dim_x)
+        mu_new = self.mu[idx]
         marginal_density = GaussianDensity(Sigma_new, mu_new)
         return marginal_density
     
@@ -163,26 +167,26 @@ class GaussianDensity(measures.GaussianMeasure):
             The corresponding conditional Gaussian density p(x|y).
         """
         from . import conditionals
-        dim_xy = numpy.arange(self.D)
-        dim_x = dim_xy[numpy.logical_not(numpy.isin(dim_xy, dim_y))]
+        dim_xy = jnp.arange(self.D)
+        dim_x = dim_xy[jnp.logical_not(jnp.isin(dim_xy, dim_y))]
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
         Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
-        M_x = -numpy.einsum('abc,acd->abd', Sigma_x, self.Lambda[:,dim_x][:,:,dim_y])
-        b_x = self.mu[:, dim_x] - numpy.einsum('abc,ac->ab', M_x, self.mu[:, dim_y])
+        M_x = -jnp.einsum('abc,acd->abd', Sigma_x, self.Lambda[:,dim_x][:,:,dim_y])
+        b_x = self.mu[:, dim_x] - jnp.einsum('abc,ac->ab', M_x, self.mu[:, dim_y])
         return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
-
+    
 class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
     
-    def __init__(self, Sigma: numpy.ndarray, mu: numpy.ndarray, Lambda: numpy.ndarray=None, ln_det_Sigma: numpy.ndarray=None):
+    def __init__(self, Sigma: jnp.ndarray, mu: jnp.ndarray, Lambda: jnp.ndarray=None, ln_det_Sigma: jnp.ndarray=None):
         """ A normalized Gaussian density, with specified mean and covariance matrix.
         
-        :param Sigma: numpy.ndarray [R, D, D]
+        :param Sigma: jnp.ndarray [R, D, D]
             Covariance matrices of the Gaussian densities.
-        :param mu: numpy.ndarray [R, D]
+        :param mu: jnp.ndarray [R, D]
             Mean of the Gaussians.
-        :param Lambda: numpy.ndarray [R, D, D] or None
+        :param Lambda: jnp.ndarray [R, D, D] or None
             Information (precision) matrix of the Gaussians. (Default=None)
-        :param ln_det_Sigma: numpy.ndarray [R] or None
+        :param ln_det_Sigma: jnp.ndarray [R] or None
             Log determinant of the covariance matrix. (Default=None)
         """
         Lambda, ln_det_Sigma = self.invert_diagonal(Sigma)
@@ -212,13 +216,13 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         :param density: GaussianDiagDensity
             New densities.
         """
-        self.Lambda[indices] = density.Lambda
-        self.Sigma[indices] = density.Sigma
-        self.mu[indices] = density.mu
-        self.ln_det_Sigma[indices] = density.ln_det_Sigma
-        self.lnZ[indices] = density.lnZ
-        self.nu[indices] = density.nu
-        self.ln_beta[indices] = density.ln_beta
+        self.Lambda = self.Lambda.at[indices].add(density.Lambda)
+        self.Sigma = self.Sigma.at[indices].add(density.Sigma)
+        self.mu = self.mu.at[indices].add(density.mu)
+        self.ln_det_Sigma = self.ln_det_Sigma.at[indices].add(density.ln_det_Sigma)
+        self.lnZ = self.lnZ.at[indices].add(density.lnZ)
+        self.nu = self.nu.at[indices].add(density.nu)
+        self.ln_beta = self.ln_beta.at[indices].add(density.ln_beta)
     
     def get_marginal(self, dim_idx: list) -> 'GaussianDiagDensity':
         """ Gets the marginal of the indicated dimensions.

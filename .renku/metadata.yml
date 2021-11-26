@@ -2,7 +2,7 @@
 '@type':
 - http://schema.org/Project
 - http://www.w3.org/ns/prov#Location
-http://schema.org/agent: 0.16.0
+http://schema.org/agent: 0.16.1.post1
 http://schema.org/creator:
   '@id': mailto:chdonner@ethz.ch
   '@type':
