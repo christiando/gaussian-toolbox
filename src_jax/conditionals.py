@@ -12,7 +12,7 @@ __author__ = "Christian Donner"
 #import jnp
 #from densities import GaussianDensity
 from jax import numpy as jnp
-from . import densities, factors
+import densities, factors
 
 class ConditionalGaussianDensity:
     

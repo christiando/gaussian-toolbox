@@ -5,15 +5,20 @@ import random
 import argparse
 import numpy as np
 import scipy
+from jax.config import config
+# config.update("jax_debug_nans", True)
+config.update("jax_enable_x64", True)
 
-sys.path.append('../../timeseries/')
-sys.path.append('../../src/')
+from jax import numpy as jnp
+
+sys.path.append('../../timeseries_jax/')
+sys.path.append('../../src_jax/')
 
 import factors
 import state_models
 import observation_models
 from ssm_em import StateSpaceEM
-from nonlinear_ssm import NonLinearStateSpace_EM
+#from nonlinear_ssm import NonLinearStateSpace_EM
 
 from scipy.stats import norm
 from scipy.stats import zscore
@@ -26,14 +31,14 @@ from sklearn.metrics import mean_absolute_percentage_error as mape
 
 import darts
 import statsmodels.api as sm
-from darts.models import TCNModel
-from darts.models import GaussianProcessFilter
-from darts.utils.likelihood_models import GaussianLikelihoodModel
+#from darts.models import TCNModel
+#from darts.models import GaussianProcessFilter
+#from darts.utils.likelihood_models import GaussianLikelihoodModel
 from darts.timeseries import TimeSeries
 from exp_utils import *
 
-import newt
-import objax
+#import newt
+#import objax
 import ssm
 
 class PredictiveDensity:
@@ -62,7 +67,7 @@ def train_linear_SSM(x_tr, **kwargs):
     if args.init_w_pca == 1:
         om.pca_init(x_tr)
         
-    ssm_em_lin = StateSpaceEM(x_tr, observation_model=om, state_model=sm)
+    ssm_em_lin = StateSpaceEM(jnp.array(x_tr), observation_model=om, state_model=sm)
     ssm_em_lin.run()
     
     return ssm_em_lin
@@ -75,7 +80,7 @@ def train_linear_hsk_SSM(x_tr, **kwargs):
     om_hs = observation_models.HCCovObservationModel(dx, args.dz, args.du)
     if args.init_w_pca == 1:
         om_hs.pca_init(x_tr)
-    hs_model = StateSpaceEM(x_tr, observation_model=om_hs, state_model=sm_hs)
+    hs_model = StateSpaceEM(jnp.array(x_tr), observation_model=om_hs, state_model=sm_hs)
     hs_model.run()
     
     return hs_model
@@ -213,6 +218,7 @@ def train_arimax(x_tr, **kwargs):
     return arimax_model
 
 
+"""
 class TCNModel_ext(TCNModel):
     def __init__(self, x_tr):
             self.pred_mean = 0
@@ -267,6 +273,7 @@ def train_deep_tcn(x_tr):
     deep_tcn = TCNModel_ext(x_tr)
     
     return deep_tcn
+"""
 
 
 class DynamicFactor_ext():
@@ -385,35 +392,65 @@ if __name__ == "__main__":
     _, mu_pred_x_va, sigma_pred_x_va = trained_model.predict(x_va,smoothed=True)
     '''
     
-    pred_x_tr = trained_model.compute_predictive_density(x_tr)
-    pred_x_va = trained_model.compute_predictive_density(x_va)
-    pred_x_te = trained_model.compute_predictive_density(x_te)
-    
-    mu_pred_x_tr = pred_x_tr.mu
-    mu_pred_x_va = pred_x_va.mu
-    mu_pred_x_te = pred_x_te.mu
-    
-    sigma_pred_x_tr = pred_x_tr.Sigma
-    sigma_pred_x_va = pred_x_va.Sigma
-    sigma_pred_x_te = pred_x_te.Sigma
+    if model == 'linear_hsk_SSM' or model == 'linear_SSM':
+        pred_x_tr = trained_model.compute_predictive_density(jnp.array(x_tr))
+        pred_x_va = trained_model.compute_predictive_density(jnp.array(x_va))
+        pred_x_te = trained_model.compute_predictive_density(jnp.array(x_te))
 
-    # compute metrics
-    mape_tr = compute_mape(x_tr, mu_pred_x_tr)#compute_mape(x_tr, mu_pred_x_tr)
-    mape_va = compute_mape(x_va, mu_pred_x_va)
-    mape_te = compute_mape(x_te, mu_pred_x_te)
+        mu_pred_x_tr = np.array(pred_x_tr.mu)
+        mu_pred_x_va = np.array(pred_x_va.mu)
+        mu_pred_x_te = np.array(pred_x_te.mu)
 
-    pll_tr = trained_model.compute_predictive_log_likelihood(x_tr)
-    pll_va = trained_model.compute_predictive_log_likelihood(x_va)
-    pll_te = trained_model.compute_predictive_log_likelihood(x_te)
-    
-    capture_tr_all_x = []
-    capture_va_all_x = []
-    capture_te_all_x = []
-    
-    width_tr_all_x = []
-    width_va_all_x = []
-    width_te_all_x = []
-    
+        sigma_pred_x_tr = np.array(pred_x_tr.Sigma)
+        sigma_pred_x_va = np.array(pred_x_va.Sigma)
+        sigma_pred_x_te = np.array(pred_x_te.Sigma)
+
+        # compute metrics
+        mape_tr = compute_mape(x_tr, mu_pred_x_tr)#compute_mape(x_tr, mu_pred_x_tr)
+        mape_va = compute_mape(x_va, mu_pred_x_va)
+        mape_te = compute_mape(x_te, mu_pred_x_te)
+
+        pll_tr = trained_model.compute_predictive_log_likelihood(jnp.array(x_tr))
+        pll_va = trained_model.compute_predictive_log_likelihood(jnp.array(x_va))
+        pll_te = trained_model.compute_predictive_log_likelihood(jnp.array(x_te))
+
+        capture_tr_all_x = []
+        capture_va_all_x = []
+        capture_te_all_x = []
+
+        width_tr_all_x = []
+        width_va_all_x = []
+        width_te_all_x = []
+    else:
+        pred_x_tr = trained_model.compute_predictive_density(x_tr)
+        pred_x_va = trained_model.compute_predictive_density(x_va)
+        pred_x_te = trained_model.compute_predictive_density(x_te)
+
+        mu_pred_x_tr = pred_x_tr.mu
+        mu_pred_x_va = pred_x_va.mu
+        mu_pred_x_te = pred_x_te.mu
+
+        sigma_pred_x_tr = pred_x_tr.Sigma
+        sigma_pred_x_va = pred_x_va.Sigma
+        sigma_pred_x_te = pred_x_te.Sigma
+
+        # compute metrics
+        mape_tr = compute_mape(x_tr, mu_pred_x_tr)#compute_mape(x_tr, mu_pred_x_tr)
+        mape_va = compute_mape(x_va, mu_pred_x_va)
+        mape_te = compute_mape(x_te, mu_pred_x_te)
+
+        pll_tr = trained_model.compute_predictive_log_likelihood(x_tr)
+        pll_va = trained_model.compute_predictive_log_likelihood(x_va)
+        pll_te = trained_model.compute_predictive_log_likelihood(x_te)
+
+        capture_tr_all_x = []
+        capture_va_all_x = []
+        capture_te_all_x = []
+
+        width_tr_all_x = []
+        width_va_all_x = []
+        width_te_all_x = []
+
     for ix in range(x_tr.shape[1]):
         #x_min = mu_pred_x_tr[:,ix] - 1.68 * sigma_pred_x_tr[:,ix]
         #x_max = mu_pred_x_tr[:,ix] + 1.68 * sigma_pred_x_tr[:,ix]

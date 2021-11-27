@@ -15,13 +15,14 @@
 
 __author__ = "Christian Donner"
 import sys
-sys.path.append('../')
+sys.path.append('../src_jax/')
 from jax import numpy as jnp
 import numpy as np
 from jax import jit, value_and_grad, grad
 from scipy.optimize import minimize as minimize_sc
 
-from src_jax import densities, conditionals, factors
+#from src_jax 
+import densities, conditionals, factors
 # from jax.scipy.optimize import minimize
 # from jax.experimental import optimizers
 # from tensorflow_probability.substrates import jax as tfp

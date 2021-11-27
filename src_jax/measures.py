@@ -9,7 +9,7 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
-from . import factors
+import factors
 from jax.scipy.special import logsumexp
 
 class GaussianMixtureMeasure:

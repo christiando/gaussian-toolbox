@@ -18,7 +18,7 @@
 
 __author__ = "Christian Donner"
 import sys
-sys.path.append('../')
+sys.path.append('../src_jax/')
 import scipy
 from scipy.optimize import minimize, NonlinearConstraint
 from jax import numpy as jnp
@@ -27,8 +27,8 @@ from jax import lax
 from jax import jit, value_and_grad, vmap
 from functools import partial
 
-from src_jax import densities, conditionals, factors
-from pathos.multiprocessing import ProcessingPool as Pool
+import densities, conditionals, factors
+#from pathos.multiprocessing import ProcessingPool as Pool
 
 
 def recommend_dims(X, smooth_window=20, cut_off=.99):
@@ -431,26 +431,31 @@ class HCCovObservationModel(LinearObservationModel):
         phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
         get_omegas = jit(vmap(HCCovObservationModel.get_omegas_i, in_axes=(None, None, 0, 1, 0, None, None, None),
                           out_axes=(0,0), axis_name='i'), static_argnums=(0))
-        if iteration % 3 == 0:
-            self.update_C(phi, X, get_omegas)
-            self.update_d(phi, X, get_omegas)
-        elif iteration % 3 == 1:
-            if self.Dx > 1:
-                self.update_U3(phi, X, get_omegas, num_resets)
-                # if iteration % 2 == 0:
-                #     self.update_U3(phi, X, get_omegas)
-                # else:
-                #     self.update_U4(phi, X, get_omegas)
-            # for i in range(10):
-            #     self.update_U3(phi, X, get_omegas)
-            # if iteration > 20:
-            #     self.update_W(phi, X, get_omegas)
-        else:
-            # if iteration < 100:
-            #     self.update_sigma_beta(phi, X, get_omegas)
-            #     self.update_W(phi, X, get_omegas)
-            # else:
-            self.update_sigma_beta_W(phi, X, get_omegas, num_resets)
+        #if iteration % 1 == 0:
+        #    self.update_C(phi, X, get_omegas)
+        #    self.update_d(phi, X, get_omegas)
+        #elif iteration % 1 == 1:
+        #    if self.Dx > 1:
+        #        # self.update_U3(phi, X, get_omegas, num_resets)
+        #        self.update_U(phi, X, get_omegas)
+        #        # if iteration % 2 == 0:
+        #        #     self.update_U3(phi, X, get_omegas)
+        #        # else:
+        #        #     self.update_U4(phi, X, get_omegas)
+        #    # for i in range(10):
+        #    #     self.update_U3(phi, X, get_omegas)
+        #    # if iteration > 20:
+        #    #     self.update_W(phi, X, get_omegas)
+        #else:
+        #    # if iteration < 100:
+        #    #     self.update_sigma_beta(phi, X, get_omegas)
+        #    #     self.update_W(phi, X, get_omegas)
+        #    # else:
+        #    self.update_sigma_beta_W(phi, X, get_omegas, num_resets)
+        self.update_C(phi, X, get_omegas)
+        self.update_d(phi, X, get_omegas)
+        self.update_U3(phi, X, get_omegas, num_resets)
+        self.update_sigma_beta_W(phi, X, get_omegas, num_resets)
         #
         self.update_emission_density()
         
@@ -595,7 +600,7 @@ class HCCovObservationModel(LinearObservationModel):
                 Q, R = np.linalg.qr(rand_mat)
                 # x0 = Q[:, :self.Du].flatten()
                 x0 = jnp.array(Q[:, :self.Du].flatten())
-            result = minimize(objective, x0, method='SLSQP', jac=True, constraints=constraint, options={'disp': True, 'maxiter': 1000})
+            result = minimize(objective, x0, method='SLSQP', jac=True, constraints=constraint, options={'disp': False, 'maxiter': 1000})
             if result.fun < opt_fun:
                 opt_fun = result.fun
                 U_new = jnp.array(result.x.reshape((self.Dx, self.Du)))
@@ -630,7 +635,7 @@ class HCCovObservationModel(LinearObservationModel):
             U_jnp = jnp.array(U.reshape((self.Dx, self.Du)))
             converged = np.abs(val - val_old) < 1e-5
             val_old = val
-            print(val)
+            #print(val)
             iter += 1
         self.U = U_jnp
 
@@ -708,7 +713,7 @@ class HCCovObservationModel(LinearObservationModel):
     def Lagrange_func_U(params, R, Du, Dx, U_old):
         U = params[:Du * Dx].reshape((Dx, Du))
         lagrange_multipliers = params[Du * Dx:].reshape((Du, Du))
-        dL_dU = - jnp.einsum('abc,ca->ab', R, U) + jnp.dot(U, lagrange_multipliers).T
+        dL_dU = - jnp.einsum('abc,ca->ab', R, U_old) + jnp.dot(U, lagrange_multipliers).T
         dL_dmultipliers = jnp.dot(U.T, U) - jnp.eye(Du)
         L_U = jnp.sum(dL_dU ** 2) + jnp.sum(dL_dmultipliers ** 2)
         return L_U
@@ -764,7 +769,7 @@ class HCCovObservationModel(LinearObservationModel):
         opt_fun = np.inf
         for i in range(num_resets):
             result = par_func(i)
-            print(result.fun)
+            # print(result.fun)
             if result.fun < opt_fun:
                 opt_fun = result.fun
                 opt_params = result.x
@@ -1030,7 +1035,7 @@ class HCCovObservationModel(LinearObservationModel):
         T = X.shape[0]
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
-        b_i = 0 * W_i[:1]
+        b_i = W_i[:1]
         u_i = u_i.reshape((-1, 1))
         uC = jnp.dot(u_i.T, -C)
         ux_d = jnp.dot(u_i.T, (X - d).T)
@@ -1092,7 +1097,7 @@ class HCCovObservationModel(LinearObservationModel):
         T = X.shape[0]
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
-        b_i = 0 * W_i[:1]
+        b_i = W_i[:1]
         u_i = u_i.reshape((-1, 1))
         # uC = jnp.dot(u_i.T, -C)
         # ux_d = jnp.dot(u_i.T, (X - d).T)
@@ -1134,7 +1139,7 @@ class HCCovObservationModel(LinearObservationModel):
         T = X.shape[0]
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
-        b_i = 0 * W_i[:1]
+        b_i = W_i[:1]
         g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
         nu_plus = (1. - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1. - g_omega[:, None] * b_i) * w_i
@@ -1163,7 +1168,7 @@ class HCCovObservationModel(LinearObservationModel):
         T = X.shape[0]
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
-        b_i = 0 * W_i[:1]
+        b_i = W_i[:1]
         # beta = self.beta[iu:iu + 1]
         # Lower bound for E[ln (sigma_x^2 + f(h))]
 

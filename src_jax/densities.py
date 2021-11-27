@@ -10,7 +10,8 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 import numpy as np
-from . import measures
+#from . 
+import measures
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     
