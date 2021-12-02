@@ -8,10 +8,11 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
-import sys
-sys.path.append('../')
-from autograd import numpy
-from . import factors, densities
+
+#import jnp
+#from densities import GaussianDensity
+from jax import numpy as jnp
+import densities, factors
 
 class ConditionalGaussianDensity:
     
@@ -22,15 +23,15 @@ class ConditionalGaussianDensity:
             
             with the conditional mean function mu(x) = M x + b.
                 
-        :param M: numpy.ndarray [R, Dy, Dx]
+        :param M: jnp.ndarray [R, Dy, Dx]
             Matrix in the mean function.
-        :param b: numpy.ndarray [R, Dy]
+        :param b: jnp.ndarray [R, Dy]
             Vector in the conditional mean function.
-        :param Sigma: numpy.ndarray [R, Dy, Dy]
+        :param Sigma: jnp.ndarray [R, Dy, Dy]
             The covariance matrix of the conditional. (Default=None)
-        :param Lambda: numpy.ndarray [R, Dy, Dy] or None
+        :param Lambda: jnp.ndarray [R, Dy, Dy] or None
             Information (precision) matrix of the Gaussians. (Default=None)
-        :param ln_det_Sigma: numpy.ndarray [R] or None
+        :param ln_det_Sigma: jnp.ndarray [R] or None
             Log determinant of the covariance matrix. (Default=None)
         """
         
@@ -71,45 +72,46 @@ class ConditionalGaussianDensity:
         new_measure = ConditionalGaussianDensity(M_new, b_new, Sigma_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
             
-    def get_conditional_mu(self, x: numpy.ndarray) -> numpy.ndarray:
+    def get_conditional_mu(self, x: jnp.ndarray) -> jnp.ndarray:
         """ Computest the conditional mu function
         
             mu(x) = M x + b.
             
-        :param x: numpy.ndarray [N, Dx]
+        :param x: jnp.ndarray [N, Dx]
             Instances, the mu should be conditioned on.
         
-        :return: numpy.ndarray [R, N, Dy]
+        :return: jnp.ndarray [R, N, Dy]
             Conditional means.
         """
-        mu_y = numpy.einsum('abc,dc->adb', self.M, x) + self.b[:,None]
+        mu_y = jnp.einsum('abc,dc->adb', self.M, x) + self.b[:,None]
         return mu_y
     
-    def condition_on_x(self, x: numpy.ndarray) -> 'GaussianDensity':
+    def condition_on_x(self, x: jnp.ndarray) -> 'GaussianDensity':
         """ Generates the corresponding Gaussian Density conditioned on x.
         
-        :param x: numpy.ndarray [N, Dx]
+        :param x: jnp.ndarray [N, Dx]
             Instances, the mu should be conditioned on.
         
         :return: GaussianDensity
             The density conditioned on x.
         """
+
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((self.R * N, self.Dy))
-        Sigma_new = numpy.tile(self.Sigma[:,None], (1,N,1,1)).reshape(self.R * N, self.Dy, self.Dy)
-        Lambda_new = numpy.tile(self.Lambda[:,None], (1,N,1,1)).reshape(self.R * N, self.Dy, self.Dy)
-        ln_det_Sigma_new = numpy.tile(self.ln_det_Sigma[:,None], (1,N)).reshape(self.R * N)
+        Sigma_new = jnp.tile(self.Sigma[:,None], (1,N,1,1)).reshape(self.R * N, self.Dy, self.Dy)
+        Lambda_new = jnp.tile(self.Lambda[:,None], (1,N,1,1)).reshape(self.R * N, self.Dy, self.Dy)
+        ln_det_Sigma_new = jnp.tile(self.ln_det_Sigma[:,None], (1,N)).reshape(self.R * N)
         return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new)
         
     @staticmethod
-    def invert_matrix(A: numpy.ndarray) -> (numpy.ndarray, numpy.ndarray):
-        L = numpy.linalg.cholesky(A)
+    def invert_matrix(A: jnp.ndarray) -> (jnp.ndarray, jnp.ndarray):
+        L = jnp.linalg.cholesky(A)
         # TODO: Check whether we can make it mor efficienty with solve_triangular.
-        #L_inv = solve_triangular(L, numpy.eye(L.shape[0]), lower=True,
+        #L_inv = solve_triangular(L, jnp.eye(L.shape[0]), lower=True,
         #                         check_finite=False)
-        L_inv = numpy.linalg.solve(L, numpy.eye(L.shape[1])[None])
-        A_inv = numpy.einsum('acb,acd->abd', L_inv, L_inv)
-        ln_det_A = 2. * numpy.sum(numpy.log(L.diagonal(axis1=1, axis2=2)), axis=1)
+        L_inv = jnp.linalg.solve(L, jnp.eye(L.shape[1])[None])
+        A_inv = jnp.einsum('acb,acd->abd', L_inv, L_inv)
+        ln_det_A = 2. * jnp.sum(jnp.log(L.diagonal(axis1=1, axis2=2)), axis=1)
         return A_inv, ln_det_A
     
     def affine_joint_transformation(self, p_x: 'GaussianDensity') -> 'GaussianDensity':
@@ -134,43 +136,47 @@ class ConditionalGaussianDensity:
         R = p_x.R * self.R
         D_xy = p_x.D + self.Dy
         # Mean
-        mu_x = numpy.tile(p_x.mu[None], (self.R, 1, 1,)).reshape((R, p_x.D))
+        mu_x = jnp.tile(p_x.mu[None], (self.R, 1, 1,)).reshape((R, p_x.D))
         mu_y = self.get_conditional_mu(p_x.mu).reshape((R, self.Dy))
-        mu_xy = numpy.hstack([mu_x, mu_y])
+        mu_xy = jnp.hstack([mu_x, mu_y])
         # Sigma
-        Sigma_x = numpy.tile(p_x.Sigma[None], (self.R, 1, 1, 1)).reshape(R, p_x.D, p_x.D)
-        MSigma_x = numpy.einsum('abc,dce->adbe', self.M, p_x.Sigma) # [R1,R,Dy,D]
-        MSigmaM = numpy.einsum('abcd,aed->abce', MSigma_x, self.M)
+        Sigma_x = jnp.tile(p_x.Sigma[None], (self.R, 1, 1, 1)).reshape(R, p_x.D, p_x.D)
+        MSigma_x = jnp.einsum('abc,dce->adbe', self.M, p_x.Sigma) # [R1,R,Dy,D]
+        MSigmaM = jnp.einsum('abcd,aed->abce', MSigma_x, self.M)
         Sigma_y = (self.Sigma[:,None] + MSigmaM).reshape((R, self.Dy, self.Dy))
         C_xy = MSigma_x.reshape((R, self.Dy, p_x.D))
-        Sigma_xy = numpy.empty((R, D_xy, D_xy))
-        Sigma_xy[:,:p_x.D,:p_x.D] = Sigma_x
-        Sigma_xy[:,p_x.D:,p_x.D:] = Sigma_y
-        Sigma_xy[:,p_x.D:,:p_x.D] = C_xy
-        Sigma_xy[:,:p_x.D,p_x.D:] = numpy.swapaxes(C_xy, 1, 2)
+        Sigma_xy = jnp.block([[Sigma_x, jnp.swapaxes(C_xy, 1, 2)],
+                              [C_xy, Sigma_y]])
+        # Sigma_xy = jnp.empty((R, D_xy, D_xy))
+        # Sigma_xy[:,:p_x.D,:p_x.D] = Sigma_x
+        # Sigma_xy[:,p_x.D:,p_x.D:] = Sigma_y
+        # Sigma_xy[:,p_x.D:,:p_x.D] = C_xy
+        # Sigma_xy[:,:p_x.D,p_x.D:] = jnp.swapaxes(C_xy, 1, 2)
         # Lambda
-        Lambda_y = numpy.tile(self.Lambda[:,None], (1, p_x.R, 1, 1)).reshape((R, self.Dy, self.Dy))
-        Lambda_yM = numpy.einsum('abc,abd->acd', self.Lambda, self.M) # [R1,Dy,D]
-        MLambdaM = numpy.einsum('abc,abd->acd', self.M, Lambda_yM)
+        Lambda_y = jnp.tile(self.Lambda[:,None], (1, p_x.R, 1, 1)).reshape((R, self.Dy, self.Dy))
+        Lambda_yM = jnp.einsum('abc,abd->acd', self.Lambda, self.M) # [R1,Dy,D]
+        MLambdaM = jnp.einsum('abc,abd->acd', self.M, Lambda_yM)
         Lambda_x = (p_x.Lambda[None] + MLambdaM[:,None]).reshape((R, p_x.D, p_x.D))
-        L_xy = numpy.tile(-Lambda_yM[:,None], (1, p_x.R, 1, 1)).reshape((R, self.Dy, p_x.D))
-        Lambda_xy = numpy.empty((R, D_xy, D_xy))
-        Lambda_xy[:,:p_x.D,:p_x.D] = Lambda_x
-        Lambda_xy[:,p_x.D:,p_x.D:] = Lambda_y
-        Lambda_xy[:,p_x.D:,:p_x.D] = L_xy
-        Lambda_xy[:,:p_x.D,p_x.D:] = numpy.swapaxes(L_xy, 1, 2)
+        L_xy = jnp.tile(-Lambda_yM[:,None], (1, p_x.R, 1, 1)).reshape((R, self.Dy, p_x.D))
+        Lambda_xy = jnp.block([[Lambda_x, jnp.swapaxes(L_xy, 1, 2)],
+                               [L_xy, Lambda_y]])
+        # Lambda_xy = jnp.empty((R, D_xy, D_xy))
+        # Lambda_xy[:,:p_x.D,:p_x.D] = Lambda_x
+        # Lambda_xy[:,p_x.D:,p_x.D:] = Lambda_y
+        # Lambda_xy[:,p_x.D:,:p_x.D] = L_xy
+        # Lambda_xy[:,:p_x.D,p_x.D:] = jnp.swapaxes(L_xy, 1, 2)
         # Log determinant
         if p_x.D > self.Dy:
-            CLambda_x = numpy.einsum('abcd,bde->abce', MSigma_x, p_x.Lambda) # [R1,R,Dy,D]
-            CLambdaC = numpy.einsum('abcd,abed->abce', CLambda_x, MSigma_x) # [R1,R,Dy,Dy]
-            delta_ln_det = numpy.linalg.slogdet(Sigma_y[:,None] - CLambdaC)[1].reshape((R,))
+            CLambda_x = jnp.einsum('abcd,bde->abce', MSigma_x, p_x.Lambda) # [R1,R,Dy,D]
+            CLambdaC = jnp.einsum('abcd,abed->abce', CLambda_x, MSigma_x) # [R1,R,Dy,Dy]
+            delta_ln_det = jnp.linalg.slogdet(Sigma_y[:,None] - CLambdaC)[1].reshape((R,))
             ln_det_Sigma_xy = p_x.ln_det_Sigma + delta_ln_det
         else:
-            Sigma_yL = numpy.einsum('abc,acd->abd', self.Sigma, -Lambda_yM) # [R1,Dy,Dy] x [R1, Dy, D] = [R1, Dy, D]
-            LSigmaL = numpy.einsum('abc,abd->acd', -Lambda_yM, Sigma_yL) # [R1, Dy, D] x [R1, Dy, D] = [R1, D, D]
-            LSigmaL = numpy.tile(LSigmaL[:,None], (1, p_x.R)).reshape((R, p_x.D, p_x.D))
-            delta_ln_det = numpy.linalg.slogdet(Lambda_x - LSigmaL)[1]
-            ln_det_Sigma_xy = -(numpy.tile(self.ln_det_Lambda[:,None], (1, p_x.R)).reshape((R,)) + delta_ln_det)
+            Sigma_yL = jnp.einsum('abc,acd->abd', self.Sigma, -Lambda_yM) # [R1,Dy,Dy] x [R1, Dy, D] = [R1, Dy, D]
+            LSigmaL = jnp.einsum('abc,abd->acd', -Lambda_yM, Sigma_yL) # [R1, Dy, D] x [R1, Dy, D] = [R1, D, D]
+            LSigmaL = jnp.tile(LSigmaL[:,None], (1, p_x.R)).reshape((R, p_x.D, p_x.D))
+            delta_ln_det = jnp.linalg.slogdet(Lambda_x - LSigmaL)[1]
+            ln_det_Sigma_xy = -(jnp.tile(self.ln_det_Lambda[:,None], (1, p_x.R)).reshape((R,)) + delta_ln_det)
         return densities.GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
     
     def affine_marginal_transformation(self, p_x: 'ConditionalGaussianDensity') -> 'GaussianDensity':
@@ -193,8 +199,8 @@ class ConditionalGaussianDensity:
         # Mean
         mu_y = self.get_conditional_mu(p_x.mu).reshape((R, self.Dy))
         # Sigma
-        MSigma_x = numpy.einsum('abc,dce->adbe', self.M, p_x.Sigma) # [R1,R,Dy,D]
-        MSigmaM = numpy.einsum('abcd,aed->abce', MSigma_x, self.M)
+        MSigma_x = jnp.einsum('abc,dce->adbe', self.M, p_x.Sigma) # [R1,R,Dy,D]
+        MSigmaM = jnp.einsum('abcd,aed->abce', MSigma_x, self.M)
         Sigma_y = (self.Sigma[:,None] + MSigmaM).reshape((R, self.Dy, self.Dy))
         return densities.GaussianDensity(Sigma_y, mu_y)
     
@@ -217,21 +223,21 @@ class ConditionalGaussianDensity:
         R = p_x.R * self.R
         # TODO: Could be flexibly made more effiecient here.
         # Marginal Sigma y
-        # MSigma_x = numpy.einsum('abc,dce->adbe', self.M, p_xSigma) # [R1,R,Dy,D]
-        # MSigmaM = numpy.einsum('abcd,aed->abce', MSigma_x, self.M)
+        # MSigma_x = jnp.einsum('abc,dce->adbe', self.M, p_xSigma) # [R1,R,Dy,D]
+        # MSigmaM = jnp.einsum('abcd,aed->abce', MSigma_x, self.M)
         # Sigma_y = (self.Sigma[:,None] + MSigmaM).reshape((R, self.Dy, self.Dy))
         # Lambda_y, ln_det_Sigma_y = p_x.invert_matrix(Sigma_y)
         # Lambda
-        Lambda_yM = numpy.einsum('abc,abd->acd', self.Lambda, self.M) # [R1,Dy,D]
-        MLambdaM = numpy.einsum('abc,abd->acd', self.M, Lambda_yM)
+        Lambda_yM = jnp.einsum('abc,abd->acd', self.Lambda, self.M) # [R1,Dy,D]
+        MLambdaM = jnp.einsum('abc,abd->acd', self.M, Lambda_yM)
         Lambda_x = (p_x.Lambda[None] + MLambdaM[:,None]).reshape((R, p_x.D, p_x.D))
         # Sigma
         Sigma_x, ln_det_Lambda_x = p_x.invert_matrix(Lambda_x)
         # M_x
-        M_Lambda_y = numpy.einsum('abc,abd->acd', self.M, self.Lambda) # [R1, D, Dy]
-        M_x = numpy.einsum('abcd,ade->abce', Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), M_Lambda_y) #[R1, R, D, Dy]
-        b_x = - numpy.einsum('abcd,ad->abc', M_x, self.b) # [R1, R, D, Dy] x [R1, Dy] = [R1, R, D]
-        b_x += numpy.einsum('abcd,bd->abc', Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), p_x.nu).reshape((R, p_x.D))
+        M_Lambda_y = jnp.einsum('abc,abd->acd', self.M, self.Lambda) # [R1, D, Dy]
+        M_x = jnp.einsum('abcd,ade->abce', Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), M_Lambda_y) #[R1, R, D, Dy]
+        b_x = - jnp.einsum('abcd,ad->abc', M_x, self.b) # [R1, R, D, Dy] x [R1, Dy] = [R1, R, D]
+        b_x += jnp.einsum('abcd,bd->abc', Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), p_x.nu).reshape((R, p_x.D))
         M_x = M_x.reshape((R, p_x.D, self.Dy))
         
         return ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
@@ -239,9 +245,9 @@ class ConditionalGaussianDensity:
     
 class LSEMGaussianConditional(ConditionalGaussianDensity):
     
-    def __init__(self, M: numpy.ndarray, b: numpy.ndarray, W: numpy.ndarray, 
-                 Sigma: numpy.ndarray=None, Lambda: numpy.ndarray=None, 
-                 ln_det_Sigma: numpy.ndarray=None):
+    def __init__(self, M: jnp.ndarray, b: jnp.ndarray, W: jnp.ndarray, 
+                 Sigma: jnp.ndarray=None, Lambda: jnp.ndarray=None, 
+                 ln_det_Sigma: jnp.ndarray=None):
         """ A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
             
             p(y|x) = N(mu(x), Sigma)
@@ -257,17 +263,17 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
             
             Note, that the affine transformations will be approximated via moment matching.
             
-            :param M: numpy.ndarray [1, Dy, Dphi]
+            :param M: jnp.ndarray [1, Dy, Dphi]
                 Matrix in the mean function.
-            :param b: numpy.ndarray [1, Dy]
+            :param b: jnp.ndarray [1, Dy]
                 Vector in the conditional mean function.
-            :param W: numpy.ndarray [Dphi, Dx + 1]
+            :param W: jnp.ndarray [Dphi, Dx + 1]
                 Parameters for linear mapping in the nonlinear functions
-            :param Sigma: numpy.ndarray [1, Dy, Dy]
+            :param Sigma: jnp.ndarray [1, Dy, Dy]
                 The covariance matrix of the conditional. (Default=None)
-            :param Lambda: numpy.ndarray [1, Dy, Dy] or None
+            :param Lambda: jnp.ndarray [1, Dy, Dy] or None
                 Information (precision) matrix of the Gaussians. (Default=None)
-            :param ln_det_Sigma: numpy.ndarray [1] or None
+            :param ln_det_Sigma: jnp.ndarray [1] or None
                 Log determinant of the covariance matrix. (Default=None)
         """
         super().__init__(M, b, Sigma, Lambda, ln_det_Sigma)
@@ -286,39 +292,39 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         ln_beta = - .5 * self.w0 ** 2
         self.k_func = factors.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
         
-    def evaluate_phi(self, x: numpy.ndarray):
+    def evaluate_phi(self, x: jnp.ndarray):
         """ Evaluates the phi
         
         phi(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
         
-        :param x: numpy.ndarray [N, Dx]
+        :param x: jnp.ndarray [N, Dx]
             Points where f should be evaluated.
             
-        :return: numpy.ndarray [N, Dphi]
+        :return: jnp.ndarray [N, Dphi]
             Deature vector.
         """
         N = x.shape[0]
-        phi_x = numpy.empty((N, self.Dphi))
-        phi_x[:,:self.Dx] = x
-        phi_x[:,self.Dx:] = self.k_func.evaluate(x).T
+        # phi_x = jnp.empty((N, self.Dphi))
+        phi_x = jnp.block([[x], [self.k_func.evaluate(x).T]])
+        # phi_x[:,self.Dx:] = self.k_func.evaluate(x).T
         return phi_x
     
-    def get_conditional_mu(self, x: numpy.ndarray) -> numpy.ndarray:
+    def get_conditional_mu(self, x: jnp.ndarray) -> jnp.ndarray:
         """ Computes the conditional mu function
         
             mu(x) = mu(x) = M phi(x) + b
             
-        :param x: numpy.ndarray [N, Dx]
+        :param x: jnp.ndarray [N, Dx]
             Instances, the mu should be conditioned on.
         
-        :return: numpy.ndarray [1, N, Dy]
+        :return: jnp.ndarray [1, N, Dy]
             Conditional means.
         """
         phi_x = self.evaluate_phi(x)
-        mu_y = numpy.einsum('ab,cb->ca', self.M[0], phi_x) + self.b[0][None]
+        mu_y = jnp.einsum('ab,cb->ca', self.M[0], phi_x) + self.b[0][None]
         return mu_y
     
-    def get_expected_moments(self, p_x: 'GaussianDensity') -> numpy.ndarray:
+    def get_expected_moments(self, p_x: 'GaussianDensity') -> jnp.ndarray:
         """ Computes the expected covariance
         
             Sigma_y = E[yy'] - E[y]E[y]'
@@ -326,7 +332,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         :param p_x: GaussianDensity
             The density which we average over.
 
-        :return: numpy.ndarray [p_R, Dy, Dy]
+        :return: jnp.ndarray [p_R, Dy, Dy]
             Returns the expected mean
         """
         
@@ -334,37 +340,40 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         # E[x] [R, Dx]
         Ex = p_x.integrate('x')
         # E[k(x)] [R, Dphi - Dx]
-        p_k = p_x.multiply(self.k_func)
+        p_k = p_x.multiply(self.k_func, update_full=True)
         Ekx = p_k.integrate().reshape((p_x.R, self.Dphi - self.Dx))
         # E[f(x)]
-        Ef = numpy.concatenate([Ex, Ekx], axis=1)
+        Ef = jnp.concatenate([Ex, Ekx], axis=1)
         
         #### E[f(x)f(x)'] ####
-        Eff = numpy.empty([p_x.R, self.Dphi, self.Dphi])
+        # Eff = jnp.empty([p_x.R, self.Dphi, self.Dphi])
         # Linear terms E[xx']
-        Eff[:,:self.Dx,:self.Dx] = p_x.integrate('xx')
+        Exx = p_x.integrate('xx')
+        # Eff[:,:self.Dx,:self.Dx] =
         # Cross terms E[x k(x)']
         Ekx = p_k.integrate('x').reshape((p_x.R, self.Dk, self.Dx))
-        Eff[:,:self.Dx,self.Dx:] = numpy.swapaxes(Ekx, axis1=1, axis2=2)
-        Eff[:,self.Dx:,:self.Dx] = Ekx
+        # Eff[:,:self.Dx,self.Dx:] = jnp.swapaxes(Ekx, axis1=1, axis2=2)
+        # Eff[:,self.Dx:,:self.Dx] = Ekx
         # kernel terms E[k(x)k(x)']
-        Ekk = p_x.multiply(self.k_func).multiply(self.k_func).integrate().reshape((p_x.R, self.Dk, self.Dk))
-        Eff[:,self.Dx:,self.Dx:] = Ekk
+        Ekk = p_x.multiply(self.k_func, update_full=True).multiply(self.k_func, update_full=True).integrate().reshape((p_x.R, self.Dk, self.Dk))
+        # Eff[:,self.Dx:,self.Dx:] = Ekk
+        Eff = jnp.block([[Exx, jnp.swapaxes(Ekx, axis1=1, axis2=2)],
+                          [Ekx, Ekk]])
         
         ### mu_y = E[mu(x)] = ME[f(x)] + b ###
-        mu_y = numpy.einsum('ab,cb->ca', self.M[0], Ef) + self.b[0][None]
+        mu_y = jnp.einsum('ab,cb->ca', self.M[0], Ef) + self.b[0][None]
         
         ### Sigma_y = E[yy'] - mu_ymu_y' = Sigma + E[mu(x)mu(x)'] - mu_ymu_y'
         #                                = Sigma + ME[f(x)f(x)']M' + bE[f(x)']M' + ME[f(x)]b' + bb' - mu_ymu_y'
-        Sigma_y = numpy.tile(self.Sigma, (p_x.R, 1, 1))
-        Sigma_y += numpy.einsum('ab,cbd->cad', self.M[0], numpy.einsum('abc,dc->abd', Eff, self.M[0]))
-        MEfb = numpy.einsum('ab,c->abc', numpy.einsum('ab,cb->ca', self.M[0], Ef), self.b[0])
-        Sigma_y += MEfb + numpy.swapaxes(MEfb, axis1=1, axis2=2)
+        Sigma_y = jnp.tile(self.Sigma, (p_x.R, 1, 1))
+        Sigma_y += jnp.einsum('ab,cbd->cad', self.M[0], jnp.einsum('abc,dc->abd', Eff, self.M[0]))
+        MEfb = jnp.einsum('ab,c->abc', jnp.einsum('ab,cb->ca', self.M[0], Ef), self.b[0])
+        Sigma_y += MEfb + jnp.swapaxes(MEfb, axis1=1, axis2=2)
         Sigma_y += (self.b[0,None] * self.b[0,:,None])[None]
         Sigma_y -= mu_y[:,None] * mu_y[:,:,None]
         return mu_y, Sigma_y
     
-    def get_expected_cross_terms(self, p_x: 'GaussianDensity') -> numpy.ndarray:
+    def get_expected_cross_terms(self, p_x: 'GaussianDensity') -> jnp.ndarray:
         """ Computes
         
             E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx
@@ -372,18 +381,18 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         :param p_x: GaussianDensity
             The density which we average over.
 
-        :return: numpy.ndarray [p_R, Dx, Dy]
+        :return: jnp.ndarray [p_R, Dx, Dy]
             Returns the cross expectations.
         """
         
         # E[xx']
         Exx = p_x.integrate('xx')
         # E[k(x)x']
-        Ekx = p_x.multiply(self.k_func).integrate('x').reshape((p_x.R, self.Dk, self.Dx))
+        Ekx = p_x.multiply(self.k_func, update_full=True).integrate('x').reshape((p_x.R, self.Dk, self.Dx))
         # E[f(x)x']
-        Ef_x = numpy.concatenate([Exx, Ekx], axis=1)
+        Ef_x = jnp.concatenate([Exx, Ekx], axis=1)
         # M E[f(x)x']
-        MEf_x = numpy.einsum('ab,cbd->cad', self.M[0], Ef_x)
+        MEf_x = jnp.einsum('ab,cbd->cad', self.M[0], Ef_x)
         # bE[x']
         bEx = self.b[0][None,:,None] * p_x.integrate('x')[:,None]
         # E[yx']
@@ -414,12 +423,14 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:,:,None] * mu_x[:,None]
-        mu_xy = numpy.concatenate([mu_x, mu_y], axis=1)
-        Sigma_xy = numpy.empty((p_x.R, self.Dy + self.Dx, self.Dy + self.Dx))
-        Sigma_xy[:,:self.Dx,:self.Dx] = p_x.Sigma
-        Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
-        Sigma_xy[:,:self.Dx,self.Dx:] = numpy.swapaxes(cov_yx, axis1=1, axis2=2)
-        Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
+        mu_xy = jnp.concatenate([mu_x, mu_y], axis=1)
+        Sigma_xy =jnp.block([[p_x.Sigma, cov_yx],
+                             [jnp.swapaxes(cov_yx, axis1=1, axis2=2), Sigma_y]])
+        # Sigma_xy = jnp.empty((p_x.R, self.Dy + self.Dx, self.Dy + self.Dx))
+        # Sigma_xy[:,:self.Dx,:self.Dx] = p_x.Sigma
+        # Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
+        # Sigma_xy[:,:self.Dx,self.Dx:] = jnp.swapaxes(cov_yx, axis1=1, axis2=2)
+        # Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
         p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
     
@@ -439,9 +450,9 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:,:,None] * mu_x[:,None]
-        M_new = numpy.einsum('abc,abd->acd', cov_yx, Lambda_y)
-        b_new = mu_x - numpy.einsum('abc,ac->ab', M_new, mu_y)
-        Sigma_new = p_x.Sigma - numpy.einsum('abc,acd->abd', M_new, cov_yx)
+        M_new = jnp.einsum('abc,abd->acd', cov_yx, Lambda_y)
+        b_new = mu_x - jnp.einsum('abc,ac->ab', M_new, mu_y)
+        Sigma_new = p_x.Sigma - jnp.einsum('abc,acd->abd', M_new, cov_yx)
         cond_p_xy = ConditionalGaussianDensity(M=M_new, b=b_new, Sigma=Sigma_new)
         return cond_p_xy
         
@@ -471,8 +482,8 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
     
 class HCCovGaussianConditional(ConditionalGaussianDensity):
     
-    def __init__(self, M: numpy.ndarray, b: numpy.ndarray, sigma_x: numpy.ndarray, 
-                 U: numpy.ndarray, W: numpy.ndarray, beta: numpy.ndarray,):
+    def __init__(self, M: jnp.ndarray, b: jnp.ndarray, sigma_x: jnp.ndarray, 
+                 U: jnp.ndarray, W: jnp.ndarray, beta: jnp.ndarray,):
         """ A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
             
             p(y|x) = N(mu(x), Sigma(x))
@@ -486,19 +497,19 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
             
             Note, that the affine transformations will be approximated via moment matching.
             
-            :param M: numpy.ndarray [1, Dy, Dx]
+            :param M: jnp.ndarray [1, Dy, Dx]
                 Matrix in the mean function.
-            :param b: numpy.ndarray [1, Dy]
+            :param b: jnp.ndarray [1, Dy]
                 Vector in the conditional mean function.
-            :param W: numpy.ndarray [Du, Dx + 1]
+            :param W: jnp.ndarray [Du, Dx + 1]
                 Parameters for linear mapping in the nonlinear functions
             :param sigma_x: float
                 Diagonal noise parameter.
-            :param U: numpy.ndarray [Dy, Du]
+            :param U: jnp.ndarray [Dy, Du]
                 Othonormal vectors for low rank noise part.
-            :param W: numpy.ndarray [Du, Dx + 1]
+            :param W: jnp.ndarray [Du, Dx + 1]
                 Noise weights for low rank components (w_i & b_i).
-            :param beta: numpy.ndarray [Du]
+            :param beta: jnp.ndarray [Du]
                 Scaling for low rank noise components.
         """
         self.R, self.Dy, self.Dx = M.shape
@@ -523,28 +534,28 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         self.exp_h_plus = factors.LinearFactor(nu, ln_beta)
         self.exp_h_minus = factors.LinearFactor(-nu, -ln_beta)
         
-    def get_conditional_cov(self, x: numpy.ndarray) -> numpy.ndarray:
+    def get_conditional_cov(self, x: jnp.ndarray) -> jnp.ndarray:
         """ Evaluates the covariance at a given x, i.e.
         
         Sigma_y(x) = sigma_x^2 I + \sum_i U_i D_i(x) U_i',
             
         with D_i(x) = 2 * beta_i * cosh(h_i(x)) and h_i(x) = w_i'x + b_i.
         
-        :param x: numpy.ndarray [N, Dx]
+        :param x: jnp.ndarray [N, Dx]
             Instances, the mu should be conditioned on.
               
-        :return: numpy.ndarray [N, Dy, Dy]
+        :return: jnp.ndarray [N, Dy, Dy]
             Conditional covariance.
         """
         D_x = self.beta[None,:,None] * (self.exp_h_plus(x) + self.exp_h_minus(x))
-        Sigma_0 = self.sigma2_x * numpy.eye(self.Dy)
-        Sigma_y_x = Sigma_0[None] + numpy.einsum('ab,cb->ac', numpy.einsum('ab,cb->ca', self.U, D_x), self.U)
+        Sigma_0 = self.sigma2_x * jnp.eye(self.Dy)
+        Sigma_y_x = Sigma_0[None] + jnp.einsum('ab,cb->ac', jnp.einsum('ab,cb->ca', self.U, D_x), self.U)
         return Sigma_y_x
     
-    def condition_on_x(self, x: numpy.ndarray) -> 'GaussianDensity':
+    def condition_on_x(self, x: jnp.ndarray) -> 'GaussianDensity':
         """ Generates the corresponding Gaussian Density conditioned on x.
         
-        :param x: numpy.ndarray [N, Dx]
+        :param x: jnp.ndarray [N, Dx]
             Instances, the mu should be conditioned on.
         
         :return: GaussianDensity
@@ -555,7 +566,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         Sigma_new = self.get_conditional_cov(x)
         return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new)
 
-    def integrate_Sigma_x(self, p_x: 'GaussianDensity') -> numpy.ndarray:
+    def integrate_Sigma_x(self, p_x: 'GaussianDensity') -> jnp.ndarray:
         """ Returns the integral
         
         int Sigma_y(x)p(x) dx.
@@ -563,15 +574,15 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         :param p_x: GaussianDensity
             The density the covatiance is integrated with.
             
-        :return: numpy.ndarray [Dy, Dy]
+        :return: jnp.ndarray [Dy, Dy]
             Integrated covariance matrix.
         """
         # int 2 cosh(h(z)) dphi(z)
         D_int = p_x.multiply(self.exp_h_plus).integrate() + p_x.multiply(self.exp_h_minus).integrate()
         D_int = self.beta[None] * D_int.reshape((p_x.R, self.Du))
-        return self.sigma2_x * numpy.eye(self.Dy)[None] + numpy.einsum('abc,dc->abd', self.U[None] * D_int[:,None], self.U)
+        return self.sigma2_x * jnp.eye(self.Dy)[None] + jnp.einsum('abc,dc->abd', self.U[None] * D_int[:,None], self.U)
     
-    def get_expected_moments(self, p_x: 'GaussianDensity') -> numpy.ndarray:
+    def get_expected_moments(self, p_x: 'GaussianDensity') -> jnp.ndarray:
         """ Computes the expected mean and covariance
         
             mu_y = E[y] = M E[x] + b
@@ -581,7 +592,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         :param p_x: GaussianDensity
             The density which we average over.
 
-        :return: (numpy.ndarray [p_R, Dy], numpy.ndarray [p_R, Dy, Dy])
+        :return: (jnp.ndarray [p_R, Dy], jnp.ndarray [p_R, Dy, Dy])
             Returns the expected mean and covariance.
         """
         
@@ -595,7 +606,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         #Sigma_y = .5 * (Sigma_y + Sigma_y.T)
         return mu_y, Sigma_y
     
-    def get_expected_cross_terms(self, p_x: 'GaussianDensity') -> numpy.ndarray:
+    def get_expected_cross_terms(self, p_x: 'GaussianDensity') -> jnp.ndarray:
         """ Computes
         
             E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx
@@ -603,7 +614,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         :param p_x: GaussianDensity
             The density which we average over.
 
-        :return: numpy.ndarray [p_R, Dx, Dy]
+        :return: jnp.ndarray [p_R, Dx, Dy]
             Returns the cross expectations.
         """
         
@@ -634,14 +645,14 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:,:,None] * mu_x[:,None]
-        mu_xy = numpy.concatenate([mu_x, mu_y], axis=1)
-        #Sigma_xy = numpy.empty((p_x.R, self.Dy + self.Dx, self.Dy + self.Dx))
-        Sigma_xy1 = numpy.concatenate([p_x.Sigma, numpy.swapaxes(cov_yx, axis1=1, axis2=2)], axis=2)
-        Sigma_xy2 = numpy.concatenate([cov_yx, Sigma_y], axis=2)
-        Sigma_xy = numpy.concatenate([Sigma_xy1, Sigma_xy2], axis=1)
+        mu_xy = jnp.concatenate([mu_x, mu_y], axis=1)
+        #Sigma_xy = jnp.empty((p_x.R, self.Dy + self.Dx, self.Dy + self.Dx))
+        Sigma_xy1 = jnp.concatenate([p_x.Sigma, jnp.swapaxes(cov_yx, axis1=1, axis2=2)], axis=2)
+        Sigma_xy2 = jnp.concatenate([cov_yx, Sigma_y], axis=2)
+        Sigma_xy = jnp.concatenate([Sigma_xy1, Sigma_xy2], axis=1)
         #Sigma_xy[:,:self.Dx,:self.Dx] = p_x.Sigma
         #Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
-        #Sigma_xy[:,:self.Dx,self.Dx:] = numpy.swapaxes(cov_yx, axis1=1, axis2=2)
+        #Sigma_xy[:,:self.Dx,self.Dx:] = jnp.swapaxes(cov_yx, axis1=1, axis2=2)
         #Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
         p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
@@ -662,9 +673,9 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:,:,None] * mu_x[:,None]
-        M_new = numpy.einsum('abc,abd->acd', cov_yx, Lambda_y)
-        b_new = mu_x - numpy.einsum('abc,ac->ab', M_new, mu_y)
-        Sigma_new = p_x.Sigma - numpy.einsum('abc,acd->abd', M_new, cov_yx)
+        M_new = jnp.einsum('abc,abd->acd', cov_yx, Lambda_y)
+        b_new = mu_x - jnp.einsum('abc,ac->ab', M_new, mu_y)
+        Sigma_new = p_x.Sigma - jnp.einsum('abc,acd->abd', M_new, cov_yx)
         cond_p_xy = ConditionalGaussianDensity(M=M_new, b=b_new, Sigma=Sigma_new)
         return cond_p_xy
     
@@ -687,6 +698,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         :return: GaussianDensity
             Returns the joint distribution of x,y.
         """
+
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
         return p_y

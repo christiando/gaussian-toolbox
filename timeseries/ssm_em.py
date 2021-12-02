@@ -10,12 +10,13 @@
 __author__ = "Christian Donner"
 
 from autograd import numpy
-import observation_models, state_models
+from timeseries import observation_models, state_models
 import sys
 sys.path.append('../src/')
 import densities
 import pickle
 import os
+import time
 
 def load_model(model_name: str, path: str='') -> 'StateSpaceEM':
     """ Loads state space em model.
@@ -34,7 +35,7 @@ class StateSpaceEM:
     
     def __init__(self, X: numpy.ndarray, observation_model: observation_models.ObservationModel, 
                  state_model: state_models.StateModel, max_iter: int=100, conv_crit: float=1e-3,
-                 u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
+                 u_x: numpy.ndarray=None, u_z: numpy.ndarray=None, timeit: bool=False):
         """ Class to fit a state space model with the expectation-maximization procedure.
         
         :param X: numpy.ndarray [T, Dx]
@@ -50,7 +51,9 @@ class StateSpaceEM:
         :param u_x: numpy.ndarray [T,...]
             Control variables for observation model. (Default=None)
         :param u_z: numpy.ndarray [T,...]
-            Control variables for state model. (Default=None)   
+            Control variables for state model. (Default=None)
+        :param timeit: bool
+            If true, prints the timings. (Default=False)
         """
         self.X = X
         self.T, self.Dx = self.X.shape
@@ -62,6 +65,7 @@ class StateSpaceEM:
         self.sm = state_model
         self.max_iter = max_iter
         self.conv_crit = conv_crit
+        self.timeit = timeit
         self.iteration = 0
         self.llk_list = []
         # Setup densities
@@ -90,9 +94,15 @@ class StateSpaceEM:
         """
         converged = False
         while self.iteration < self.max_iter and not converged:
+            time_start_total = time.perf_counter()
             self.estep()
+            etime = (time.perf_counter() - time_start_total)
+            time_start = time.perf_counter()
             self.llk_list.append(self.compute_log_likelihood())
+            llk_time =  (time.perf_counter() - time_start)
+            time_start = time.perf_counter()
             self.mstep()
+            mtime = (time.perf_counter() - time_start)
             if self.iteration>1:
                 conv = (self.llk_list[-1] - self.llk_list[-2]) / numpy.amax([1, 
                                                                              numpy.abs(self.llk_list[-1]), 
@@ -101,6 +111,14 @@ class StateSpaceEM:
             self.iteration += 1
             if self.iteration % 2 == 0:
                 print('Iteration %d - llk=%.1f' %(self.iteration, self.llk_list[-1]))
+            tot_time = (time.perf_counter() - time_start_total)
+            if self.timeit:
+                print('###################### \n' +
+                        'E-step: Run Time %.1f \n' %etime +
+                        'LLK: Run Time %.1f \n' %llk_time +
+                        'M-step: Run Time %.1f \n' %mtime +
+                        'Total: Run Time %.1f \n' %tot_time +
+                        '###################### \n')
         if not converged:
             print('EM reached the maximal number of iterations.')
         else:
@@ -118,7 +136,7 @@ class StateSpaceEM:
         """
         # Update parameters of state model
         self.sm.update_hyperparameters(self.smoothing_density, self.twostep_smoothing_density, u_z=self.u_z, iteration=self.iteration)
-        # Update initial latent density.
+        # Update initial latent density.Lambda
         init_smooth_density = self.smoothing_density.slice([0])
         opt_init_density = self.sm.update_init_density(init_smooth_density)
         self.filter_density.update([0], opt_init_density)
@@ -128,13 +146,14 @@ class StateSpaceEM:
     def forward_path(self):
         """ Iterates forward, alternately doing prediction and filtering step.
         """
+        cur_filter_density = self.filter_density.slice([0])
         for t in range(1, self.T+1):
-            pre_filter_density = self.filter_density.slice([t-1])
+            # pre_filter_density = self.filter_density.slice([t-1])
             if self.u_z is not None:
                 uz_t = self.u_z[t-1:t]
             else:
                 uz_t = None
-            cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
+            cur_prediction_density = self.sm.prediction(cur_filter_density, uz_t=uz_t)
             self.prediction_density.update([t], cur_prediction_density)
             if self.u_x is not None:
                 ux_t = self.u_x[t-1:t]
@@ -148,16 +167,16 @@ class StateSpaceEM:
         """
         last_filter_density = self.filter_density.slice([self.T])
         self.smoothing_density.update([self.T], last_filter_density)
-        
+        cur_smoothing_density = self.smoothing_density.slice([self.T])
         for t in numpy.arange(self.T-1,-1,-1):
             cur_filter_density = self.filter_density.slice([t])
-            post_smoothing_density = self.smoothing_density.slice([t+1])
+            # post_smoothing_density = self.smoothing_density.slice([t+1])
             if self.u_z is not None:
                 uz_t = self.u_z[t-1:t]
             else:
                 uz_t = None
             cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(cur_filter_density,
-                                                                                      post_smoothing_density,
+                                                                                      cur_smoothing_density,
                                                                                       uz_t=uz_t)
             self.smoothing_density.update([t], cur_smoothing_density)
             self.twostep_smoothing_density.update([t], cur_two_step_smoothing_density)
@@ -224,6 +243,50 @@ class StateSpaceEM:
         else:
             u_x_tmp = u_x
         return self.om.evaluate_llk(p_z, X[ignore_init_samples:], u_x=u_x_tmp)
+    
+    def compute_predictive_density(self, X: numpy.ndarray, p0: 'GaussianDensity'=None, 
+                                          u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
+        """ Computes the likelihood for given data X.
+        
+        :param X: numpy.ndarray [T, Dx]
+            Data for which likelihood is computed.
+        :param p0: GaussianDensity
+            Density for the initial latent state. If None, the initial density 
+            of the training data is taken. (Default=None)
+        :param u_x: numpy.ndarray [T, ...]
+            Control parameters for observation model. (Default=None)
+        :param u_z: numpy.ndarray [T, ...]
+            Control parameters for state model. (Default=None)
+            
+        :return: float
+            Data log likelihood.
+        """
+        T = X.shape[0]
+        if p0 is None:
+            #p0 = self.filter_density.slice([0])
+            p0 = densities.GaussianDensity(Sigma=numpy.array([numpy.eye(self.Dz)]), 
+                                           mu=numpy.zeros((1,self.Dz)))
+        prediction_density = self._setup_density(T=T+1)
+        filter_density = self._setup_density(T=T+1)
+        filter_density.update([0], p0)
+        for t in range(1, T+1):
+            # Filter
+            pre_filter_density = filter_density.slice([t-1])
+            if u_z is not None:
+                uz_t = u_z[t-1:t]
+            else:
+                uz_t = None
+            cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
+            prediction_density.update([t], cur_prediction_density)
+            if u_x is not None:
+                ux_t = u_x[t-1:t]
+            else:
+                ux_t = None
+            cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
+            filter_density.update([t], cur_filter_density)
+            
+        px = self.om.emission_density.affine_marginal_transformation(prediction_density.slice(numpy.arange(1, T+1)))
+        return px
     
     def compute_predictive_density(self, X: numpy.ndarray, p0: 'GaussianDensity'=None, 
                                           u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
