@@ -366,7 +366,7 @@ class HCCovObservationModel(LinearObservationModel):
         Q, R = np.linalg.qr(rand_mat)
         self.U = jnp.array(Q[:,:self.Du])
         #self.U = jnp.eye(Dx)[:, :Du]
-        W = 1e-4 * np.random.randn(self.Du, self.Dz + 1)
+        W = 1e-2 * np.random.randn(self.Du, self.Dz + 1)
         W[:,0] = 0
         self.W = jnp.array(W)
         self.beta = noise_x ** 2 * jnp.ones(self.Du)
@@ -379,6 +379,15 @@ class HCCovObservationModel(LinearObservationModel):
                                                                       W = self.W,
                                                                       beta = self.beta)
         
+    def lin_om_init(self, lin_om: LinearObservationModel):
+        self.sigma_x = jnp.array([jnp.sqrt(jnp.amin(lin_om.Qx.diagonal()))])
+        beta, U = jnp.linalg.eig(lin_om.Qx - self.sigma_x ** 2 * jnp.eye(self.Dx))
+        self.U = jnp.real(U[:,:self.Du])
+        self.beta = jnp.abs(jnp.real(beta[:self.Du]))
+        self.beta.at[(self.beta / self.sigma_x ** 2) < .5].set(.5 / self.sigma_x ** 2)
+        self.C = lin_om.C
+        self.d = lin_om.d
+        self.update_emission_density()
         
     def pca_init(self, X: jnp.ndarray, smooth_window: int=10):
         """ Sets the model parameters to an educated initial guess, based on principal component analysis.
@@ -445,7 +454,7 @@ class HCCovObservationModel(LinearObservationModel):
         grad_func1 = jit(value_and_grad(HCCovObservationModel.Qfunc), static_argnums=(1,6,7,8))
         func2 = jit(HCCovObservationModel.Qfunc_U_ls, static_argnums=(1,5,6,7))
         grad_func2 = jit(value_and_grad(HCCovObservationModel.Qfunc_U_ls), static_argnums=(1,5,6,7))
-        while not converged and num_iter < 50:
+        while not converged and num_iter < 200:
             val = self.step(func1, grad_func1, func2, grad_func2, phi, X, get_omegas, num_iter)
             converged = jnp.abs((val - val_old) / val_old) < 1e-5
             val_old = val
@@ -774,7 +783,7 @@ class HCCovObservationModel(LinearObservationModel):
         uC = jnp.dot(u_i.T, -C)
         ux_d = jnp.dot(u_i.T, (X - d).T)
         # Lower bound for E[ln (sigma_x^2 + f(h))]
-
+        
         omega_dagger = jnp.sqrt(phi.integrate('Ax_aBx_b_inner', A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i))
         g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
         nu_plus = (1. - g_omega[:, None] * b_i) * w_i
@@ -803,7 +812,7 @@ class HCCovObservationModel(LinearObservationModel):
         quad_int = quad_int_plus + quad_int_minus
         omega_old = omega_star
         omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
-
+        
         f_omega_dagger = HCCovObservationModel.f(omega_dagger, beta)
         log_lb = jnp.log(sigma_x ** 2 + f_omega_dagger)
         g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
