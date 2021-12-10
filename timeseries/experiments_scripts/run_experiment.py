@@ -78,8 +78,9 @@ def train_linear_hsk_SSM(x_tr, **kwargs):
     dx = x_tr.shape[1]
     sm_hs = state_models.LinearStateModel(args.dz)
     om_hs = observation_models.HCCovObservationModel(dx, args.dz, args.du)
-    if args.init_w_pca == 1:
-        om_hs.pca_init(x_tr)
+    if args.init_lin_model == 1:
+        ssm_lin = train_linear_SSM(x_tr)
+        om_hs.lin_om_init(ssm_lin.om)
     hs_model = StateSpaceEM(jnp.array(x_tr), observation_model=om_hs, state_model=sm_hs)
     hs_model.run()
     
@@ -190,10 +191,10 @@ class ARIMAX:
         
     def _train(self):
         if x_tr.shape[1] == 1:
-            self.mod = sm.tsa.statespace.SARIMAX(x_tr, trend='c', order=(self.p,0,self.q))
+            self.mod = sm.tsa.statespace.SARIMAX(x_tr, trend='c', order=(int(self.p),0,int(self.q)))
             self.fit_res = self.mod.fit(disp=False)
         else:
-            self.mod = sm.tsa.VARMAX(x_tr, trend='c', order=(self.p,self.q))
+            self.mod = sm.tsa.VARMAX(x_tr, trend='c', order=(int(self.p),int(self.q)))
             self.fit_res = self.mod.fit(disp=False, max_iter=1000)
             
     def compute_predictive_density(self, x_te):
@@ -323,6 +324,7 @@ if __name__ == "__main__":
     parser.add_argument('--du', type=int, default=1)
     parser.add_argument('--dk', type=int, default=1)
     parser.add_argument('--init_w_pca', type=int, default=0)
+    parser.add_argument('--init_lin_model', type=int, default=1)
     parser.add_argument('--results_file', type=str, default='first_results.txt')
     parser.add_argument('--exp_num', type=str, default="1")
     parser.add_argument('--num_states', type=int, default=1)
