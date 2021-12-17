@@ -176,6 +176,10 @@ class GaussianDensity(measures.GaussianMeasure):
         b_x = self.mu[:, dim_x] - jnp.einsum('abc,ac->ab', M_x, self.mu[:, dim_y])
         return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
     
+    def to_dict(self):
+        density_dict = {'Sigma': self.Sigma, 'mu': self.mu, 'Lambda': self.Lambda, 'ln_det_Sigma': self.ln_det_Sigma}
+        return density_dict
+    
 class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
     
     def __init__(self, Sigma: jnp.ndarray, mu: jnp.ndarray, Lambda: jnp.ndarray=None, ln_det_Sigma: jnp.ndarray=None):
