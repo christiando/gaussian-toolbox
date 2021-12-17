@@ -21,7 +21,7 @@ def simple_sweep(grid, prefix=""):
 
 def sweep():
     parameters = {
-        "dataset": ['sunspots'],
+        "dataset": ['synthetic'],
         "init_w_pca": [0],
         "init_lin_model": [1],
         "exp_num": ["1",],
@@ -29,18 +29,18 @@ def sweep():
         "train_ratio": [.75],
         "method": {
             "lin_ssm": {
-                "dz": list(range(1,2)),
+                "dz": list(range(1,7)),
             },
             "linear_hsk_ssm": {
-                "dz": list(range(1,2)),
-                "du": list(range(1,2))
+                "dz": list(range(1,6)),
+                "du": list(range(1,6))
             },
             "arimax" : {
-                "p_arimax": list(range(1,4)),
-                "q_arimax": list(range(1,4))
+                "p_arimax": list(range(1,8)),
+                "q_arimax": list(range(1,8))
             },
             "hmm": {
-                "num_states": list(range(1,20))
+                "num_states": list(range(1,40))
             }
             
         }
