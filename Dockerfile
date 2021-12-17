@@ -15,8 +15,8 @@ FROM ${RENKU_BASE_IMAGE}
 # except for the last end with backslash '\' to continue the RUN line
 #
 USER root
-ARG CUDA=11.1
-ARG CUDNN=8.0.5.39
+ARG CUDA=11.4
+ARG CUDNN=8.2.2
 ARG CUDNN_MAJOR_VERSION=8
 ARG LIB_DIR_PREFIX=x86_64
 
