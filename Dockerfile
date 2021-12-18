@@ -16,7 +16,7 @@ FROM ${RENKU_BASE_IMAGE}
 #
 USER root
 ENV CUDA_VERSION=11.1.1
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN /bin/sh -c apt-get update && apt-get install -y --no-install-recommends \
     cuda-cudart-11-1=11.1.74-1 \
     cuda-compat-11-1 \
     && ln -s cuda-11.1 /usr/local/cuda && \
