@@ -22,25 +22,30 @@ def simple_sweep(grid, prefix=""):
 
 def sweep():
     parameters = {
-        "dataset": ['lorenz'],
-        "init_w_pca": [1],
+        "dataset": ['synthetic'],
+        "init_w_pca": [0],
+        "init_lin_model": [1],
         "exp_num": ["1",],
         "seed" : [0],
+        "train_ratio": [.75],
         "method": {
             "hmm": {
                 "num_states": list(range(1,20))
             },
             "lin_ssm": {
-                "dz": list(range(1,4)),
+                "dz": list(range(1,7)),
             },
-            "lin_hsk_ssm": {
-                "dz": list(range(1,4)),
-                "du": list(range(1,4))
+            "linear_hsk_ssm": {
+                "dz": list(range(1,6)),
+                "du": list(range(1,6))
             },
-            "arimax": {
-                "q_arimax": list(range(1,5)),
-                "p_arimax": list(range(1,5))
+            "arimax" : {
+                "p_arimax": list(range(1,8)),
+                "q_arimax": list(range(1,8))
             },
+            "hmm": {
+                "num_states": list(range(1,40))
+            }
         }
     }
 
@@ -49,12 +54,13 @@ def sweep():
     for dataset in parameters["dataset"]:
         for method in parameters["method"]:
             for exp_num in parameters["exp_num"]:
-                for init_pca in parameters["init_w_pca"]:
-                    prefix = "python run_experiment.py --dataset {} --exp_num {} --model_name {}  --init_w_pca {} --results_file {} --train_ratio {}".format(dataset, exp_num, method, init_pca, dataset, 0.75)
-                    if len(parameters["method"][method]) == 0:
-                        commands.append(prefix)
-                    else:
-                        commands += simple_sweep(parameters["method"][method], prefix)
+                for init_lin_model in parameters["init_lin_model"]:
+                    for train_ratio in parameters["train_ratio"]:
+                        prefix = "python run_experiment.py --dataset {} --exp_num {} --model_name {}  --init_lin_model {} --train_ratio {} --results_file {}".format(dataset, exp_num, method, init_lin_model, train_ratio, dataset)
+                        if len(parameters["method"][method]) == 0:
+                            commands.append(prefix)
+                        else:
+                            commands += simple_sweep(parameters["method"][method], prefix)
 
     return commands
 

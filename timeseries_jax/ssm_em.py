@@ -261,24 +261,6 @@ class StateSpaceEM:
         p_z = self.prediction_density.slice(jnp.arange(1,self.T+1))
         return self.om.evaluate_llk(p_z, self.X, u=self.u_x)
 
-    def forward_step(self, t: int, pf_dict, X):
-        pre_filter_density = densities.GaussianDensity(**pf_dict)
-        if self.u_z is not None:
-            uz_t = self.u_z[t - 1].reshape((1,-1))
-        else:
-            uz_t = None
-        cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
-        if self.u_x is not None:
-            ux_t = self.u_x[t - 1].reshape((1,-1))
-        else:
-            ux_t = None
-        cur_filter_density = self.om.filtering(cur_prediction_density, X[t - 1][None], ux_t=ux_t)
-
-        cp_dict = {'Sigma': cur_prediction_density.Sigma, 'mu': cur_prediction_density.mu,
-                   'Lambda': cur_prediction_density.Lambda, 'ln_det_Sigma': cur_prediction_density.ln_det_Sigma}
-        cf_dict = {'Sigma': cur_filter_density.Sigma, 'mu': cur_filter_density.mu,
-                   'Lambda': cur_filter_density.Lambda, 'ln_det_Sigma': cur_filter_density.ln_det_Sigma}
-        return cf_dict, cp_dict
     
     def compute_predictive_log_likelihood(self, X: jnp.ndarray, p0: 'GaussianDensity'=None, 
                                           u_x: jnp.ndarray=None, u_z: jnp.ndarray=None,
