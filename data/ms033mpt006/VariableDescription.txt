@@ -1,0 +1,114 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+PIV data, ms***mpt***_C1C2(_C1,C2)
+wing_geometry.*		wing position and kinematics information
+xw			instantaneous main wing x position
+yw			instantaneous main wing y position
+xf			instantaneous flap x position
+yf			instantaneous flap y position
+wingAOA			main wing angle of attack extracted from cam1 PIV image
+wingAOA2		main wing angle of attack extracted from cam2 PIV image
+flapAOA			flap angle extracted from cam2 PIV image
+wingAOA_fit		fitted wingAOA2 
+flapAOA_fit		fitted flapAOA 
+curvefit_wingAOA	fitting model for wingAOA
+curvfit_flapAOA		fitting model for flapAOA
+t0			time for wing position starting from Zero
+t1			time for flap position starting from Zero
+x_offset		x offset for wing(flap) position
+y_offset		y offset for wing(flap) position
+ChordLength		airfoil chord length in minimeter
+filt_size		filter size for wingAOA,wingAOA2 and flapAOA	
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+pressure data,	ms***mpt***_pressure
+
+param.
+	     rho: air density at 35 degree temperature
+              U0: free stream velocity
+               c: airfoil chord length in meter
+              c1: airfoil chord length in minimeter
+         osci_LT: laser triagulation angles fitted parameters [a0,a1,f,t0]
+    osci_Encoder: encoder angles fitted parameters [a0,a1,f,t0]
+              a0: main wing mean angle of attack
+              a1: main wing pitching amplitude
+               f: main wing pitching frequency
+        harmonic: flap oscillates at Nth harmonic of f
+              b0: flap mean(static) angle of attack
+              b1: flap pitching amplitude
+              fp: flap pitching frequency
+       delta_phi: phase lag between the flap and the main wing
+
+
+raw.
+                   t: time in seconds
+               alpha: angle of attack from laser triagulation
+            pivstart: PIV starting frame index, trigger on index
+           tpivstart: PIV starting time, trigger on time
+                  Cp: pressure coefficients
+                 xcp: pressure tap x locations
+                 ycp: pressure tap y locations
+            Galil_NI: raw data recorded from Galil and NI Daq
+    WingshapePara_C1: Wingshape data extracted from cam1 PIV image
+    WingshapePara_C2: Wingshape data extracted from cam2 PIV image
+
+res.
+	       t: time in seconds
+          tstart: excerpt starting time, piching up and down stage discarded
+            tend: excerpt ending time, only stable oscillating stage kept
+           alpha: angle of attack from laser triagulation
+       alpha_fit: angle of attack from laser triagulation, filtered
+    alpha_theory: angle of attack, theoretical
+        dalphadt: anglular velocity
+      d2alphadt2: anglular accelaration
+           phase: phase of the pitching motion
+         cyclenr: cycle number index
+        cyclenum: total cycle number
+            beta: flap angle
+      phase_beta: flap phase
+      alpha_eff1: effective angle of attack based on geometrical information
+      alpha_eff2: effective angle of attack based on zero lift shift
+              Cl: lift coefficient
+              Cn: normal force coefficient
+              Cd: drag coefficient
+              Cm: pitching moment coefficient
+              Cp: pressure coefficient
+             xcp: pressure tap x locations
+             ycp: pressure tap y locations
+              t0: first minimum AOA time instant
+     align_alpha: compare alpha from different methods
+
+piv.
+        deltat: delta t between the piv.t and res.t (res.t=piv.t+deltat)
+             t: time in seconds
+         phase: phase
+           t_T: time with respct to periods
+            tc: time normalized by convective scale, piv.t*param.U0/param.c;
+            t0: first minimum AOA time instant
+       cyclenr: cycle number index
+            Cl: lift coefficient
+            Cm: pitching moment coefficient
+            Cp: pressure coefficient
+         alpha: AOA main wing
+          beta: flap angle
+    phase_beta: flap phase
+      alphaeff: effective angle of attack based on geometrical information
+     dalphaeff: effective angular velocity
+
+phavg. , phase averaged
+       Cl: lift coefficient
+      dCl: [1×180 double]
+    minCl: [1×180 double]
+    maxCl: [1×180 double]
+       Cm: pitching moment coefficient
+      dCm: [1×180 double]
+    minCm: [1×180 double]
+    maxCm: [1×180 double]
+       Cp: pressure coefficient
+      dCp: [36×180 double]
+    phase: phase
+      t_T: time with respct to periods, t/T belongs to [0,1]
+    alpha: AOA main wing
+        t: time in seconds
+       tc: time normalized by convective scale, phavg.t*param.U0/param.c;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

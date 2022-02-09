@@ -9,12 +9,12 @@
 
 __author__ = "Christian Donner"
 import sys
-sys.path.append('../')
+sys.path.append('../src_jax/')
 from jax import numpy as jnp
 from jax import jit
 # import numpy as np
-from timeseries_jax import observation_models, state_models
-from src_jax import densities
+import observation_models, state_models
+import densities
 import pickle
 import os
 import numpy as np
@@ -106,12 +106,12 @@ class StateSpaceEM:
             self.mstep()
             mtime = (time.perf_counter() - time_start)
             if self.iteration>3:
-                conv = (self.llk_list[-1] - self.llk_list[-4]) / jnp.amax(jnp.array([1,
+                conv = (self.llk_list[-1] - self.llk_list[-2]) / jnp.amax(jnp.array([1,
                                                                              jnp.abs(self.llk_list[-1]), 
-                                                                             jnp.abs(self.llk_list[-4])]))
+                                                                             jnp.abs(self.llk_list[-2])]))
                 converged = jnp.abs(conv) < self.conv_crit
             self.iteration += 1
-            if self.iteration % 3 == 0:
+            if self.iteration % 1 == 0:
                 print('Iteration %d - llk=%.1f' %(self.iteration, self.llk_list[-1]))
             tot_time = (time.perf_counter() - time_start_total)
             if self.timeit:
@@ -145,7 +145,7 @@ class StateSpaceEM:
         # Update parameters of observation model
         self.om.update_hyperparameters(self.smoothing_density, self.X, u_x=self.u_x, iteration=self.iteration)
 
-    def forward_step(self, t: int, pf_dict):
+    def forward_step(self, t: int, pf_dict, X: jnp.array):
         pre_filter_density = densities.GaussianDensity(**pf_dict)
         if self.u_z is not None:
             uz_t = self.u_z[t - 1].reshape((1,-1))
@@ -156,7 +156,7 @@ class StateSpaceEM:
             ux_t = self.u_x[t - 1].reshape((1,-1))
         else:
             ux_t = None
-        cur_filter_density = self.om.filtering(cur_prediction_density, self.X[t - 1][None], ux_t=ux_t)
+        cur_filter_density = self.om.filtering(cur_prediction_density, X[t - 1][None], ux_t=ux_t)
 
         cp_dict = {'Sigma': cur_prediction_density.Sigma, 'mu': cur_prediction_density.mu,
                    'Lambda': cur_prediction_density.Lambda, 'ln_det_Sigma': cur_prediction_density.ln_det_Sigma}
@@ -170,7 +170,7 @@ class StateSpaceEM:
         """
         cf_dict = {'Sigma': self.filter_density.Sigma[:1], 'mu': self.filter_density.mu[:1],
                    'Lambda': self.filter_density.Lambda[:1], 'ln_det_Sigma': self.filter_density.ln_det_Sigma[:1]}
-        forward_step = jit(lambda t, cf: self.forward_step(t, cf))
+        forward_step = jit(lambda t, cf: self.forward_step(t, cf, self.X))
         Sigma_p, mu_p, Lambda_p, ln_det_Sigma_p = np.array(self.prediction_density.Sigma), \
                                                   np.array(self.prediction_density.mu), \
                                                   np.array(self.prediction_density.Lambda), \
@@ -195,7 +195,7 @@ class StateSpaceEM:
                                                             jnp.asarray(Lambda_f), jnp.asarray(ln_det_Sigma_f))
 
 
-    def backward_step(self, t: int, ps_dict: dict):
+    def backward_step(self, t: int, ps_dict: dict, X: jnp.array):
         cur_filter_density = self.filter_density.slice(jnp.array([t]))
         post_smoothing_density = densities.GaussianDensity(**ps_dict)
         if self.u_z is not None:
@@ -229,7 +229,7 @@ class StateSpaceEM:
                                                   np.array(self.twostep_smoothing_density.Lambda), \
                                                   np.array(self.twostep_smoothing_density.ln_det_Sigma)
 
-        backward_step = jit(lambda t, cs: self.backward_step(t, cs))
+        backward_step = jit(lambda t, cs: self.backward_step(t, cs, self.X))
         for t in jnp.arange(self.T-1, -1, -1):
             cs_dict, ctss_dict = backward_step(t, cs_dict)
             Sigma_s[t] = cs_dict['Sigma']
@@ -261,24 +261,6 @@ class StateSpaceEM:
         p_z = self.prediction_density.slice(jnp.arange(1,self.T+1))
         return self.om.evaluate_llk(p_z, self.X, u=self.u_x)
 
-    def forward_step(self, t: int, pf_dict):
-        pre_filter_density = densities.GaussianDensity(**pf_dict)
-        if self.u_z is not None:
-            uz_t = self.u_z[t - 1].reshape((1,-1))
-        else:
-            uz_t = None
-        cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
-        if self.u_x is not None:
-            ux_t = self.u_x[t - 1].reshape((1,-1))
-        else:
-            ux_t = None
-        cur_filter_density = self.om.filtering(cur_prediction_density, self.X[t - 1][None], ux_t=ux_t)
-
-        cp_dict = {'Sigma': cur_prediction_density.Sigma, 'mu': cur_prediction_density.mu,
-                   'Lambda': cur_prediction_density.Lambda, 'ln_det_Sigma': cur_prediction_density.ln_det_Sigma}
-        cf_dict = {'Sigma': cur_filter_density.Sigma, 'mu': cur_filter_density.mu,
-                   'Lambda': cur_filter_density.Lambda, 'ln_det_Sigma': cur_filter_density.ln_det_Sigma}
-        return cf_dict, cp_dict
     
     def compute_predictive_log_likelihood(self, X: jnp.ndarray, p0: 'GaussianDensity'=None, 
                                           u_x: jnp.ndarray=None, u_z: jnp.ndarray=None,
@@ -307,18 +289,18 @@ class StateSpaceEM:
                                            mu=jnp.zeros((1,self.Dz)))
         prediction_density = self._setup_density(T=T+1)
         filter_density = self._setup_density(T=T+1)
-        filter_density.update([0], p0)
+        filter_density.update(jnp.array([0]), p0)
 
         cf_dict = {'Sigma': filter_density.Sigma[:1], 'mu': filter_density.mu[:1],
                    'Lambda': filter_density.Lambda[:1], 'ln_det_Sigma': filter_density.ln_det_Sigma[:1]}
-        forward_step = jit(lambda t, cf: self.forward_step(t, cf))
+        forward_step = jit(lambda t, cf: self.forward_step(t, cf, X))
 
         Sigma_p, mu_p, Lambda_p, ln_det_Sigma_p = np.array(prediction_density.Sigma), \
                                                   np.array(prediction_density.mu), \
                                                   np.array(prediction_density.Lambda), \
                                                   np.array(prediction_density.ln_det_Sigma)
 
-        for t in range(1, self.T+1):
+        for t in range(1, T+1):
             cf_dict, cp_dict = forward_step(t, cf_dict)
             Sigma_p[t] = cp_dict['Sigma']
             mu_p[t] = cp_dict['mu']
@@ -327,14 +309,14 @@ class StateSpaceEM:
 
         prediction_density = densities.GaussianDensity(jnp.asarray(Sigma_p), jnp.asarray(mu_p),
                                                        jnp.asarray(Lambda_p), jnp.asarray(ln_det_Sigma_p))
-        p_z = prediction_density.slice(range(1+ignore_init_samples,T+1))
+        p_z = prediction_density.slice(jnp.arange(1+ignore_init_samples,T+1))
         if u_x is not None:
             u_x_tmp = u_x[ignore_init_samples:]
         else:
             u_x_tmp = u_x
         return self.om.evaluate_llk(p_z, X[ignore_init_samples:], u_x=u_x_tmp)
 
-    def gappy_forward_step(self, t: int, pf_dict):
+    def gappy_forward_step(self, t: int, pf_dict, X):
         pre_filter_density = densities.GaussianDensity(**pf_dict)
         if self.u_z is not None:
             uz_t = self.u_z[t - 1].reshape((1,-1))
@@ -345,7 +327,7 @@ class StateSpaceEM:
             ux_t = self.u_x[t - 1].reshape((1,-1))
         else:
             ux_t = None
-        cur_filter_density = self.om.gappy_filtering(cur_prediction_density, self.X[t - 1][None], ux_t=ux_t)
+        cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t - 1][None], ux_t=ux_t)
 
         cp_dict = {'Sigma': cur_prediction_density.Sigma, 'mu': cur_prediction_density.mu,
                    'Lambda': cur_prediction_density.Lambda, 'ln_det_Sigma': cur_prediction_density.ln_det_Sigma}
@@ -378,16 +360,16 @@ class StateSpaceEM:
         filter_density = self._setup_density(T=T+1)
         filter_density.update(jnp.array([0]), p0)
 
-        Sigma_p, mu_p, Lambda_p, ln_det_Sigma_p = np.array(self.prediction_density.Sigma), \
-                                                  np.array(self.prediction_density.mu), \
-                                                  np.array(self.prediction_density.Lambda), \
-                                                  np.array(self.prediction_density.ln_det_Sigma)
+        Sigma_p, mu_p, Lambda_p, ln_det_Sigma_p = np.array(filter_density.Sigma), \
+                                                  np.array(filter_density.mu), \
+                                                  np.array(filter_density.Lambda), \
+                                                  np.array(filter_density.ln_det_Sigma)
 
         cf_dict = {'Sigma': filter_density.Sigma[:1], 'mu': filter_density.mu[:1],
                    'Lambda': filter_density.Lambda[:1], 'ln_det_Sigma': filter_density.ln_det_Sigma[:1]}
 
         for t in range(1, T+1):
-            cf_dict, cp_dict = self.gappy_forward_step(t, cf_dict)
+            cf_dict, cp_dict = self.gappy_forward_step(t, cf_dict, X)
             Sigma_p[t] = cp_dict['Sigma']
             mu_p[t] = cp_dict['mu']
             Lambda_p[t] = cp_dict['Lambda']
@@ -465,7 +447,7 @@ class StateSpaceEM:
             # Initialize smoothing
             smoothing_density = self._setup_density(T=T+1)
             cur_smoothing_density = filter_density.slice([T])
-            smoothing_density.update([T], cur_smoothing_density)
+            smoothing_density.update(jnp.array([T]), cur_smoothing_density)
             Sigma_s, mu_s, Lambda_s, ln_det_Sigma_s = np.array(smoothing_density.Sigma), \
                                                       np.array(smoothing_density.mu), \
                                                       np.array(smoothing_density.Lambda), \

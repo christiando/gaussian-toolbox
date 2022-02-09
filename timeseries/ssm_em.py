@@ -12,8 +12,8 @@ __author__ = "Christian Donner"
 from autograd import numpy
 from timeseries import observation_models, state_models
 import sys
-sys.path.append('../')
-from src import densities
+sys.path.append('../src/')
+import densities
 import pickle
 import os
 import time
@@ -243,6 +243,50 @@ class StateSpaceEM:
         else:
             u_x_tmp = u_x
         return self.om.evaluate_llk(p_z, X[ignore_init_samples:], u_x=u_x_tmp)
+    
+    def compute_predictive_density(self, X: numpy.ndarray, p0: 'GaussianDensity'=None, 
+                                          u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):
+        """ Computes the likelihood for given data X.
+        
+        :param X: numpy.ndarray [T, Dx]
+            Data for which likelihood is computed.
+        :param p0: GaussianDensity
+            Density for the initial latent state. If None, the initial density 
+            of the training data is taken. (Default=None)
+        :param u_x: numpy.ndarray [T, ...]
+            Control parameters for observation model. (Default=None)
+        :param u_z: numpy.ndarray [T, ...]
+            Control parameters for state model. (Default=None)
+            
+        :return: float
+            Data log likelihood.
+        """
+        T = X.shape[0]
+        if p0 is None:
+            #p0 = self.filter_density.slice([0])
+            p0 = densities.GaussianDensity(Sigma=numpy.array([numpy.eye(self.Dz)]), 
+                                           mu=numpy.zeros((1,self.Dz)))
+        prediction_density = self._setup_density(T=T+1)
+        filter_density = self._setup_density(T=T+1)
+        filter_density.update([0], p0)
+        for t in range(1, T+1):
+            # Filter
+            pre_filter_density = filter_density.slice([t-1])
+            if u_z is not None:
+                uz_t = u_z[t-1:t]
+            else:
+                uz_t = None
+            cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
+            prediction_density.update([t], cur_prediction_density)
+            if u_x is not None:
+                ux_t = u_x[t-1:t]
+            else:
+                ux_t = None
+            cur_filter_density = self.om.gappy_filtering(cur_prediction_density, X[t-1:t], ux_t=ux_t)
+            filter_density.update([t], cur_filter_density)
+            
+        px = self.om.emission_density.affine_marginal_transformation(prediction_density.slice(numpy.arange(1, T+1)))
+        return px
     
     def compute_predictive_density(self, X: numpy.ndarray, p0: 'GaussianDensity'=None, 
                                           u_x: numpy.ndarray=None, u_z: numpy.ndarray=None):

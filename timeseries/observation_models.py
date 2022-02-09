@@ -523,8 +523,12 @@ class HCCovObservationModel(LinearObservationModel):
         x0 = numpy.concatenate([numpy.array([numpy.log(self.sigma_x ** 2)]), numpy.log(self.beta) - numpy.log(self.sigma_x ** 2), self.W.flatten()])
         bounds = [(None, 10)] + [(numpy.log(.25), 10)] * self.Du + [(None,None)] * (self.Du * (self.Dz + 1))
         objective = lambda x: self.parameter_optimization_sigma_beta_W(x, smoothing_density, X)
+<<<<<<< HEAD
+        result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds, options={'disp': False, 'maxiter': 10})
+=======
         result = minimize(objective, x0, jac=True, method='L-BFGS-B', bounds=bounds,
                           options={'disp': False, 'maxiter': 10})
+>>>>>>> jax
         #print(result)
         #if not result.success:
         #    raise RuntimeError('Sigma, beta, W did not converge!!')

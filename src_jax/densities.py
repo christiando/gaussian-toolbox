@@ -10,7 +10,8 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 import numpy as np
-from . import measures
+#from . 
+import measures
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     
@@ -166,7 +167,7 @@ class GaussianDensity(measures.GaussianMeasure):
         :return: ConditionalGaussianDensity
             The corresponding conditional Gaussian density p(x|y).
         """
-        from . import conditionals
+        import conditionals
         dim_xy = jnp.arange(self.D)
         dim_x = dim_xy[jnp.logical_not(jnp.isin(dim_xy, dim_y))]
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
@@ -174,6 +175,26 @@ class GaussianDensity(measures.GaussianMeasure):
         M_x = -jnp.einsum('abc,acd->abd', Sigma_x, self.Lambda[:,dim_x][:,:,dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum('abc,ac->ab', M_x, self.mu[:, dim_y])
         return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
+    
+    def condition_on_explicit(self, dim_y: list, dim_x: list) -> 'ConditionalGaussianDensity':
+        """ Returns density conditioned on indicated dimensions, i.e. p(x|y).
+        
+        :param dim_y: list
+            The dimensions of the variables, that should be conditioned on.
+        
+        :return: ConditionalGaussianDensity
+            The corresponding conditional Gaussian density p(x|y).
+        """
+        import conditionals
+        Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
+        Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
+        M_x = -jnp.einsum('abc,acd->abd', Sigma_x, self.Lambda[:,dim_x][:,:,dim_y])
+        b_x = self.mu[:, dim_x] - jnp.einsum('abc,ac->ab', M_x, self.mu[:, dim_y])
+        return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
+    
+    def to_dict(self):
+        density_dict = {'Sigma': self.Sigma, 'mu': self.mu, 'Lambda': self.Lambda, 'ln_det_Sigma': self.ln_det_Sigma}
+        return density_dict
     
 class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
     
