@@ -9,12 +9,13 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
-import factors
+from . import factors
 from jax.scipy.special import logsumexp
+from typing import Iterable, Tuple
 
 class GaussianMixtureMeasure:
     
-    def __init__(self, components: ['GaussianMeasure'], weights: jnp.ndarray=None):
+    def __init__(self, components: Iterable['GaussianMeasure'], weights: jnp.ndarray=None):
         """ Class of mixture of Gaussian measures
         
             u(x) = sum_i w_i * u_i(x)
@@ -335,7 +336,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         return densities.GaussianDensity(Sigma=self.Sigma, mu=self.mu, Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
             
         
-    def _get_default(self, mat, vec) -> (jnp.ndarray, jnp.ndarray):
+    def _get_default(self, mat, vec) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """ Small method to get default matrix and vector.
         """
         if mat is None:
@@ -1009,7 +1010,7 @@ class GaussianDiagMeasure(GaussianMeasure):
         self.ln_det_Sigma = -self.ln_det_Lambda   
         
     @staticmethod
-    def invert_diagonal(A: jnp.ndarray) -> (jnp.ndarray,jnp.ndarray):
+    def invert_diagonal(A: jnp.ndarray) -> Tuple[jnp.ndarray,jnp.ndarray]:
         A_inv = jnp.concatenate([jnp.diag(mat)[None] for mat in  1./A.diagonal(axis1=1, axis2=2)], axis=0)
         ln_det_A = jnp.sum(jnp.log(A.diagonal(axis1=1, axis2=2)), axis=1)
         return A_inv, ln_det_A

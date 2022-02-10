@@ -10,6 +10,7 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from jax import scipy as jsc
+from typing import Tuple
 
 class ConjugateFactor:
     
@@ -140,7 +141,7 @@ class ConjugateFactor:
         return new_density_dict
         
     @staticmethod
-    def invert_matrix(A: jnp.ndarray) -> (jnp.ndarray, jnp.ndarray):
+    def invert_matrix(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         L = jsc.linalg.cho_factor(A)
         # TODO: Check whether we can make it mor efficienty with solve_triangular.
         #L_inv = solve_triangular(L, jnp.eye(L.shape[0]), lower=True,

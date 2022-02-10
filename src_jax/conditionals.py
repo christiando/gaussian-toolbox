@@ -12,7 +12,8 @@ __author__ = "Christian Donner"
 #import jnp
 #from densities import GaussianDensity
 from jax import numpy as jnp
-import densities, factors
+from typing import Tuple
+from . import densities, factors
 
 class ConditionalGaussianDensity:
     
@@ -104,7 +105,7 @@ class ConditionalGaussianDensity:
         return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new)
         
     @staticmethod
-    def invert_matrix(A: jnp.ndarray) -> (jnp.ndarray, jnp.ndarray):
+    def invert_matrix(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         L = jnp.linalg.cholesky(A)
         # TODO: Check whether we can make it mor efficienty with solve_triangular.
         #L_inv = solve_triangular(L, jnp.eye(L.shape[0]), lower=True,

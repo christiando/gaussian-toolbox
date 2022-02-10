@@ -10,12 +10,13 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 import numpy as np
+from typing import Iterable
 #from . 
-import measures
+from . import measures
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     
-    def __init__(self, components: ['GaussianDensities'], weights: jnp.ndarray=None):
+    def __init__(self, components: Iterable['GaussianDensities'], weights: jnp.ndarray=None):
         """ Class of mixture of Gaussian measures
         
             u(x) = sum_i w_i * u_i(x)
