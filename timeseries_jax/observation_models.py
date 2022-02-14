@@ -471,17 +471,12 @@ class HCCovObservationModel(LinearObservationModel):
         params = HCCovObservationModel.params_to_vector(self.C, self.d, self.sigma_x, self.beta, self.W)
         val, euclid_grad = self.grad_func1(params, phi_dict, X, self.U, omega_dagger, omega_star, self.Dx, self.Dz, self.Du)
         params_new = self.euclid_step(params, euclid_grad, phi_dict, X)
-        #params_new = self.apply_step(params, euclid_grad, step_size, phi, X, get_omegas)
         C, d, sigma_x, beta, W = HCCovObservationModel.vector_to_params(params_new, self.Dx, self.Dz, self.Du)
         self.C = C
         self.d = d
         self.sigma_x = sigma_x
         self.beta = beta
         self.W = W
-        #dW = W - self.W
-        #dW = dW.at[dW > .005].set(.005)
-        #dW = dW.at[dW < -.005].set(-.005)
-        #self.W += dW
         if self.Dx > 1:
             omega_dagger, omega_star, num_iter = self.get_omegas(phi_dict, X, self.W, self.U, self.beta, self.C, self.d, self.sigma_x)
             val, euclid_grad_U = self.grad_func2(self.U, phi_dict, X, omega_dagger, omega_star, self.Dx, self.Dz, self.Du, self.C, self.d, self.sigma_x, self.beta, self.W)
@@ -533,11 +528,6 @@ class HCCovObservationModel(LinearObservationModel):
             num_params = (self.Dz + 1) * self.Dx
             cur_params = self.Dx * self.Du
             params = params.at[jnp.arange(num_params, num_params + cur_params)].set(1)
-        #num_params = (self.Dz + 1) * self.Dx + self.Dx * self.Du + 1
-        #cur_params = self.Du
-        #ln_y = params[jnp.arange(num_params, num_params + cur_params)]
-        #ln_y = ln_y.at[ln_y < jnp.log(.25)].set(jnp.log(.25))
-        #params = params.at[jnp.arange(num_params, num_params + cur_params)].set(ln_y)
         return params
 
     @staticmethod
@@ -600,103 +590,6 @@ class HCCovObservationModel(LinearObservationModel):
         Qm = Qm - .5 * E_ln_sigma2_f + .5 * T * (Du - Dx) * jnp.log(sigma_x ** 2)
         return jnp.squeeze(Qm) / T
 
-    def update_U4(self, phi: 'GaussianDensity', X: jnp.ndarray, get_omegas):
-        """ Updates the `U` by maximizing the Q-function. One component at a time is updated analytically.
-
-        :param smoothing_density: GaussianDensity
-            The smoothing density obtained in the E-step.
-        :param X: numpy.ndarray [T, Dx]
-            Data.
-        """
-        converged = False
-        T = X.shape[0]
-        get_R = lambda U, omega_star: vmap(HCCovObservationModel.get_R,
-                                           in_axes=(None, None, 0, 0, 1, 0, None, None, None), axis_name='i')(phi, X,
-                                                                                                              self.W,
-                                                                                                              self.beta,
-                                                                                                              U,
-                                                                                                              omega_star,
-                                                                                                              self.C,
-                                                                                                              self.d,
-                                                                                                              self.sigma_x)
-        get_omegas_U = lambda U: get_omegas(phi, X, self.W, U, self.beta, self.C, self.d, self.sigma_x)[1]
-        omega_star = get_omegas_U(self.U)
-        R = get_R(self.U, omega_star)
-        num_iter = 0
-        Q_u = jnp.sum(jnp.einsum('ab,ba->a', self.U, jnp.einsum('abc,ca->ab', R, self.U)))
-        U_new = self.U
-        Q_u_old_old = Q_u
-        while not converged and num_iter < 50:
-            # print(Q_u)
-            U_old = U_new
-            for iu in range(self.Du):
-                U_not_i = jnp.delete(U_new, jnp.array([iu]), axis=1)
-                V = self.partial_gs(U_not_i)
-                # A = numpy.hstack([U_not_i, numpy.eye(self.Dx)[:,-self.Du-1:]])
-                # V_full = numpy.linalg.qr(A)[0]
-                # print(numpy.dot(V_full[:,:-self.Du-1].T, U_not_i))
-                # V = V_full[:,-self.Du-1:]
-                VRV = jnp.dot(jnp.dot(V.T, R[iu]), V)
-                # VRV /= jnp.amax(VRV)
-                # alpha = scipy.linalg.eigh(VRV, eigvals=(VRV.shape[0]-1,VRV.shape[0]-1))[1]
-                alpha = jnp.real(jnp.linalg.eig(VRV)[1][:, :1])
-                u_new = jnp.dot(V, alpha)[:, 0]
-                if jnp.allclose(jnp.dot(U_not_i.T, u_new), 0, rtol=1e-4):
-                    U_new = U_new.at[:, iu].set(u_new)
-                else:
-                    print('Warning: U not orthonormal')
-            Q_u_old = Q_u
-            Q_u = jnp.sum(jnp.einsum('ab,ba->a', U_new, jnp.einsum('abc,ca->ab', R, U_new)))
-            converged = (Q_u - Q_u_old) < 1e-4
-            num_iter += 1
-        if (Q_u - Q_u_old_old) < 0:
-            self.U = U_new
-            print(jnp.dot(self.U.T, self.U))
-
-
-
-    def update_U2(self, phi: 'GaussianDensity', X: jnp.ndarray):
-        """ Updates the `U` by maximizing the Q-function. One component at a time is updated analytically.
-        
-        :param smoothing_density: GaussianDensity
-            The smoothing density obtained in the E-step.
-        :param X: jnp.ndarray [T, Dx]
-            Data.
-        """
-        R = vmap(HCCovObservationModel.get_R, in_axes=(None, None, 0, 0, None, None, None),
-                                        axis_name='i')(phi, X, self.W, self.beta, self.C, self.d,
-                                                       self.sigma_x)
-        U_new = jnp.empty(self.U.shape)
-
-        for iu in range(self.Du):
-            R_tmp = R[iu] / jnp.amax(R[iu])
-            if iu > 0:
-                U_not_i = U_new[:,:iu]
-                # print(U_not_i)
-                V = self.partial_gs(U_not_i)
-                # A = jnp.hstack([U_not_i, jnp.eye(self.Dx)[:,-self.Du-1:]])
-                # V_full = jnp.linalg.qr(A)[0]
-                # print(jnp.dot(V_full[:,:-self.Du-1].T, U_not_i))
-                # V = V_full[:,-self.Du-1:]
-                # print(V)
-                VRV = jnp.dot(jnp.dot(V.T, R_tmp), V)
-                VRV /= jnp.amax(VRV)
-                # alpha = scipy.linalg.eigh(VRV, eigvals=(VRV.shape[0]-1,VRV.shape[0]-1))[1]
-                alpha = jnp.real(jnp.linalg.eig(VRV)[1])[:, :1]
-                u_new = jnp.dot(V, alpha)[:, 0]
-            else:
-                u_new = jnp.real(jnp.linalg.eig(R_tmp)[1])[:, 0]
-            # U_new = jnp.copy(self.U)
-            # print(u_new)
-            U_new = U_new.at[:, iu].set(u_new)
-
-        if jnp.allclose(jnp.dot(U_new.T, U_new), jnp.eye(self.Du)):
-            self.U = U_new
-        else:
-            print('Warning: U not orthonormal')
-        # Q_u = jnp.sum(jnp.einsum('ab,ba->a', self.U, jnp.einsum('abc,ca->ab', R, self.U)))
-
-
     ###################### Lower bound functions #######################################################################
     @staticmethod
     def get_omegas_i(phi_dict: dict, X: jnp.ndarray, W_i, u_i, beta, C, d, sigma_x, conv_crit: float = 1e-3):
@@ -714,38 +607,6 @@ class HCCovObservationModel(LinearObservationModel):
         #omega_star = omega_star_init
         omega_old = 10 * jnp.ones(T)
         
-        """
-        @vmap
-        @grad
-        def get_qt(omega_star):
-            # From the lower bound term
-            g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
-            nu_plus = (1. - g_omega[:, None] * b_i) * w_i
-            nu_minus = (-1. - g_omega[:, None] * b_i) * w_i
-            ln_beta = - jnp.log(sigma_x ** 2 + HCCovObservationModel.f(omega_star, beta)) - .5 * g_omega * (
-                    b_i ** 2 - omega_star ** 2) + jnp.log(beta)
-            ln_beta_plus = ln_beta + b_i
-            ln_beta_minus = ln_beta - b_i
-            # Create OneRankFactors
-            exp_factor_plus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus)
-            exp_factor_minus = factors.OneRankFactor(v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus)
-            # Create the two measures
-            exp_phi_plus = phi.hadamard(exp_factor_plus, update_full=True)
-            exp_phi_minus = phi.hadamard(exp_factor_minus, update_full=True)
-            quad_int_plus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T)
-            quad_int_minus = exp_phi_minus.integrate('Ax_aBx_b_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T)
-            quad_int = quad_int_plus + quad_int_minus
-            return jnp.sum(quad_int)
-        
-        def body_fun(omegas):
-            omega_star, omega_old, num_iter = omegas
-            # From the lower bound term
-            domega = get_qt(omega_star)
-            omega_old = omega_star
-            omega_star += step_size * domega
-            num_iter = num_iter + 1
-            return omega_star, omega_old, num_iter
-        """
         def body_fun(omegas):
             omega_star, omega_old, num_iter = omegas
             # From the lower bound term
@@ -832,7 +693,6 @@ class HCCovObservationModel(LinearObservationModel):
         quad_int_plus = exp_phi_plus.integrate('Ax_aBx_b_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T)
         quad_int_minus = exp_phi_minus.integrate('Ax_aBx_b_inner', A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T)
         quad_int = quad_int_plus + quad_int_minus
-        omega_old = omega_star
         omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
         f_omega_dagger = HCCovObservationModel.f(omega_dagger, beta)
         log_lb = jnp.log(sigma_x ** 2 + f_omega_dagger)
@@ -893,66 +753,6 @@ class HCCovObservationModel(LinearObservationModel):
         R = .5 * (R + R.T)
         return R
 
-    ####################### FUNCTIONS FOR OPTIMIZING U ################################################
-    @staticmethod
-    def gen_lin_ind_vecs(U):
-        """ Generates linearly independent vectors from U.
-        
-        :param U: jnp.ndarray [N,M]
-            Set of M vectors.
-        
-        :return: jnp.ndarray [N,N-M]
-            return N-M linear inpendent vectors.
-        """
-        N, M = U.shape
-        rand_vecs = jnp.array(np.random.rand(N, N - M))
-        V_fixed = jnp.hstack([U, rand_vecs])
-        V = V_fixed
-        for m in range(N - M):
-            v = rand_vecs[:,m]
-            V = V.at[:,M+m].add(-jnp.dot(V_fixed.T, v) / jnp.sqrt(jnp.sum(v ** 2)))
-        return V[:,M:]
-    
-    @staticmethod
-    def proj(U, v):
-        """ Projects v on U.
-        
-            proj_U(v) = (vU)/|U| U'
-            
-        :param U: jnp.ndarray [N,M]
-            Set of M vectors.
-        :param v: jnp.ndarray [N]
-            Vector U is projected on.
-        
-        :return: jnp.ndarray [N]
-            Projection of v on U.
-        """
-        return jnp.dot(jnp.dot(v, U) / jnp.linalg.norm(U, axis=0), U.T)
-
-    def partial_gs(self, U):
-        """ Partial Gram-Schmidt process, which generates orthonormal vectors (also to U).
-        
-        :param U: jnp.ndarray [N,M]
-            Set of M orthonormal vectors.
-            
-        :return: jnp.ndarray [N,N-M]
-            Orthonormal vectors (orthonormal to itself and U).
-        """
-        N, M = U.shape
-        V = jnp.empty((N, N - M))
-        I = jnp.tril(np.random.randn(N, N - M), -1)
-        I = I + jnp.eye(N)[:,:N - M]
-        # I = jnp.tri(N,N-M)
-        #
-        # I = self.gen_lin_ind_vecs(U)#jnp.random.randn(N,N-M)
-        # I = jnp.eye(N)[:,M:]
-        #I[-1,0] = 1
-        for d in range(N - M):
-            v = I[:,d]
-            V = V.at[:,d].set(v - self.proj(U, v) - self.proj(V[:,:d], v))
-            V = V.at[:,d].set(V[:,d] / jnp.sqrt(jnp.sum(V[:,d] ** 2)))
-        return V
-    
     ####################### Functions for bounds of non tractable terms in the Q-function ################################################  
     @staticmethod
     def f(h, beta):

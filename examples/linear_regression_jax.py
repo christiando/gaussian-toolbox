@@ -1,10 +1,9 @@
 # %%
 import sys
-from xml.etree.ElementPath import xpath_tokenizer
 sys.path.append('../')
-from jax import numpy as jnp, jit
+from jax import numpy as jnp
 import numpy as np
-from src_jax import factors, densities, measures, conditionals
+from src_jax import factors, densities, conditionals
 from matplotlib import pyplot as plt
 from typing import Tuple
 
@@ -168,3 +167,4 @@ if __name__=='__main__':
     plt.ylabel('y')
     plt.title('Data space')
     plt.show()
+# %%

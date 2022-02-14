@@ -12,7 +12,7 @@ from jax import numpy as jnp
 import numpy as np
 from typing import Iterable
 #from . 
-from . import measures
+from src_jax import measures
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     
@@ -107,7 +107,7 @@ class GaussianDensity(measures.GaussianMeasure):
             The samples.
         """
         L = jnp.linalg.cholesky(self.Sigma)
-        rand_nums = jnp.random.randn(num_samples, self.R, self.D)
+        rand_nums = jnp.array(np.random.randn(num_samples, self.R, self.D))
         x_samples = self.mu[None] + jnp.einsum('abc,dac->dab', L, rand_nums)
         return x_samples
     
@@ -168,7 +168,7 @@ class GaussianDensity(measures.GaussianMeasure):
         :return: ConditionalGaussianDensity
             The corresponding conditional Gaussian density p(x|y).
         """
-        import conditionals
+        from src_jax import conditionals
         dim_xy = jnp.arange(self.D)
         dim_x = dim_xy[jnp.logical_not(jnp.isin(dim_xy, dim_y))]
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
@@ -186,7 +186,7 @@ class GaussianDensity(measures.GaussianMeasure):
         :return: ConditionalGaussianDensity
             The corresponding conditional Gaussian density p(x|y).
         """
-        import conditionals
+        from src_jax import conditionals
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
         Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
         M_x = -jnp.einsum('abc,acd->abd', Sigma_x, self.Lambda[:,dim_x][:,:,dim_y])

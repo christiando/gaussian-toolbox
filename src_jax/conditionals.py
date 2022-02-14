@@ -13,7 +13,7 @@ __author__ = "Christian Donner"
 #from densities import GaussianDensity
 from jax import numpy as jnp
 from typing import Tuple
-from . import densities, factors
+from src_jax import densities, factors
 
 class ConditionalGaussianDensity:
     

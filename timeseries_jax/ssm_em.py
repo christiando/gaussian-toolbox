@@ -9,12 +9,12 @@
 
 __author__ = "Christian Donner"
 import sys
-sys.path.append('../src_jax/')
+sys.path.append('../')
 from jax import numpy as jnp
 from jax import jit
 # import numpy as np
-import observation_models, state_models
-import densities
+from timeseries_jax import observation_models, state_models
+from src_jax import densities
 import pickle
 import os
 import numpy as np
@@ -446,7 +446,7 @@ class StateSpaceEM:
         else:
             # Initialize smoothing
             smoothing_density = self._setup_density(T=T+1)
-            cur_smoothing_density = filter_density.slice([T])
+            cur_smoothing_density = filter_density.slice(jnp.array([T]))
             smoothing_density.update(jnp.array([T]), cur_smoothing_density)
             Sigma_s, mu_s, Lambda_s, ln_det_Sigma_s = np.array(smoothing_density.Sigma), \
                                                       np.array(smoothing_density.mu), \
@@ -455,7 +455,7 @@ class StateSpaceEM:
 
             for t in jnp.arange(T-1,-1,-1):
                 # Smoothing step
-                cur_filter_density = filter_density.slice([t])
+                cur_filter_density = filter_density.slice(jnp.array([t]))
                 if u_z is not None:
                     uz_t = u_z[t-1].reshape((1,-1))
                 else:

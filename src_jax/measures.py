@@ -9,7 +9,7 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
-from . import factors
+from src_jax import factors
 from jax.scipy.special import logsumexp
 from typing import Iterable, Tuple
 
