@@ -9,6 +9,7 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
+from jax import lax, random
 import numpy as np
 from typing import Iterable
 #from . 
@@ -72,7 +73,7 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
 
 class GaussianDensity(measures.GaussianMeasure):
     
-    def __init__(self, Sigma: jnp.ndarray, mu: jnp.ndarray, Lambda: jnp.ndarray=None, ln_det_Sigma: jnp.ndarray=None):
+    def __init__(self, Sigma: jnp.ndarray, mu: jnp.ndarray, Lambda: jnp.ndarray=None, ln_det_Sigma: jnp.ndarray=None, init_key: int=0):
         """ A normalized Gaussian density, with specified mean and covariance matrix.
         
         :param Sigma: jnp.ndarray [R, D, D]
@@ -96,6 +97,7 @@ class GaussianDensity(measures.GaussianMeasure):
         self.ln_det_Lambda = -ln_det_Sigma
         self._prepare_integration()
         self.normalize()
+        self.key = random.PRNGKey(init_key)
         
     def sample(self, num_samples: int) -> jnp.ndarray:
         """ Generates samples from the Gaussian density.
@@ -106,8 +108,9 @@ class GaussianDensity(measures.GaussianMeasure):
         :return: jnp.ndarray [num_samples, R, D]
             The samples.
         """
+        self.key, subkey = random.split(self.key)
+        rand_nums = random.normal(subkey, (num_samples, self.R, self.D))
         L = jnp.linalg.cholesky(self.Sigma)
-        rand_nums = jnp.array(np.random.randn(num_samples, self.R, self.D))
         x_samples = self.mu[None] + jnp.einsum('abc,dac->dab', L, rand_nums)
         return x_samples
     
@@ -124,6 +127,10 @@ class GaussianDensity(measures.GaussianMeasure):
         Sigma_new = self.Sigma[indices]
         mu_new = self.mu[indices]
         ln_det_Sigma_new = self.ln_det_Sigma[indices]
+        #Lambda_new = lax.dynamic_index_in_dim(self.Lambda, indices, axis=0)
+        #Sigma_new = lax.dynamic_index_in_dim(self.Sigma, indices, axis=0)
+        #mu_new = lax.dynamic_index_in_dim(self.mu, indices, axis=0)
+        #ln_det_Sigma_new = lax.dynamic_index_in_dim(self.ln_det_Sigma, indices, axis=0)
         new_measure = GaussianDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
     
@@ -142,6 +149,13 @@ class GaussianDensity(measures.GaussianMeasure):
         self.lnZ = self.lnZ.at[indices].set(density.lnZ)
         self.nu = self.nu.at[indices].set(density.nu)
         self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)
+        #self.Lambda = lax.dynamic_update_index_in_dim(self.Lambda, density.Lambda, indices, 0)
+        #self.Sigma = lax.dynamic_update_index_in_dim(self.Sigma, density.Sigma, indices, 0)
+        #self.mu = lax.dynamic_update_index_in_dim(self.mu, density.mu, indices, 0)
+        #self.ln_det_Sigma = lax.dynamic_update_index_in_dim(self.ln_det_Sigma, density.ln_det_Sigma, indices, 0)
+        #self.lnZ = lax.dynamic_update_index_in_dim(self.lnZ, density.lnZ, indices, 0)
+        #self.nu = lax.dynamic_update_index_in_dim(self.nu, density.nu, indices, 0)
+        #self.ln_beta = lax.dynamic_update_index_in_dim(self.ln_beta, density.ln_beta, indices, 0)
     
     def get_marginal(self, dim_x: list) -> 'GaussianDensity':
         """ Gets the marginal of the indicated dimensions.
