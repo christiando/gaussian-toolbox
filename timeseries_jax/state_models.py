@@ -37,7 +37,7 @@ class StateModel:
         Furthermore, it should be possible to optimize hyperparameters, when provided 
         with a density over the latent space.
         """
-        self.emission_density = None
+        self.state_density = None
         
     def prediction(self, pre_filter_density: 'GaussianDensity', **kwargs) -> 'GaussianDensity':
         """ Here the prediction density is calculated.
