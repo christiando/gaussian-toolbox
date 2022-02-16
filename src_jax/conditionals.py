@@ -65,11 +65,11 @@ class ConditionalGaussianDensity:
         :return: ConditionalGaussianDensity
             The resulting Gaussian diagonal density.
         """
-        M_new = self.M[indices]
-        b_new = self.b[indices]
-        Lambda_new = self.Lambda[indices]
-        Sigma_new = self.Sigma[indices]
-        ln_det_Sigma_new = self.ln_det_Sigma[indices]
+        M_new = jnp.take(self.M, indices, axis=0)
+        b_new = jnp.take(self.b, indices, axis=0)
+        Lambda_new = jnp.take(self.Lambda, indices, axis=0)
+        Sigma_new = jnp.take(self.Sigma, indices, axis=0)
+        ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
         new_measure = ConditionalGaussianDensity(M_new, b_new, Sigma_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
             

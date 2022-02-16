@@ -123,10 +123,10 @@ class GaussianDensity(measures.GaussianMeasure):
         :return: GaussianDensity
             The resulting Gaussian density.
         """
-        Lambda_new = self.Lambda[indices]
-        Sigma_new = self.Sigma[indices]
-        mu_new = self.mu[indices]
-        ln_det_Sigma_new = self.ln_det_Sigma[indices]
+        Lambda_new = jnp.take(self.Lambda, indices, axis=0)
+        Sigma_new = jnp.take(self.Sigma, indices, axis=0)
+        mu_new = jnp.take(self.mu, indices, axis=0)
+        ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
         #Lambda_new = lax.dynamic_index_in_dim(self.Lambda, indices, axis=0)
         #Sigma_new = lax.dynamic_index_in_dim(self.Sigma, indices, axis=0)
         #mu_new = lax.dynamic_index_in_dim(self.mu, indices, axis=0)
@@ -237,10 +237,10 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         :return: GaussianDiagDensity
             The resulting Gaussian diagonal density.
         """
-        Lambda_new = self.Lambda[indices]
-        Sigma_new = self.Sigma[indices]
-        mu_new = self.mu[indices]
-        ln_det_Sigma_new = self.ln_det_Sigma[indices]
+        Lambda_new = jnp.take(self.Lambda, indices, axis=0)
+        Sigma_new = jnp.take(self.Sigma, indices, axis=0)
+        mu_new = jnp.take(self.mu, indices, axis=0)
+        ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
         new_measure = GaussianDiagDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
     

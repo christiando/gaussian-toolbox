@@ -187,14 +187,14 @@ class GaussianMeasure(factors.ConjugateFactor):
         :return: GaussianMeasure
             The resulting Gaussian measure.
         """
-        Lambda_new = self.Lambda[indices]
-        nu_new = self.nu[indices]
-        ln_beta_new = self.ln_beta[indices]
+        Lambda_new = jnp.take(self.Lambda, indices, axis=0)
+        nu_new = jnp.take(self.nu, indices, axis=0)
+        ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
         new_measure = GaussianMeasure(Lambda_new, nu_new, ln_beta_new)
         if self.Sigma is not None:
-            new_measure.Sigma = self.Sigma[indices]
-            new_measure.ln_det_Sigma = self.ln_det_Sigma[indices]
-            new_measure.ln_det_Lambda = self.ln_det_Lambda[indices]
+            new_measure.Sigma = jnp.take(self.Sigma, indices, axis=0)
+            new_measure.ln_det_Sigma = jnp.take(self.ln_det_Sigma, indices, axis=0)
+            new_measure.ln_det_Lambda = jnp.take(self.ln_det_Lambda, indices, axis=0)
         return new_measure
         
     def _prepare_integration(self):
@@ -1024,12 +1024,12 @@ class GaussianDiagMeasure(GaussianMeasure):
         :return: GaussianDiagMeasure
             The resulting Gaussian diagonal measure.
         """
-        Lambda_new = self.Lambda[indices]
-        nu_new = self.nu[indices]
-        ln_beta_new = self.ln_beta[indices]
+        Lambda_new = jnp.array(self.Lambda, indices, axis=0)
+        nu_new = jnp.array(self.nu, indices, axis=0)
+        ln_beta_new = jnp.array(self.ln_beta, indices, axis=0)
         new_measure = GaussianDiagMeasure(Lambda_new, nu_new, ln_beta_new)
         if self.Sigma is not None:
-            new_measure.Sigma = self.Sigma[indices]
-            new_measure.ln_det_Sigma = self.ln_det_Sigma[indices]
-            new_measure.ln_det_Lambda = self.ln_det_Lambda[indices]
+            new_measure.Sigma = jnp.array(self.Sigma, indices, axis=0)
+            new_measure.ln_det_Sigma = jnp.array(self.ln_det_Sigma, indices, axis=0)
+            new_measure.ln_det_Lambda = jnp.array(self.ln_det_Lambda, indices, axis=0)
         return new_measure

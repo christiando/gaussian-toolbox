@@ -82,9 +82,9 @@ class ConjugateFactor:
         :return: ConjugateFactor
             The resulting Conjugate factor.
         """
-        Lambda_new = self.Lambda[indices]
-        nu_new = self.nu[indices]
-        ln_beta_new = self.ln_beta[indices]
+        Lambda_new = jnp.take(self.Lambda, indices, axis=0)
+        nu_new = jnp.take(self.nu, indices, axis=0)
+        ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
         return ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
     
     def _multiply_with_measure(self, measure: 'GaussianMeasure', update_full: bool=False) -> 'GaussianMeasure':
@@ -204,10 +204,10 @@ class OneRankFactor(LowRankFactor):
         :return: OneRankFactor
             The resulting OneRankFactor.
         """
-        v_new = self.v[indices]
-        g_new = self.g[indices]
-        nu_new = self.nu[indices]
-        ln_beta_new = self.ln_beta[indices]
+        v_new = jnp.take(self.v, indices, axis=0)
+        g_new = jnp.take(self.g, indices, axis=0)
+        nu_new = jnp.take(self.nu, indices, axis=0)
+        ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
         return OneRankFactor(v_new, g_new, nu_new, ln_beta_new)
         
     def _get_Lambda(self) -> jnp.ndarray:
@@ -325,8 +325,8 @@ class LinearFactor(ConjugateFactor):
             self.ln_beta = ln_beta
             
     def slice(self, indices: list) -> 'LinearFactor':
-        nu_new = self.nu[indices]
-        ln_beta_new = self.ln_beta[indices]
+        nu_new = jnp.take(self.nu, indices, axis=0)
+        ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
         return LinearFactor(nu_new, ln_beta_new)
             
     def _multiply_with_measure(self, measure: 'GaussianMeasure', update_full=True) -> 'GaussianMeasure':
@@ -415,7 +415,7 @@ class ConstantFactor(ConjugateFactor):
         super().__init__(Lambda, nu, ln_beta)
             
     def slice(self, indices: list) -> 'ConstantFactor':
-        ln_beta_new = self.ln_beta[indices]
+        ln_beta_new = jnp.array(self.ln_beta, indices, axis=0)
         return ConstantFactor(ln_beta_new, self.D)
     
     def _multiply_with_measure(self, measure: 'GaussianMeasure', update_full=True) -> 'GaussianMeasure':
