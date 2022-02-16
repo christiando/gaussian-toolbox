@@ -18,7 +18,7 @@
 
 __author__ = "Christian Donner"
 import sys
-sys.path.append('../src_jax/')
+sys.path.append('../')
 import scipy
 from scipy.optimize import minimize, NonlinearConstraint, minimize_scalar
 from jax import numpy as jnp
@@ -28,7 +28,7 @@ from jax import lax
 from jax import jit, grad, value_and_grad, vmap
 from functools import partial
 
-import densities, conditionals, factors
+from src_jax import densities, conditionals, factors
 #from pathos.multiprocessing import ProcessingPool as Pool
 
 
