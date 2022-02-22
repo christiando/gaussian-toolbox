@@ -1,5 +1,5 @@
-################################################################################
-# This file is part of the Gaussian Toolbox.                                   #
+##################################################################################################
+# This file is part of the Gaussian Toolbox.                                                     #
 #                                                                                                #
 # It contains the functionality for Gaussian (mixture) probability densities.                    #
 #                                                                                                #
@@ -12,12 +12,15 @@ from jax import numpy as jnp
 from jax import lax, random
 import numpy as np
 from typing import Iterable
-#from . 
+
+# from .
 from src_jax import measures
 
+
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
-    
-    def __init__(self, components: Iterable['GaussianDensities'], weights: jnp.ndarray=None):
+    def __init__(
+        self, components: Iterable["GaussianDensities"], weights: jnp.ndarray = None
+    ):
         """ Class of mixture of Gaussian measures
         
             u(x) = sum_i w_i * u_i(x)
@@ -27,16 +30,17 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
         :param components: list
             List of Gaussian densities.
         :param weights: jnp.ndarray [num_components] or None
-            Weights of the components, that must be positive. If None they are assumed to be 1/num_components. (Default=None)
+            Weights of the components, that must be positive. If None they are assumed to be 1/num_components. 
+            (Default=None)
         """
         super().__init__(components, weights)
         self.normalize()
-        
+
     def normalize(self):
         """ Normalizes the mixture (assuming, that its components are already normalized).
         """
         self.weights /= jnp.sum(self.weights)
-        
+
     def sample(self, num_samples: int) -> jnp.ndarray:
         """ Generates samples from the Gaussian mixture density.
         
@@ -51,11 +55,11 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
         comp_samples = jnp.searchsorted(cum_weights, rand_nums)
         samples = jnp.empty((num_samples, self.R, self.D))
         for icomp in range(self.num_components):
-            comp_idx = jnp.where(comp_samples==icomp)[0]
+            comp_idx = jnp.where(comp_samples == icomp)[0]
             samples[comp_idx] = self.components[icomp].sample(len(comp_idx))
         return samples
-    
-    def slice(self, indices: list) -> 'GaussianMixtureDensity':
+
+    def slice(self, indices: list) -> "GaussianMixtureDensity":
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -68,12 +72,19 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
         for icomp in range(self.num_components):
             comp_sliced = self.components[icomp].slice(indices)
             components_new.append(comp_sliced)
-        
+
         return GaussianMixtureDensity(components_new, self.weights)
 
+
 class GaussianDensity(measures.GaussianMeasure):
-    
-    def __init__(self, Sigma: jnp.ndarray, mu: jnp.ndarray, Lambda: jnp.ndarray=None, ln_det_Sigma: jnp.ndarray=None, init_key: jnp.ndarray=None):
+    def __init__(
+        self,
+        Sigma: jnp.ndarray,
+        mu: jnp.ndarray,
+        Lambda: jnp.ndarray = None,
+        ln_det_Sigma: jnp.ndarray = None,
+        init_key: jnp.ndarray = None,
+    ):
         """ A normalized Gaussian density, with specified mean and covariance matrix.
         
         :param Sigma: jnp.ndarray [R, D, D]
@@ -89,7 +100,7 @@ class GaussianDensity(measures.GaussianMeasure):
             Lambda, ln_det_Sigma = self.invert_matrix(Sigma)
         elif ln_det_Sigma is None:
             ln_det_Sigma = jnp.linalg.slogdet(Sigma)[1]
-        nu = jnp.einsum('abc,ab->ac', Lambda, mu)
+        nu = jnp.einsum("abc,ab->ac", Lambda, mu)
         super().__init__(Lambda=Lambda, nu=nu)
         self.Sigma = Sigma
         self.mu = mu
@@ -101,7 +112,7 @@ class GaussianDensity(measures.GaussianMeasure):
             self.key = random.PRNGKey(0)
         else:
             self.key = init_key
-        
+
     def sample(self, num_samples: int) -> jnp.ndarray:
         """ Generates samples from the Gaussian density.
         
@@ -114,10 +125,10 @@ class GaussianDensity(measures.GaussianMeasure):
         self.key, subkey = random.split(self.key)
         rand_nums = random.normal(subkey, (num_samples, self.R, self.D))
         L = jnp.linalg.cholesky(self.Sigma)
-        x_samples = self.mu[None] + jnp.einsum('abc,dac->dab', L, rand_nums)
+        x_samples = self.mu[None] + jnp.einsum("abc,dac->dab", L, rand_nums)
         return x_samples
-    
-    def slice(self, indices: jnp.array) -> 'GaussianDensity':
+
+    def slice(self, indices: jnp.array) -> "GaussianDensity":
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -130,15 +141,17 @@ class GaussianDensity(measures.GaussianMeasure):
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         mu_new = jnp.take(self.mu, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
-        #Lambda_new = lax.dynamic_index_in_dim(self.Lambda, indices, axis=0)
-        #Sigma_new = lax.dynamic_index_in_dim(self.Sigma, indices, axis=0)
-        #mu_new = lax.dynamic_index_in_dim(self.mu, indices, axis=0)
-        #ln_det_Sigma_new = lax.dynamic_index_in_dim(self.ln_det_Sigma, indices, axis=0)
+        # Lambda_new = lax.dynamic_index_in_dim(self.Lambda, indices, axis=0)
+        # Sigma_new = lax.dynamic_index_in_dim(self.Sigma, indices, axis=0)
+        # mu_new = lax.dynamic_index_in_dim(self.mu, indices, axis=0)
+        # ln_det_Sigma_new = lax.dynamic_index_in_dim(self.ln_det_Sigma, indices, axis=0)
         self.key, subkey = random.split(self.key)
-        new_measure = GaussianDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new, init_key=subkey)
+        new_measure = GaussianDensity(
+            Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new, init_key=subkey
+        )
         return new_measure
-    
-    def update(self, indices: jnp.array, density: 'GaussianDensity'):
+
+    def update(self, indices: jnp.array, density: "GaussianDensity"):
         """ Updates densities at indicated entries.
         
         :param indices: list
@@ -153,15 +166,15 @@ class GaussianDensity(measures.GaussianMeasure):
         self.lnZ = self.lnZ.at[indices].set(density.lnZ)
         self.nu = self.nu.at[indices].set(density.nu)
         self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)
-        #self.Lambda = lax.dynamic_update_index_in_dim(self.Lambda, density.Lambda, indices, 0)
-        #self.Sigma = lax.dynamic_update_index_in_dim(self.Sigma, density.Sigma, indices, 0)
-        #self.mu = lax.dynamic_update_index_in_dim(self.mu, density.mu, indices, 0)
-        #self.ln_det_Sigma = lax.dynamic_update_index_in_dim(self.ln_det_Sigma, density.ln_det_Sigma, indices, 0)
-        #self.lnZ = lax.dynamic_update_index_in_dim(self.lnZ, density.lnZ, indices, 0)
-        #self.nu = lax.dynamic_update_index_in_dim(self.nu, density.nu, indices, 0)
-        #self.ln_beta = lax.dynamic_update_index_in_dim(self.ln_beta, density.ln_beta, indices, 0)
-    
-    def get_marginal(self, dim_x: list) -> 'GaussianDensity':
+        # self.Lambda = lax.dynamic_update_index_in_dim(self.Lambda, density.Lambda, indices, 0)
+        # self.Sigma = lax.dynamic_update_index_in_dim(self.Sigma, density.Sigma, indices, 0)
+        # self.mu = lax.dynamic_update_index_in_dim(self.mu, density.mu, indices, 0)
+        # self.ln_det_Sigma = lax.dynamic_update_index_in_dim(self.ln_det_Sigma, density.ln_det_Sigma, indices, 0)
+        # self.lnZ = lax.dynamic_update_index_in_dim(self.lnZ, density.lnZ, indices, 0)
+        # self.nu = lax.dynamic_update_index_in_dim(self.nu, density.nu, indices, 0)
+        # self.ln_beta = lax.dynamic_update_index_in_dim(self.ln_beta, density.ln_beta, indices, 0)
+
+    def get_marginal(self, dim_x: list) -> "GaussianDensity":
         """ Gets the marginal of the indicated dimensions.
         
         :param dim_x: list
@@ -177,8 +190,8 @@ class GaussianDensity(measures.GaussianMeasure):
         self.key, subkey = random.split(self.key)
         marginal_density = GaussianDensity(Sigma_new, mu_new, init_key=subkey)
         return marginal_density
-    
-    def condition_on(self, dim_y: list) -> 'ConditionalGaussianDensity':
+
+    def condition_on(self, dim_y: list) -> "ConditionalGaussianDensity":
         """ Returns density conditioned on indicated dimensions, i.e. p(x|y).
         
         :param dim_y: list
@@ -188,15 +201,20 @@ class GaussianDensity(measures.GaussianMeasure):
             The corresponding conditional Gaussian density p(x|y).
         """
         from src_jax import conditionals
+
         dim_xy = jnp.arange(self.D)
         dim_x = dim_xy[jnp.logical_not(jnp.isin(dim_xy, dim_y))]
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
         Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
-        M_x = -jnp.einsum('abc,acd->abd', Sigma_x, self.Lambda[:,dim_x][:,:,dim_y])
-        b_x = self.mu[:, dim_x] - jnp.einsum('abc,ac->ab', M_x, self.mu[:, dim_y])
-        return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
-    
-    def condition_on_explicit(self, dim_y: list, dim_x: list) -> 'ConditionalGaussianDensity':
+        M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
+        b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
+        return conditionals.ConditionalGaussianDensity(
+            M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
+        )
+
+    def condition_on_explicit(
+        self, dim_y: list, dim_x: list
+    ) -> "ConditionalGaussianDensity":
         """ Returns density conditioned on indicated dimensions, i.e. p(x|y).
         
         :param dim_y: list
@@ -206,19 +224,34 @@ class GaussianDensity(measures.GaussianMeasure):
             The corresponding conditional Gaussian density p(x|y).
         """
         from src_jax import conditionals
+
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
         Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
-        M_x = -jnp.einsum('abc,acd->abd', Sigma_x, self.Lambda[:,dim_x][:,:,dim_y])
-        b_x = self.mu[:, dim_x] - jnp.einsum('abc,ac->ab', M_x, self.mu[:, dim_y])
-        return conditionals.ConditionalGaussianDensity(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x)
-    
+        M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
+        b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
+        return conditionals.ConditionalGaussianDensity(
+            M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
+        )
+
     def to_dict(self):
-        density_dict = {'Sigma': self.Sigma, 'mu': self.mu, 'Lambda': self.Lambda, 'ln_det_Sigma': self.ln_det_Sigma}
+        density_dict = {
+            "Sigma": self.Sigma,
+            "mu": self.mu,
+            "Lambda": self.Lambda,
+            "ln_det_Sigma": self.ln_det_Sigma,
+        }
         return density_dict
-    
+
+
 class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
-    
-    def __init__(self, Sigma: jnp.ndarray, mu: jnp.ndarray, Lambda: jnp.ndarray=None, ln_det_Sigma: jnp.ndarray=None, init_key: jnp.ndarray=None):
+    def __init__(
+        self,
+        Sigma: jnp.ndarray,
+        mu: jnp.ndarray,
+        Lambda: jnp.ndarray = None,
+        ln_det_Sigma: jnp.ndarray = None,
+        init_key: jnp.ndarray = None,
+    ):
         """ A normalized Gaussian density, with specified mean and covariance matrix.
         
         :param Sigma: jnp.ndarray [R, D, D]
@@ -231,9 +264,15 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
             Log determinant of the covariance matrix. (Default=None)
         """
         Lambda, ln_det_Sigma = self.invert_diagonal(Sigma)
-        super().__init__(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma, init_key=init_key)
-        
-    def slice(self, indices: list) -> 'GaussianDiagDensity':
+        super().__init__(
+            Sigma=Sigma,
+            mu=mu,
+            Lambda=Lambda,
+            ln_det_Sigma=ln_det_Sigma,
+            init_key=init_key,
+        )
+
+    def slice(self, indices: list) -> "GaussianDiagDensity":
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -247,10 +286,12 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         mu_new = jnp.take(self.mu, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
         self.key, subkey = random.split(self.key)
-        new_measure = GaussianDiagDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new, init_key=subkey)
+        new_measure = GaussianDiagDensity(
+            Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new, init_key=subkey
+        )
         return new_measure
-    
-    def update(self, indices: list, density: 'GaussianDiagDensity'):
+
+    def update(self, indices: list, density: "GaussianDiagDensity"):
         """ Updates densities at indicated entries.
         
         :param indices: list
@@ -265,8 +306,8 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         self.lnZ = self.lnZ.at[indices].add(density.lnZ)
         self.nu = self.nu.at[indices].add(density.nu)
         self.ln_beta = self.ln_beta.at[indices].add(density.ln_beta)
-    
-    def get_marginal(self, dim_idx: list) -> 'GaussianDiagDensity':
+
+    def get_marginal(self, dim_idx: list) -> "GaussianDiagDensity":
         """ Gets the marginal of the indicated dimensions.
         
         :param dim_idx: list
@@ -275,8 +316,8 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         :return: GaussianDiagDensity
             The resulting marginal Gaussian density.
         """
-        Sigma_new = self.Sigma[:,dim_idx][:,:,dim_idx]
-        mu_new = self.mu[:,dim_idx]
+        Sigma_new = self.Sigma[:, dim_idx][:, :, dim_idx]
+        mu_new = self.mu[:, dim_idx]
         self.key, subkey = random.split(self.key)
         marginal_density = GaussianDiagDensity(Sigma_new, mu_new, init_key=subkey)
         return marginal_density
