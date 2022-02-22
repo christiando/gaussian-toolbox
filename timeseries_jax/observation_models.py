@@ -244,6 +244,35 @@ class LinearObservationModel(ObservationModel):
                 x_t[:, observed_dims]
             )
             return cur_filter_density
+        
+    def gappy_filtering_static(
+        self, prediction_density: densities.GaussianDensity, x_t: jnp.ndarray, observed_dims: jnp.ndarray=None, **kwargs
+    ) -> densities.GaussianDensity:
+        # In case all data are unobserved
+        if observed_dims == None:
+            return prediction_density
+        # In case all data are observed
+        elif len(observed_dims) == self.Dx:
+            cur_filter_density = self.filtering(prediction_density, x_t)
+            return cur_filter_density
+        # In case we have only partial observations
+        else:
+            # p(z_t, x_t| x_{1:t-1})
+            p_zx = self.emission_density.affine_joint_transformation(prediction_density)
+            # p(z_t, x_t (observed) | x_{1:t-1})
+            marginal_dims = jnp.concatenate(
+                [jnp.arange(self.Dz), self.Dz + observed_dims]
+            )
+            p_zx_observed = p_zx.get_marginal(marginal_dims)
+            # p(z_t | x_t (observed), x_{1:t-1})
+            conditional_dims = jnp.arange(self.Dz, self.Dz + len(observed_dims))
+            nonconditional_dims = jnp.arange(0,self.Dz)
+            p_z_given_x_observed = p_zx_observed.condition_on_explicit(conditional_dims, nonconditional_dims)
+            cur_filter_density = p_z_given_x_observed.condition_on_x(
+                x_t[:, observed_dims]
+            )
+            
+            return cur_filter_density
 
     def gappy_data_density(
         self, p_z: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
@@ -272,6 +301,34 @@ class LinearObservationModel(ObservationModel):
             # Density over unobserved variables
             p_x = self.emission_density.affine_marginal_transformation(p_z)
             p_ux_given_ox = p_x.condition_on(observed_dims)
+            p_ux = p_ux_given_ox.condition_on_x(x_t[:, observed_dims])
+            return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))
+        
+    def gappy_data_density_static(
+        self, p_z: densities.GaussianDensity, x_t: jnp.ndarray, observed_dims: jnp.ndarray=None, nonobserved_dims: jnp.ndarray=None, **kwargs
+    ):
+        """ Here the data density is calculated for incomplete data. Not observed values should be nans.
+        
+         p(x_t) = p(x_t|z_t)p(z_t) dz_t
+        
+        :param prediction_density: GaussianDensity
+            Prediction density p(z_t|x_{1:t-1}).
+        :param x_t: jnp.ndarray [1, Dx]
+            Observation, where unobserved dimensions are filled with NANs.
+        :return: (jnp.ndarray, jnp.ndarray)
+            Mean and variance of unobserved entries.
+        """
+        if observed_dims == None:
+            p_x = self.emission_density.affine_marginal_transformation(p_z)
+            return p_x.mu[0], jnp.sqrt(p_x.Sigma[0].diagonal(axis1=-1, axis2=-2))
+        # In case all data are observed
+        elif len(observed_dims) == self.Dx:
+            return jnp.array([]), jnp.array([])
+        else:
+        # In case we have only partial observations
+            # Density over unobserved variables
+            p_x = self.emission_density.affine_marginal_transformation(p_z)
+            p_ux_given_ox = p_x.condition_on_explicit(observed_dims, nonobserved_dims)
             p_ux = p_ux_given_ox.condition_on_x(x_t[:, observed_dims])
             return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))
 

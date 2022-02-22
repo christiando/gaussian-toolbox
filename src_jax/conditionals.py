@@ -25,7 +25,6 @@ class ConditionalGaussianDensity:
         Sigma=None,
         Lambda=None,
         ln_det_Sigma=None,
-        init_key: jnp.ndarray = None,
     ):
         """ A conditional Gaussian density
 
@@ -64,10 +63,6 @@ class ConditionalGaussianDensity:
             else:
                 self.Sigma, self.ln_det_Lambda = Lambda, ln_det_Sigma
             self.ln_det_Sigma = -self.ln_det_Lambda
-        if init_key is None:
-            self.key = random.PRNGKey(0)
-        else:
-            self.key = init_key
 
     def slice(self, indices: list) -> "ConditionalGaussianDensity":
         """ Returns an object with only the specified entries.
@@ -83,9 +78,8 @@ class ConditionalGaussianDensity:
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
-        self.key, subkey = random.split(self.key)
         new_measure = ConditionalGaussianDensity(
-            M_new, b_new, Sigma_new, Lambda_new, ln_det_Sigma_new, init_key=subkey
+            M_new, b_new, Sigma_new, Lambda_new, ln_det_Sigma_new
         )
         return new_measure
 
@@ -124,13 +118,11 @@ class ConditionalGaussianDensity:
         ln_det_Sigma_new = jnp.tile(self.ln_det_Sigma[:, None], (1, N)).reshape(
             self.R * N
         )
-        self.key, subkey = random.split(self.key)
         return densities.GaussianDensity(
             Sigma=Sigma_new,
             mu=mu_new,
             Lambda=Lambda_new,
             ln_det_Sigma=ln_det_Sigma_new,
-            init_key=subkey,
         )
 
     @staticmethod
@@ -222,9 +214,8 @@ class ConditionalGaussianDensity:
                 jnp.tile(self.ln_det_Lambda[:, None], (1, p_x.R)).reshape((R,))
                 + delta_ln_det
             )
-        p_x.key, subkey = random.split(p_x.key)
         return densities.GaussianDensity(
-            Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy, init_key=subkey
+            Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy
         )
 
     def affine_marginal_transformation(
@@ -254,8 +245,7 @@ class ConditionalGaussianDensity:
         MSigma_x = jnp.einsum("abc,dce->adbe", self.M, p_x.Sigma)  # [R1,R,Dy,D]
         MSigmaM = jnp.einsum("abcd,aed->abce", MSigma_x, self.M)
         Sigma_y = (self.Sigma[:, None] + MSigmaM).reshape((R, self.Dy, self.Dy))
-        p_x.key, subkey = random.split(p_x.key)
-        return densities.GaussianDensity(Sigma_y, mu_y, init_key=subkey)
+        return densities.GaussianDensity(Sigma_y, mu_y)
 
     def affine_conditional_transformation(
         self, p_x: "ConditionalGaussianDensity"
@@ -301,9 +291,8 @@ class ConditionalGaussianDensity:
             "abcd,bd->abc", Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), p_x.nu
         ).reshape((R, p_x.D))
         M_x = M_x.reshape((R, p_x.D, self.Dy))
-        self.key, subkey = random.split(self.key)
         return ConditionalGaussianDensity(
-            M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x, init_key=subkey
+            M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x,
         )
 
 
@@ -316,7 +305,6 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         Sigma: jnp.ndarray = None,
         Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
-        init_key: jnp.ndarray = None,
     ):
         """ A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
 
@@ -346,7 +334,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
             :param ln_det_Sigma: jnp.ndarray [1] or None
                 Log determinant of the covariance matrix. (Default=None)
         """
-        super().__init__(M, b, Sigma, Lambda, ln_det_Sigma, init_key=init_key)
+        super().__init__(M, b, Sigma, Lambda, ln_det_Sigma)
         self.w0 = W[:, 0]
         self.W = W[:, 1:]
         self.Dx = self.W.shape[1]
@@ -514,8 +502,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         # Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
         # Sigma_xy[:,:self.Dx,self.Dx:] = jnp.swapaxes(cov_yx, axis1=1, axis2=2)
         # Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
-        p_x.key, subkey = random.split(p_x.key)
-        p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy, init_key=subkey)
+        p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
 
     def affine_conditional_transformation(
@@ -539,9 +526,8 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        self.key, subkey = random.split(self.key)
         cond_p_xy = ConditionalGaussianDensity(
-            M=M_new, b=b_new, Sigma=Sigma_new, init_key=subkey
+            M=M_new, b=b_new, Sigma=Sigma_new,
         )
         return cond_p_xy
 
@@ -567,8 +553,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
             Returns the joint distribution of x,y.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        p_x.key, subkey = random.split(p_x.key)
-        p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y, init_key=subkey)
+        p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y,)
         return p_y
 
 
@@ -581,7 +566,6 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         U: jnp.ndarray,
         W: jnp.ndarray,
         beta: jnp.ndarray,
-        init_key: jnp.ndarray = None,
     ):
         """ A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
 
@@ -622,10 +606,6 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         self.beta = beta
         self.sigma2_x = sigma_x ** 2
         self._setup_noise_diagonal_functions()
-        if init_key is None:
-            self.key = random.PRNGKey(0)
-        else:
-            self.key = init_key
 
     def _setup_noise_diagonal_functions(self):
         """ Creates the functions, that later need to be integrated over, i.e.
@@ -669,8 +649,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
         Sigma_new = self.get_conditional_cov(x)
-        self.key, subkey = random.split(self.key)
-        return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new, init_key=subkey)
+        return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new)
 
     def integrate_Sigma_x(self, p_x: "GaussianDensity") -> jnp.ndarray:
         """ Returns the integral
@@ -767,8 +746,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         # Sigma_xy[:,self.Dx:,:self.Dx] = cov_yx
         # Sigma_xy[:,:self.Dx,self.Dx:] = jnp.swapaxes(cov_yx, axis1=1, axis2=2)
         # Sigma_xy[:,self.Dx:,self.Dx:] = Sigma_y
-        p_x.key, subkey = random.split(p_x.key)
-        p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy, init_key=subkey)
+        p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
 
     def affine_conditional_transformation(
@@ -792,9 +770,8 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        self.key, subkey = random.split(self.key)
         cond_p_xy = ConditionalGaussianDensity(
-            M=M_new, b=b_new, Sigma=Sigma_new, init_key=subkey
+            M=M_new, b=b_new, Sigma=Sigma_new, 
         )
         return cond_p_xy
 
@@ -821,6 +798,5 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         """
 
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        p_x.key, subkey = random.split(p_x.key)
-        p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y, init_key=subkey)
+        p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
         return p_y

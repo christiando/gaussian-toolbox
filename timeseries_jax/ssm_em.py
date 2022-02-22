@@ -12,7 +12,7 @@ import sys
 
 sys.path.append("../")
 from jax import numpy as jnp
-from jax import jit
+from jax import jit, random
 
 # import numpy as np
 from timeseries_jax import observation_models, state_models
@@ -21,6 +21,7 @@ import pickle
 import os
 import numpy as np
 import time
+from typing import Union
 
 
 def load_model(model_name: str, path: str = "") -> "StateSpaceEM":
@@ -309,7 +310,7 @@ class StateSpaceEM:
             Sigma=jnp.asarray(Sigma_tss),
             mu=jnp.asarray(mu_tss),
             Lambda=jnp.asarray(Lambda_tss),
-            ln_det_Sigma=jnp.asarray(ln_det_Sigma_tss),
+            ln_det_Sigma=jnp.asarray(ln_det_Sigma_tss), 
         )
 
     def compute_log_likelihood(self) -> float:
@@ -562,7 +563,7 @@ class StateSpaceEM:
                 jnp.asarray(Sigma_f),
                 jnp.asarray(mu_f),
                 jnp.asarray(Lambda_f),
-                jnp.asarray(ln_det_Sigma_f),
+                jnp.asarray(ln_det_Sigma_f),          
             )
         if not smoothed:
             return filter_density, mu_unobserved, std_unobserved
@@ -610,6 +611,77 @@ class StateSpaceEM:
                 ln_det_Sigma=jnp.asarray(ln_det_Sigma_s),
             )
             return smoothing_density, mu_unobserved, std_unobserved
+        
+    def gappy_forward_step_static(self, t: int, pf_dict: dict, X: jnp.ndarray, observed_dims: jnp.ndarray = None, nonobserved_dims: jnp.ndarray=None) -> Union[dict, jnp.ndarray, jnp.ndarray]:
+        pre_filter_density = densities.GaussianDensity(**pf_dict)
+        cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=None)
+        cur_filter_density = self.om.gappy_filtering_static(
+            cur_prediction_density, X[t - 1][None], observed_dims, ux_t=None
+        )
+        mu_x_t, std_x_t = self.om.gappy_data_density_static(cur_filter_density, X[t - 1][None], observed_dims, nonobserved_dims)
+
+        cf_dict = {
+            "Sigma": cur_filter_density.Sigma,
+            "mu": cur_filter_density.mu,
+            "Lambda": cur_filter_density.Lambda,
+            "ln_det_Sigma": cur_filter_density.ln_det_Sigma,
+        }
+        return cf_dict, mu_x_t, std_x_t
+        
+    def predict_static(self,
+        X: jnp.ndarray,
+        p0: densities.GaussianDensity = None,
+        observed_dims: jnp.ndarray = None,
+        u_x: jnp.ndarray = None,
+        u_z: jnp.ndarray = None) -> Union[densities.GaussianDensity, jnp.array, jnp.array]:
+        
+        T = X.shape[0]
+        if p0 is None:
+            p0 = densities.GaussianDensity(
+                Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
+            )
+            
+        cf_dict = {
+            "Sigma": p0.Sigma,
+            "mu": p0.mu,
+            "Lambda": p0.Lambda,
+            "ln_det_Sigma": p0.ln_det_Sigma,
+        }
+        filter_density = self._setup_density(T=T + 1)
+        filter_density.update(jnp.array([0]), p0)
+
+        Sigma_f, mu_f, Lambda_f, ln_det_Sigma_f = (
+            np.array(filter_density.Sigma),
+            np.array(filter_density.mu),
+            np.array(filter_density.Lambda),
+            np.array(filter_density.ln_det_Sigma),
+        )
+        
+        if observed_dims == None:
+            num_nonobserved_dims = X.shape[1]
+            nonobserved_dims = None
+        else:
+            nonobserved_dims = jnp.setxor1d(jnp.arange(self.Dx), observed_dims)
+            num_nonobserved_dims = len(nonobserved_dims)
+        mu_x, std_x = np.empty([T, num_nonobserved_dims]), np.empty([T, num_nonobserved_dims])
+        gappy_forward_step_static = jit(lambda t, cf: self.gappy_forward_step_static(t, cf, X, observed_dims, nonobserved_dims))
+        
+        for t in range(1, T + 1):
+            cf_dict, mu_x_t, std_x_t = gappy_forward_step_static(t, cf_dict)
+            Sigma_f[t] = cf_dict["Sigma"]
+            mu_f[t] = cf_dict["mu"]
+            Lambda_f[t] = cf_dict["Lambda"]
+            ln_det_Sigma_f[t] = cf_dict["ln_det_Sigma"]
+            mu_x[t-1] = mu_x_t
+            std_x[t-1] = std_x_t
+        filter_density = densities.GaussianDensity(Sigma=jnp.asarray(Sigma_f),
+                mu=jnp.asarray(mu_f),
+                Lambda=jnp.asarray(Lambda_f),
+                ln_det_Sigma=jnp.asarray(ln_det_Sigma_f),
+                )
+        mu_x, std_x = jnp.asarray(mu_x), jnp.asarray(std_x)
+        return filter_density, mu_x, std_x
+        
 
     def sample_trajectory(
         self,
