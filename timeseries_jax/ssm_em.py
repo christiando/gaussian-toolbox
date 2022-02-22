@@ -8,7 +8,6 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
-from functools import partial
 import sys
 
 sys.path.append("../")
@@ -329,7 +328,7 @@ class StateSpaceEM:
     def compute_predictive_log_likelihood(
         self,
         X: jnp.ndarray,
-        p0: "GaussianDensity" = None,
+        p0: densities.GaussianDensity = None,
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
         ignore_init_samples: int = 0,
@@ -428,7 +427,7 @@ class StateSpaceEM:
     def compute_predictive_density(
         self,
         X: jnp.ndarray,
-        p0: "GaussianDensity" = None,
+        p0: densities.GaussianDensity = None,
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
     ):
@@ -491,7 +490,7 @@ class StateSpaceEM:
     def predict(
         self,
         X: jnp.ndarray,
-        p0: "GaussianDensity" = None,
+        p0: densities.GaussianDensity = None,
         smoothed: bool = False,
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
@@ -617,7 +616,7 @@ class StateSpaceEM:
         X: jnp.ndarray,
         obs_indices: jnp.ndarray = None,
         num_samples: int = 1,
-        p0: "GaussianDensity" = None,
+        p0: densities.GaussianDensity = None,
     ) -> jnp.ndarray:
         T = X.shape[0]
         if p0 is None:

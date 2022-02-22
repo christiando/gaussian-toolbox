@@ -21,12 +21,12 @@ import sys
 
 sys.path.append("../")
 import scipy
-from scipy.optimize import minimize, NonlinearConstraint, minimize_scalar
+from scipy.optimize import minimize_scalar
 from jax import numpy as jnp
 from jax import scipy as jsc
 import numpy as np
 from jax import lax
-from jax import jit, grad, value_and_grad, vmap
+from jax import jit, value_and_grad, vmap
 from functools import partial
 
 from src_jax import densities, conditionals, factors
@@ -79,8 +79,8 @@ class ObservationModel:
         self.emission_density = None
 
     def filtering(
-        self, prediction_density: "GaussianDensity", x_t: jnp.ndarray, **kwargs
-    ) -> "GaussianDensity":
+        self, prediction_density: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
+    ) -> densities.GaussianDensity:
         """ Here the filtering density is calculated.
         
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
@@ -95,7 +95,7 @@ class ObservationModel:
         raise NotImplementedError("Filtering for observation model not implemented.")
 
     def update_hyperparameters(
-        self, smoothing_density: "GaussianDensity", X: jnp.ndarray, **kwargs
+        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
     ):
         """ This procedure updates the hyperparameters of the observation model.
         
@@ -109,7 +109,7 @@ class ObservationModel:
         )
 
     def evalutate_llk(
-        self, p_z: "GaussianDensity", X: jnp.ndarray, **kwargs
+        self, p_z: densities.GaussianDensity, X: jnp.ndarray, **kwargs
     ) -> jnp.ndarray:
         """ Computes the log likelihood of data given distribution over latent variables.
         
@@ -185,8 +185,8 @@ class LinearObservationModel(ObservationModel):
         )
 
     def filtering(
-        self, prediction_density: "GaussianDensity", x_t: jnp.ndarray, **kwargs
-    ) -> "GaussianDensity":
+        self, prediction_density: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
+    ) -> densities.GaussianDensity:
         """ Here the filtering density is calculated.
         
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
@@ -207,8 +207,8 @@ class LinearObservationModel(ObservationModel):
         return cur_filter_density
 
     def gappy_filtering(
-        self, prediction_density: "GaussianDensity", x_t: jnp.ndarray, **kwargs
-    ) -> "GaussianDensity":
+        self, prediction_density: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
+    ) -> densities.GaussianDensity:
         """ Here the filtering density is calculated for incomplete data. Not observed values should be nans.
         
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
@@ -245,7 +245,9 @@ class LinearObservationModel(ObservationModel):
             )
             return cur_filter_density
 
-    def gappy_data_density(self, p_z: "GaussianDensity", x_t: jnp.ndarray, **kwargs):
+    def gappy_data_density(
+        self, p_z: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
+    ):
         """ Here the data density is calculated for incomplete data. Not observed values should be nans.
         
          p(x_t) = p(x_t|z_t)p(z_t) dz_t
@@ -274,7 +276,7 @@ class LinearObservationModel(ObservationModel):
             return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))
 
     def update_hyperparameters(
-        self, smoothing_density: "GaussianDensity", X: jnp.ndarray, **kwargs
+        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
     ):
         """ This procedure updates the hyperparameters of the observation model.
         
@@ -288,7 +290,7 @@ class LinearObservationModel(ObservationModel):
         self.update_Qx(smoothing_density, X)
         self.update_emission_density()
 
-    def update_Qx(self, smoothing_density: "GaussianDensity", X: jnp.ndarray):
+    def update_Qx(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
         """ This procedure updates the covariance of the observation model.
         
         :param smoothing_density: GaussianDensity
@@ -314,7 +316,7 @@ class LinearObservationModel(ObservationModel):
         #                                         b_vec=a_t[t-1])[0]
         self.Qx = Exx / T
 
-    def update_C(self, smoothing_density: "GaussianDensity", X: jnp.ndarray):
+    def update_C(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
         """ This procedure updates the transition matrix of the observation model.
         
         :param smoothing_density: GaussianDensity
@@ -327,7 +329,7 @@ class LinearObservationModel(ObservationModel):
         zx = jnp.sum(Ez[:, :, None] * (X[:, None] - self.d[None, None]), axis=0)
         self.C = jnp.linalg.solve(Ezz, zx).T
 
-    def update_d(self, smoothing_density: "GaussianDensity", X: jnp.ndarray):
+    def update_d(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
         """ This procedure updates the transition offset of the observation model.
         
         :param smoothing_density: GaussianDensity
@@ -349,11 +351,13 @@ class LinearObservationModel(ObservationModel):
         )
 
     @staticmethod
-    def llk_step(t: int, p_x: "GaussianDensity", X: jnp.ndarray):
+    def llk_step(t: int, p_x: densities.GaussianDensity, X: jnp.ndarray):
         cur_p_x = p_x.slice(jnp.array([t]))
         return cur_p_x.evaluate_ln(X[t].reshape((1, -1)))[0, 0]
 
-    def evaluate_llk(self, p_z: "GaussianDensity", X: jnp.ndarray, **kwargs) -> float:
+    def evaluate_llk(
+        self, p_z: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+    ) -> float:
         """ Computes the log likelihood of data given distribution over latent variables.
         
         :param p_z: GaussianDensity
@@ -489,7 +493,7 @@ class HCCovObservationModel(LinearObservationModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
         X: jnp.ndarray,
         iteration: int,
         **kwargs
@@ -610,6 +614,7 @@ class HCCovObservationModel(LinearObservationModel):
         tangent = jnp.dot(self.U.T, euclid_dU) - jnp.dot(euclid_dU.T, self.U)
         # tangent = .5 * (tangent - tangent.T)
         geodesic = lambda t: jnp.dot(self.U, jsc.linalg.expm(t * tangent))
+
         def objective(t):
             U = geodesic(t)
             omega_dagger, omega_star, not_converged = self.get_omegas(
@@ -1161,7 +1166,7 @@ class BernoulliObservationModel(ObservationModel):
         return phi
 
     def compute_expected_feature_vector(
-        self, density: "GaussianDensity", ux: jnp.ndarray = None
+        self, density: densities.GaussianDensity, ux: jnp.ndarray = None
     ) -> jnp.ndarray:
         """ Computes the expected feature vector
         
@@ -1184,7 +1189,7 @@ class BernoulliObservationModel(ObservationModel):
         return Ephi
 
     def compute_expected_feature_outer_product(
-        self, density: "GaussianDensity", ux: jnp.ndarray = None
+        self, density: densities.GaussianDensity, ux: jnp.ndarray = None
     ) -> jnp.ndarray:
         """ Computes the expected feature vector
         
@@ -1226,7 +1231,7 @@ class BernoulliObservationModel(ObservationModel):
 
     def get_omega_star(
         self,
-        density: "GaussianDensity",
+        density: densities.GaussianDensity,
         x_t: jnp.ndarray,
         ux_t: jnp.ndarray = None,
         conv_crit: float = 1e-4,
@@ -1266,11 +1271,11 @@ class BernoulliObservationModel(ObservationModel):
 
     def filtering(
         self,
-        prediction_density: "GaussianDensity",
+        prediction_density: densities.GaussianDensity,
         x_t: jnp.ndarray,
         ux_t: jnp.ndarray = None,
         **kwargs
-    ) -> "GaussianDensity":
+    ) -> densities.GaussianDensity:
         """ Here the variational approximation of filtering density is calculated.
         
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
@@ -1302,7 +1307,7 @@ class BernoulliObservationModel(ObservationModel):
 
     def get_omega_dagger(
         self,
-        density: "GaussianDensity",
+        density: densities.GaussianDensity,
         ux_t: jnp.ndarray = None,
         conv_crit: float = 1e-4,
     ) -> jnp.ndarray:
@@ -1323,7 +1328,7 @@ class BernoulliObservationModel(ObservationModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
         X: jnp.ndarray,
         u_x: jnp.ndarray = None,
         **kwargs
@@ -1357,7 +1362,10 @@ class BernoulliObservationModel(ObservationModel):
         self.Theta = jnp.linalg.solve(A_theta, b_theta)
 
     def get_lb_sigma(
-        self, density: "GaussianDensity", x_t: jnp.ndarray, ux_t: jnp.ndarray = None
+        self,
+        density: densities.GaussianDensity,
+        x_t: jnp.ndarray,
+        ux_t: jnp.ndarray = None,
     ) -> jnp.ndarray:
         """ Computes the lower bounds for the data probability.
         """
@@ -1391,7 +1399,11 @@ class BernoulliObservationModel(ObservationModel):
         return prob_lb
 
     def evaluate_llk(
-        self, p_z: "GaussianDensity", X: jnp.ndarray, u_x: jnp.ndarray = None, **kwargs
+        self,
+        p_z: densities.GaussianDensity,
+        X: jnp.ndarray,
+        u_x: jnp.ndarray = None,
+        **kwargs
     ) -> float:
         """ Computes the lower bound of log likelihood of data given distribution over latent variables.
         

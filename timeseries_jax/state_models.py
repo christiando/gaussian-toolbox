@@ -19,7 +19,7 @@ import sys
 sys.path.append("../")
 from jax import numpy as jnp
 import numpy as np
-from jax import jit, value_and_grad, grad
+from jax import jit, value_and_grad
 from scipy.optimize import minimize as minimize_sc
 
 # from src_jax
@@ -42,8 +42,8 @@ class StateModel:
         self.state_density = None
 
     def prediction(
-        self, pre_filter_density: "GaussianDensity", **kwargs
-    ) -> "GaussianDensity":
+        self, pre_filter_density: densities.GaussianDensity, **kwargs
+    ) -> densities.GaussianDensity:
         """ Here the prediction density is calculated.
         
         p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1
@@ -58,10 +58,10 @@ class StateModel:
 
     def smoothing(
         self,
-        cur_filter_density: "GaussianDensity",
-        post_smoothing_density: "GaussianDensity",
+        cur_filter_density: densities.GaussianDensity,
+        post_smoothing_density: densities.GaussianDensity,
         **kwargs
-    ) -> "GaussianDensity":
+    ) -> densities.GaussianDensity:
         """ Here we do the smoothing step to acquire p(z_{t} | x_{1:T}), 
         given p(z_{t+1} | x_{1:T}) and p(z_{t} | x_{1:t}).
         
@@ -77,8 +77,8 @@ class StateModel:
 
     def update_hyperparameters(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ):
         """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
@@ -92,8 +92,8 @@ class StateModel:
         raise NotImplementedError("Hyperparamers for state model not implemented.")
 
     def update_init_density(
-        self, init_smooth_density: "GaussianDensity", **kwargs
-    ) -> "GaussianDensity":
+        self, init_smooth_density: densities.GaussianDensity, **kwargs
+    ) -> densities.GaussianDensity:
         """ Finds the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
         
@@ -131,8 +131,8 @@ class LinearStateModel(StateModel):
         )
 
     def prediction(
-        self, pre_filter_density: "GaussianDensity", **kwargs
-    ) -> "GaussianDensity":
+        self, pre_filter_density: densities.GaussianDensity, **kwargs
+    ) -> densities.GaussianDensity:
         """ Here the prediction density is calculated.
         
         p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1
@@ -148,10 +148,10 @@ class LinearStateModel(StateModel):
 
     def smoothing(
         self,
-        cur_filter_density: "GaussianDensity",
-        post_smoothing_density: "GaussianDensity",
+        cur_filter_density: densities.GaussianDensity,
+        post_smoothing_density: densities.GaussianDensity,
         **kwargs
-    ) -> "GaussianDensity":
+    ) -> densities.GaussianDensity:
         """ Here we do the smoothing step.
         
         First we calculate the backward density
@@ -191,8 +191,8 @@ class LinearStateModel(StateModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ):
         """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
@@ -210,8 +210,8 @@ class LinearStateModel(StateModel):
 
     def update_A(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
     ):
         """ The transition matrix is updated here, where the the densities
         p(z_{t+1}, z_t|x_{1:T}) is provided.
@@ -229,7 +229,7 @@ class LinearStateModel(StateModel):
         A = jnp.mean(Ezz, axis=0)  # + 1e-2 * jnp.eye(self.Dz)
         self.A = jnp.linalg.solve(A, jnp.mean(Ezz_cross - mu_b, axis=0)).T
 
-    def update_b(self, smoothing_density: "GaussianDensity"):
+    def update_b(self, smoothing_density: densities.GaussianDensity):
         """ The transition offset is updated here, where the the densities p(z_t|x_{1:T}) is provided.
         
         :param smoothing_density: GaussianDensity
@@ -242,8 +242,8 @@ class LinearStateModel(StateModel):
 
     def update_Qz(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
     ):
         """ The transition covariance is updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
@@ -280,8 +280,8 @@ class LinearStateModel(StateModel):
         )
 
     def update_init_density(
-        self, init_smooth_density: "GaussianDensity", **kwargs
-    ) -> "GaussianDensity":
+        self, init_smooth_density: densities.GaussianDensity, **kwargs
+    ) -> densities.GaussianDensity:
         """ Finds the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
         
@@ -342,8 +342,8 @@ class LSEMStateModel(LinearStateModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ):
         """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
@@ -374,8 +374,8 @@ class LSEMStateModel(LinearStateModel):
 
     def update_AbQ(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
     ):
         """ The transition matrix is updated here, where the the densities
         p(z_{t+1}, z_t|x_{1:T}) is provided.
@@ -468,8 +468,8 @@ class LSEMStateModel(LinearStateModel):
 
     def update_A(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
     ):
         """ The transition matrix is updated here, where the the densities
         p(z_{t+1}, z_t|x_{1:T}) is provided.
@@ -527,7 +527,7 @@ class LSEMStateModel(LinearStateModel):
         Ezf = jnp.concatenate([Ezz_cross.T, Ezk], axis=1)
         return jnp.linalg.solve(Eff / T, (Ezf - Ebf).T / T).T
 
-    def update_b(self, smoothing_density: "GaussianDensity"):
+    def update_b(self, smoothing_density: densities.GaussianDensity):
         """ The transition offset is updated here, where the the densities p(z_t|x_{1:T}) is provided.
         
         :param smoothing_density: GaussianDensity
@@ -545,8 +545,8 @@ class LSEMStateModel(LinearStateModel):
 
     def update_Qz(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
     ):
         """ The transition covariance is updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
@@ -609,8 +609,8 @@ class LSEMStateModel(LinearStateModel):
     @staticmethod
     def _Wfunc2(
         W,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
         A,
         b,
         Qz,
@@ -681,8 +681,8 @@ class LSEMStateModel(LinearStateModel):
     @staticmethod
     def _Wfunc(
         W,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
         A,
         b,
         Qz,
@@ -760,8 +760,8 @@ class LSEMStateModel(LinearStateModel):
 
     def update_W(
         self,
-        smoothing_density: "GaussianDensity",
-        two_step_smoothing_density: "GaussianDensity",
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
     ):
         """ Updates the weights in the squared exponential of the state conditional mean.
 
