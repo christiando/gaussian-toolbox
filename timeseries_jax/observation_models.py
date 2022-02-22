@@ -244,9 +244,13 @@ class LinearObservationModel(ObservationModel):
                 x_t[:, observed_dims]
             )
             return cur_filter_density
-        
+
     def gappy_filtering_static(
-        self, prediction_density: densities.GaussianDensity, x_t: jnp.ndarray, observed_dims: jnp.ndarray=None, **kwargs
+        self,
+        prediction_density: densities.GaussianDensity,
+        x_t: jnp.ndarray,
+        observed_dims: jnp.ndarray = None,
+        **kwargs
     ) -> densities.GaussianDensity:
         # In case all data are unobserved
         if observed_dims == None:
@@ -266,12 +270,14 @@ class LinearObservationModel(ObservationModel):
             p_zx_observed = p_zx.get_marginal(marginal_dims)
             # p(z_t | x_t (observed), x_{1:t-1})
             conditional_dims = jnp.arange(self.Dz, self.Dz + len(observed_dims))
-            nonconditional_dims = jnp.arange(0,self.Dz)
-            p_z_given_x_observed = p_zx_observed.condition_on_explicit(conditional_dims, nonconditional_dims)
+            nonconditional_dims = jnp.arange(0, self.Dz)
+            p_z_given_x_observed = p_zx_observed.condition_on_explicit(
+                conditional_dims, nonconditional_dims
+            )
             cur_filter_density = p_z_given_x_observed.condition_on_x(
                 x_t[:, observed_dims]
             )
-            
+
             return cur_filter_density
 
     def gappy_data_density(
@@ -303,9 +309,14 @@ class LinearObservationModel(ObservationModel):
             p_ux_given_ox = p_x.condition_on(observed_dims)
             p_ux = p_ux_given_ox.condition_on_x(x_t[:, observed_dims])
             return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))
-        
+
     def gappy_data_density_static(
-        self, p_z: densities.GaussianDensity, x_t: jnp.ndarray, observed_dims: jnp.ndarray=None, nonobserved_dims: jnp.ndarray=None, **kwargs
+        self,
+        p_z: densities.GaussianDensity,
+        x_t: jnp.ndarray,
+        observed_dims: jnp.ndarray = None,
+        nonobserved_dims: jnp.ndarray = None,
+        **kwargs
     ):
         """ Here the data density is calculated for incomplete data. Not observed values should be nans.
         
@@ -325,7 +336,7 @@ class LinearObservationModel(ObservationModel):
         elif len(observed_dims) == self.Dx:
             return jnp.array([]), jnp.array([])
         else:
-        # In case we have only partial observations
+            # In case we have only partial observations
             # Density over unobserved variables
             p_x = self.emission_density.affine_marginal_transformation(p_z)
             p_ux_given_ox = p_x.condition_on_explicit(observed_dims, nonobserved_dims)
