@@ -139,9 +139,7 @@ class GaussianDensity(measures.GaussianMeasure):
         # Sigma_new = lax.dynamic_index_in_dim(self.Sigma, indices, axis=0)
         # mu_new = lax.dynamic_index_in_dim(self.mu, indices, axis=0)
         # ln_det_Sigma_new = lax.dynamic_index_in_dim(self.ln_det_Sigma, indices, axis=0)
-        new_measure = GaussianDensity(
-            Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new
-        )
+        new_measure = GaussianDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
 
     def update(self, indices: jnp.array, density: "GaussianDensity"):
@@ -196,7 +194,7 @@ class GaussianDensity(measures.GaussianMeasure):
 
         dim_xy = jnp.arange(self.D, dtype=jnp.int32)
         dim_x = jnp.setxor1d(dim_xy, dim_y)
-        #dim_x = dim_xy[jnp.logical_not(jnp.isin(dim_xy, dim_y))]
+        # dim_x = dim_xy[jnp.logical_not(jnp.isin(dim_xy, dim_y))]
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
         Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
@@ -257,10 +255,7 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         """
         Lambda, ln_det_Sigma = self.invert_diagonal(Sigma)
         super().__init__(
-            Sigma=Sigma,
-            mu=mu,
-            Lambda=Lambda,
-            ln_det_Sigma=ln_det_Sigma,
+            Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma,
         )
 
     def slice(self, indices: list) -> "GaussianDiagDensity":

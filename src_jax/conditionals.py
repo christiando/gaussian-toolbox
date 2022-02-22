@@ -19,12 +19,7 @@ from src_jax import densities, factors
 
 class ConditionalGaussianDensity:
     def __init__(
-        self,
-        M,
-        b,
-        Sigma=None,
-        Lambda=None,
-        ln_det_Sigma=None,
+        self, M, b, Sigma=None, Lambda=None, ln_det_Sigma=None,
     ):
         """ A conditional Gaussian density
 
@@ -97,7 +92,7 @@ class ConditionalGaussianDensity:
         mu_y = jnp.einsum("abc,dc->adb", self.M, x) + self.b[:, None]
         return mu_y
 
-    def condition_on_x(self, x: jnp.ndarray) -> "GaussianDensity":
+    def condition_on_x(self, x: jnp.ndarray) -> densities.GaussianDensity:
         """ Generates the corresponding Gaussian Density conditioned on x.
 
         :param x: jnp.ndarray [N, Dx]
@@ -136,7 +131,9 @@ class ConditionalGaussianDensity:
         ln_det_A = 2.0 * jnp.sum(jnp.log(L.diagonal(axis1=1, axis2=2)), axis=1)
         return A_inv, ln_det_A
 
-    def affine_joint_transformation(self, p_x: "GaussianDensity") -> "GaussianDensity":
+    def affine_joint_transformation(
+        self, p_x: densities.GaussianDensity
+    ) -> densities.GaussianDensity:
         """ Returns the joint density 
 
             p(x,y) = p(y|x)p(x),
@@ -149,7 +146,7 @@ class ConditionalGaussianDensity:
         :return: GaussianDensity
             The joint density.
         """
-        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of 
+        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
         try:
             assert p_x.R == 1 or self.R == 1
@@ -214,13 +211,11 @@ class ConditionalGaussianDensity:
                 jnp.tile(self.ln_det_Lambda[:, None], (1, p_x.R)).reshape((R,))
                 + delta_ln_det
             )
-        return densities.GaussianDensity(
-            Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy
-        )
+        return densities.GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
 
     def affine_marginal_transformation(
         self, p_x: "ConditionalGaussianDensity"
-    ) -> "GaussianDensity":
+    ) -> densities.GaussianDensity:
         """ Returns the marginal density p(y) given  p(y|x) and p(x), 
             where p(y|x) is the object itself.
 
@@ -230,7 +225,7 @@ class ConditionalGaussianDensity:
         :return: GaussianDensity
             The marginal density.
         """
-        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of 
+        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
         try:
             assert p_x.R == 1 or self.R == 1
@@ -259,7 +254,7 @@ class ConditionalGaussianDensity:
         :return: GaussianDensity
             The marginal density.
         """
-        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of 
+        # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
         try:
             assert p_x.R == 1 or self.R == 1
@@ -382,7 +377,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         mu_y = jnp.einsum("ab,cb->ca", self.M[0], phi_x) + self.b[0][None]
         return mu_y
 
-    def get_expected_moments(self, p_x: "GaussianDensity") -> jnp.ndarray:
+    def get_expected_moments(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
         """ Computes the expected covariance
 
             Sigma_y = E[yy'] - E[y]E[y]'
@@ -439,7 +434,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         Sigma_y -= mu_y[:, None] * mu_y[:, :, None]
         return mu_y, Sigma_y
 
-    def get_expected_cross_terms(self, p_x: "GaussianDensity") -> jnp.ndarray:
+    def get_expected_cross_terms(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
         """ Computes
 
             E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx
@@ -469,7 +464,9 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         Eyx = MEf_x + bEx
         return Eyx
 
-    def affine_joint_transformation(self, p_x: "GaussianDensity") -> "GaussianDensity":
+    def affine_joint_transformation(
+        self, p_x: densities.GaussianDensity
+    ) -> densities.GaussianDensity:
         """ Gets an approximation of the joint density
 
             p(x,y) ~= N(mu_{xy},Sigma_{xy}),
@@ -506,7 +503,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         return p_xy
 
     def affine_conditional_transformation(
-        self, p_x: "GaussianDensity"
+        self, p_x: densities.GaussianDensity
     ) -> "ConditionalGaussianDensity":
         """ Gets an approximation of the joint density via moment matching
 
@@ -526,14 +523,12 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        cond_p_xy = ConditionalGaussianDensity(
-            M=M_new, b=b_new, Sigma=Sigma_new,
-        )
+        cond_p_xy = ConditionalGaussianDensity(M=M_new, b=b_new, Sigma=Sigma_new,)
         return cond_p_xy
 
     def affine_marginal_transformation(
-        self, p_x: "GaussianDensity"
-    ) -> "GaussianDensity":
+        self, p_x: densities.GaussianDensity
+    ) -> densities.GaussianDensity:
         """ Gets an approximation of the marginal density
 
             p(y) ~= N(mu_y,Sigma_y),
@@ -637,7 +632,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         )
         return Sigma_y_x
 
-    def condition_on_x(self, x: jnp.ndarray) -> "GaussianDensity":
+    def condition_on_x(self, x: jnp.ndarray) -> densities.GaussianDensity:
         """ Generates the corresponding Gaussian Density conditioned on x.
 
         :param x: jnp.ndarray [N, Dx]
@@ -651,7 +646,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         Sigma_new = self.get_conditional_cov(x)
         return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new)
 
-    def integrate_Sigma_x(self, p_x: "GaussianDensity") -> jnp.ndarray:
+    def integrate_Sigma_x(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
         """ Returns the integral
 
         int Sigma_y(x)p(x) dx.
@@ -672,7 +667,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
             "abc,dc->abd", self.U[None] * D_int[:, None], self.U
         )
 
-    def get_expected_moments(self, p_x: "GaussianDensity") -> jnp.ndarray:
+    def get_expected_moments(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
         """ Computes the expected mean and covariance
 
             mu_y = E[y] = M E[x] + b
@@ -694,7 +689,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         # Sigma_y = .5 * (Sigma_y + Sigma_y.T)
         return mu_y, Sigma_y
 
-    def get_expected_cross_terms(self, p_x: "GaussianDensity") -> jnp.ndarray:
+    def get_expected_cross_terms(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
         """ Computes
 
             E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx
@@ -711,7 +706,9 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         )
         return Eyx
 
-    def affine_joint_transformation(self, p_x: "GaussianDensity") -> "GaussianDensity":
+    def affine_joint_transformation(
+        self, p_x: densities.GaussianDensity
+    ) -> densities.GaussianDensity:
         """ Gets an approximation of the joint density
 
             p(x,y) ~= N(mu_{xy},Sigma_{xy}),
@@ -750,8 +747,8 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         return p_xy
 
     def affine_conditional_transformation(
-        self, p_x: "GaussianDensity"
-    ) -> "ConditionalGaussianDensity":
+        self, p_x: densities.GaussianDensity
+    ) -> ConditionalGaussianDensity:
         """ Gets an approximation of the joint density via moment matching
 
             p(x|y) ~= N(mu_{x|y},Sigma_{x|y}),
@@ -770,14 +767,12 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        cond_p_xy = ConditionalGaussianDensity(
-            M=M_new, b=b_new, Sigma=Sigma_new, 
-        )
+        cond_p_xy = ConditionalGaussianDensity(M=M_new, b=b_new, Sigma=Sigma_new,)
         return cond_p_xy
 
     def affine_marginal_transformation(
-        self, p_x: "GaussianDensity"
-    ) -> "GaussianDensity":
+        self, p_x: densities.GaussianDensity
+    ) -> densities.GaussianDensity:
         """ Gets an approximation of the marginal density
 
             p(y) ~= N(mu_y,Sigma_y),
