@@ -8,6 +8,7 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
+from functools import partial
 import sys
 sys.path.append('../')
 from jax import numpy as jnp
@@ -380,6 +381,7 @@ class StateSpaceEM:
         px = self.om.emission_density.affine_marginal_transformation(prediction_density.slice(jnp.arange(1, T+1)))
         return px
     
+    
     def predict(self, X:jnp.ndarray, p0: 'GaussianDensity'=None, smoothed:bool=False, 
                 u_x: jnp.ndarray=None, u_z: jnp.ndarray=None):
         """ Obtains predictions for data.
@@ -477,7 +479,32 @@ class StateSpaceEM:
                                                           Lambda=jnp.asarray(Lambda_s),
                                                           ln_det_Sigma=jnp.asarray(ln_det_Sigma_s))
             return smoothing_density, mu_unobserved, std_unobserved
-
+        
+        
+    def sample_trajectory(self, X: jnp.ndarray, obs_indices: jnp.ndarray=None, num_samples: int=1, p0: 'GaussianDensity'=None) -> jnp.ndarray:
+        T = X.shape[0]
+        if p0 is None:
+            p0 = densities.GaussianDensity(Sigma=jnp.array([jnp.eye(self.Dz)]), 
+                                           mu=jnp.zeros((1,self.Dz)))
+        z_sample = np.empty((T+1, num_samples, self.Dz))
+        z_sample[0] = np.asarray(p0.sample(num_samples)[:,0])
+        X_sample = np.empty((T, num_samples, self.Dx))
+        if obs_indices != None:
+            all_indices = jnp.arange(self.Dx)
+            unobs_indices = all_indices[jnp.logical_not(jnp.isin(all_indices, obs_indices))]
+        
+        for t in range(1, T+1):
+            z_sample[t] = np.asarray(self.sm.state_density.condition_on_x(z_sample[t-1]).sample(1)[0])
+            if obs_indices == None:
+                px = self.om.emission_density.condition_on_x(z_sample[t])
+                X_sample[t-1] = np.asarray(px.sample(1)[0])
+            else:
+                px = self.om.emission_density.condition_on_x(z_sample[t]).condition_on(obs_indices).condition_on_x(X[t-1, obs_indices])
+                X_sample[t-1, :, unobs_indices] = np.asarray(px.sample(1)[0])
+                X_sample[t-1, :, obs_indices] = np.asarray(X[t-1, obs_indices])
+        
+        return jnp.asarray(z_sample), jnp.asarray(X_sample)
+        
     def compute_data_density(self) -> densities.GaussianDensity:
         """ Computes the data density for the training data, given the prediction density.
         
