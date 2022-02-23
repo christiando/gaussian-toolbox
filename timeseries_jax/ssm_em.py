@@ -642,9 +642,20 @@ class StateSpaceEM:
         X: jnp.ndarray,
         p0: densities.GaussianDensity = None,
         observed_dims: jnp.ndarray = None,
-        u_x: jnp.ndarray = None,
-        u_z: jnp.ndarray = None,
     ) -> Union[densities.GaussianDensity, jnp.array, jnp.array]:
+        """Predicts data with fixed condition dimensions. Faster, but more rigid than predict().
+        
+        TODO: Implement also smoothing.
+
+        :param X: Data array containing the variabels to condition on, and indicating how long we wish to sample.
+        :type X: jnp.ndarray [T, Dx]
+        :param observed_dims: Dimension that are observed. If none no dimension is observed, defaults to None
+        :type observed_dims: jnp.ndarray, optional [num_observed_dimensions]
+        :param p0: Initial state density. If none, standard normal., defaults to None
+        :type p0: densities.GaussianDensity, optional
+        :return: Filter density of latent vairbale, mean and standard deviation of unobserved data.
+        :rtype: Union[densities.GaussianDensity, jnp.array, jnp.array]
+        """        
 
         T = X.shape[0]
         if p0 is None:
@@ -701,53 +712,32 @@ class StateSpaceEM:
         mu_x, std_x = jnp.asarray(mu_x), jnp.asarray(std_x)
         return filter_density, mu_x, std_x
 
-    def sample_trajectory(
-        self,
-        X: jnp.ndarray,
-        obs_indices: jnp.ndarray = None,
-        num_samples: int = 1,
-        p0: densities.GaussianDensity = None,
-    ) -> jnp.ndarray:
-        T = X.shape[0]
-        if p0 is None:
-            p0 = densities.GaussianDensity(
-                Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
-            )
-        z_sample = np.empty((T + 1, num_samples, self.Dz))
-        z_sample[0] = np.asarray(p0.sample(num_samples)[:, 0])
-        X_sample = np.empty((T, num_samples, self.Dx))
-        if obs_indices != None:
-            all_indices = jnp.arange(self.Dx)
-            unobs_indices = all_indices[
-                jnp.logical_not(jnp.isin(all_indices, obs_indices))
-            ]
-
-        for t in range(1, T + 1):
-            z_sample[t] = np.asarray(
-                self.sm.state_density.condition_on_x(z_sample[t - 1]).sample(1)[0]
-            )
-            if obs_indices == None:
-                px = self.om.emission_density.condition_on_x(z_sample[t])
-                X_sample[t - 1] = np.asarray(px.sample(1)[0])
-            else:
-                self.om.emission_density.condition_on_x(z_sample[t]).condition_on(
-                    obs_indices
-                )
-                px = (
-                    self.om.emission_density.condition_on_x(z_sample[t])
-                    .condition_on(obs_indices)
-                    .condition_on_x(X[t - 1 : t, obs_indices])
-                )
-                X_sample[t - 1, :, unobs_indices] = np.asarray(px.sample(1)[0].T)
-                X_sample[t - 1, :, obs_indices] = np.asarray(
-                    X[t - 1, obs_indices][:, None]
-                )
-
-        return jnp.asarray(z_sample), jnp.asarray(X_sample)
-
     def sample_step_static(
-        self, z_old, rand_nums_z, x, rand_nums_x, observed_dims, unobserved_dims
-    ):
+        self,
+        z_old: jnp.ndarray,
+        rand_nums_z: jnp.ndarray,
+        x: jnp.ndarray,
+        rand_nums_x: jnp.ndarray,
+        observed_dims: jnp.ndarray,
+        unobserved_dims: jnp.ndarray,
+    ) -> Union[jnp.ndarray, jnp.ndarray]:
+        """One time step sample for fixed observed data dimensions.
+
+        :param z_old: Sample of latent variable in previous time step.
+        :type z_old: jnp.ndarray [num_samples, Dz]
+        :param rand_nums_z: Random numbers for sampling latent dimensions.
+        :type rand_nums_z: jnp.ndarray [num_samples, Dz]
+        :param x: Data vector for current time step.
+        :type x: jnp.ndarray [1, Dx]
+        :param rand_nums_x: Random numbers for sampling x.
+        :type rand_nums_x: jnp.ndarray [num_samples, num_unobserved_dims]
+        :param observed_dims: Observed dimensions.
+        :type observed_dims: jnp.ndarray [num_observed_dims]
+        :param unobserved_dims: Unobserved dimensions.
+        :type unobserved_dims: jnp.ndarray [num_unobserved_dims]
+        :return: Latent variable and data sample (only unobserved) for current time step.
+        :rtype: Union[jnp.ndarray, jnp.ndarray] [num_samples, Dz] [num_samples, num_unobserved]
+        """        
         p_z = self.sm.state_density.condition_on_x(z_old)
         L = jnp.linalg.cholesky(p_z.Sigma)
         z_sample = p_z.mu + jnp.einsum("abc,ac->ab", L, rand_nums_z)
@@ -763,9 +753,22 @@ class StateSpaceEM:
         self,
         X: jnp.ndarray,
         observed_dims: jnp.ndarray = None,
-        num_samples: int = 1,
         p0: densities.GaussianDensity = None,
-    ) -> jnp.ndarray:
+        num_samples: int = 1,
+    ) -> Union[jnp.ndarray, jnp.ndarray]:
+        """Samples a trajectories, with fixed observed data dimensions.
+
+        :param X: Data array containing the variabels to condition on, and indicating how long we wish to sample.
+        :type X: jnp.ndarray [T, Dx]
+        :param observed_dims: Dimension that are observed. If none no dimension is observed, defaults to None
+        :type observed_dims: jnp.ndarray, optional [num_observed_dimensions]
+        :param p0: Initial state density. If none, standard normal., defaults to None
+        :type p0: densities.GaussianDensity, optional
+        :param num_samples: How many trajectories should be sampled, defaults to 1
+        :type num_samples: int, optional
+        :return: Samples of the latent variables, and the unobserved data dimensions.
+        :rtype: Union[jnp.ndarray, jnp.ndarray] [T+1, nums_samples, Dz] [T, nums_samples, num_unobserved_dims]
+        """        
         T = X.shape[0]
         if p0 is None:
             p0 = densities.GaussianDensity(
