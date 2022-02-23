@@ -358,7 +358,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         """
         N = x.shape[0]
         # phi_x = jnp.empty((N, self.Dphi))
-        phi_x = jnp.block([[x], [self.k_func.evaluate(x).T]])
+        phi_x = jnp.block([x, self.k_func.evaluate(x).T])
         # phi_x[:,self.Dx:] = self.k_func.evaluate(x).T
         return phi_x
 
