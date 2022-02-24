@@ -54,7 +54,7 @@ class ConjugateFactor:
         :param r: list
             Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
             
-        :return: jnp.ndarray [N, R]
+        :return: jnp.ndarray [R, N]
             Log exponential term.
         """
         x_Lambda_x = jnp.einsum(
@@ -69,12 +69,12 @@ class ConjugateFactor:
         :param x: jnp.ndarray [N, D]
             Points where the factor should be evaluated.
             
-        :return: jnp.ndarray [N, R]
+        :return: jnp.ndarray [R, N]
             Exponential term.
         """
         return jnp.exp(self.evaluate_ln(x))
 
-    def slice(self, indices: list) -> "ConjugateFactor":
+    def slice(self, indices: jnp.ndarray) -> "ConjugateFactor":
         """ Returns an object with only the specified entries.
         
         :param indices: list
