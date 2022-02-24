@@ -8,10 +8,9 @@ import numpy as np
 
 
 class TestConjugateFactor:
-    
     def setup_class(self):
         self.test_class = factors.ConjugateFactor
-        
+
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):
         Lambda = jnp.zeros((R, D, D))
@@ -113,10 +112,9 @@ class TestConjugateFactor:
 
 
 class TestOneRankFactor(TestConjugateFactor):
-    
     def setup_class(self):
         self.test_class = factors.OneRankFactor
-        
+
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):
         v = jnp.ones((R, D,))
@@ -173,7 +171,7 @@ class TestOneRankFactor(TestConjugateFactor):
         ln_beta = None
         with pytest.raises(AttributeError):
             f = self.test_class(v, g, nu, ln_beta)
-            
+
     @pytest.mark.parametrize(
         "R, D, N", [(100, 5, 10), (1, 5, 10), (100, 1, 10), (100, 5, 1)]
     )
