@@ -1,7 +1,8 @@
+import os
 import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-sys.path.append("../../")
-from factors import TestConjugateFactor
+from test_factors import TestConjugateFactor
 from src_jax import measures
 import pytest
 from jax import numpy as jnp
@@ -88,7 +89,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         self, R, D,
     ):
         Lambda = jnp.zeros((R, D, D))
-        Lambda = Lambda.at[:].set(jnp.eye(D))
+        Lambda = Lambda.at[:].set(jnp.eye(D) * np.random.rand(R)[:,None,None])
         nu = jnp.zeros((R, D))
         ln_beta = jnp.zeros(R)
         m = self.test_class(Lambda, nu, ln_beta)
@@ -166,3 +167,71 @@ class TestGaussianMeasure(TestConjugateFactor):
         m12 = m1.hadamard(m2, update_full=True)
         assert jnp.allclose(jnp.einsum('abc,acd->abd', Lambda_new, m12.Sigma), jnp.eye(D)[None])
         assert jnp.alltrue(m12.ln_det_Sigma == -m12.ln_det_Lambda)
+        
+    @pytest.mark.parametrize(
+        "R, D", [(100, 5,), (1, 5,), (100, 1,), (100, 5,),],
+    )
+    def test_integrate1(self, R, D):
+        np.random.seed(1)
+        Lambda = jnp.zeros((R, D, D))
+        Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:,:,None])
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.zeros(R)
+        m = self.test_class(Lambda, nu, ln_beta)
+        Sigma_diag = 1. / jnp.diagonal(Lambda, axis1=1, axis2=2)
+        mu = Sigma_diag * nu
+        normalization = jnp.exp(jnp.sum(.5 * jnp.log(2. * jnp.pi * Sigma_diag) + .5 * mu ** 2 / Sigma_diag, axis=1))
+        integral_analytic = m.integrate('1')
+        assert np.allclose(normalization, integral_analytic)
+        
+    @pytest.mark.parametrize(
+        "R, D", [(100, 5,), (1, 5,), (100, 1,), (100, 5,),],
+    )
+    def test_integratex(self, R, D):
+        np.random.seed(1)
+        Lambda = jnp.zeros((R, D, D))
+        Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:,:,None])
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.zeros(R)
+        m = self.test_class(Lambda, nu, ln_beta)
+        Sigma_diag = 1. / jnp.diagonal(Lambda, axis1=1, axis2=2)
+        mu = Sigma_diag * nu
+        normalization = jnp.exp(jnp.sum(.5 * jnp.log(2. * jnp.pi * Sigma_diag) + .5 * mu ** 2 / Sigma_diag, axis=1))
+        integral_analytic = m.integrate('x')
+        assert np.allclose(normalization[:,None] * mu, integral_analytic)
+        
+    @pytest.mark.parametrize(
+        "R, D", [(100, 5,), (1, 5,), (100, 1,), (100, 5,),],
+    )
+    def test_integrate_Ax_a(self, R, D):
+        np.random.seed(1)
+        A, a = jnp.asarray(np.random.rand(D, D)), jnp.asarray(np.random.rand(D, ))
+        Lambda = jnp.zeros((R, D, D))
+        Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:,:,None])
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.zeros(R)
+        m = self.test_class(Lambda, nu, ln_beta)
+        Sigma_diag = 1. / jnp.diagonal(Lambda, axis1=1, axis2=2)
+        mu = Sigma_diag * nu
+        normalization = jnp.exp(jnp.sum(.5 * jnp.log(2. * jnp.pi * Sigma_diag) + .5 * mu ** 2 / Sigma_diag, axis=1))
+        integral_analytic = m.integrate('Ax_a', A_mat=A, a_vec=a)
+        integral = normalization[:,None] * (jnp.einsum('ab,cb->ca', A, mu) + a)
+        assert np.allclose(integral, integral_analytic, rtol=1e-4)
+        
+    @pytest.mark.parametrize(
+        "R, D", [(100, 5,), (1, 5,), (100, 1,), (100, 5,),],
+    )
+    def test_integrate_xx(self, R, D):
+        np.random.seed(1)
+        Lambda = jnp.zeros((R, D, D))
+        Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:,:,None])
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.zeros(R)
+        m = self.test_class(Lambda, nu, ln_beta)
+        Sigma_diag = 1. / jnp.diagonal(Lambda, axis1=1, axis2=2)
+        mu = Sigma_diag * nu
+        normalization = jnp.exp(jnp.sum(.5 * jnp.log(2. * jnp.pi * Sigma_diag) + .5 * mu ** 2 / Sigma_diag, axis=1))
+        integral_analytic = m.integrate('xx')
+        integral = normalization[:,None,None] * (jnp.linalg.inv(Lambda) + jnp.einsum('ab,ac->abc', mu, mu))
+        assert np.allclose(integral, integral_analytic)
+        
