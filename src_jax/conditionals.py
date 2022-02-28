@@ -284,7 +284,8 @@ class ConditionalGaussianDensity:
         b_x = -jnp.einsum("abcd,ad->abc", M_x, self.b)
         b_x += jnp.einsum(
             "abcd,bd->abc", Sigma_x.reshape((self.R, p_x.R, p_x.D, p_x.D)), p_x.nu
-        ).reshape((R, p_x.D))
+        )
+        b_x = b_x.reshape((R, p_x.D))
         M_x = M_x.reshape((R, p_x.D, self.Dy))
         return ConditionalGaussianDensity(
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x,
