@@ -286,6 +286,22 @@ class GaussianMeasure(factors.ConjugateFactor):
         new_measure_dict = factor._hadamard_with_measure(self, update_full=update_full)
         return GaussianMeasure(**new_measure_dict)
 
+    def product(self) -> "GaussianMeasure":
+        """Computes the product over all factors.
+        
+            v(x) = \prod_i u_i(x)
+
+        :return: Factor of all factors.
+        :rtype: GaussianMeasure
+        """
+        Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
+        nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
+        ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
+        new_measure = GaussianMeasure(Lambda_new, nu_new, ln_beta_new)
+        if self.Sigma is not None:
+            new_measure._prepare_integration()
+        return new_measure
+
     def integrate(self, expr: str = "1", **kwargs) -> jnp.ndarray:
         """ Integrates the indicated expression with respect to the Gaussian measure.
 
@@ -1230,4 +1246,20 @@ class GaussianDiagMeasure(GaussianMeasure):
             new_measure.Sigma = jnp.array(self.Sigma, indices, axis=0)
             new_measure.ln_det_Sigma = jnp.array(self.ln_det_Sigma, indices, axis=0)
             new_measure.ln_det_Lambda = jnp.array(self.ln_det_Lambda, indices, axis=0)
+        return new_measure
+
+    def product(self) -> "GaussianDiagMeasure":
+        """Computes the product over all factors.
+        
+            v(x) = \prod_i u_i(x)
+
+        :return: Factor of all factors.
+        :rtype: GaussianDiagMeasure
+        """
+        Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
+        nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
+        ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
+        new_measure = GaussianDiagMeasure(Lambda_new, nu_new, ln_beta_new)
+        if self.Sigma is not None:
+            new_measure._prepare_integration()
         return new_measure

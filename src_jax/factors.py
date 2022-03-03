@@ -88,6 +88,19 @@ class ConjugateFactor:
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
         return ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
 
+    def product(self) -> "ConjugateFactor":
+        """Computes the product over all factors.
+        
+            g(x) = \prod_i f_i(x)
+
+        :return: Factor of all factors.
+        :rtype: ConjugateFactor
+        """
+        Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
+        nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
+        ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
+        return ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
+
     def _multiply_with_measure(
         self, measure: "GaussianMeasure", update_full: bool = False
     ) -> "GaussianMeasure":
