@@ -19,7 +19,7 @@ from src_jax import densities, factors
 
 class ConditionalGaussianDensity:
     def __init__(
-        self, M, b, Sigma=None, Lambda=None, ln_det_Sigma=None,
+        self, M, b=None, Sigma=None, Lambda=None, ln_det_Sigma=None,
     ):
         """ A conditional Gaussian density
 
@@ -30,7 +30,7 @@ class ConditionalGaussianDensity:
         :param M: jnp.ndarray [R, Dy, Dx]
             Matrix in the mean function.
         :param b: jnp.ndarray [R, Dy]
-            Vector in the conditional mean function.
+            Vector in the conditional mean function. If None all entries are 0. (Default=None)
         :param Sigma: jnp.ndarray [R, Dy, Dy]
             The covariance matrix of the conditional. (Default=None)
         :param Lambda: jnp.ndarray [R, Dy, Dy] or None
@@ -41,7 +41,10 @@ class ConditionalGaussianDensity:
 
         self.R, self.Dy, self.Dx = M.shape
         self.M = M
-        self.b = b
+        if b is None:
+            self.b = jnp.zeros((self.R, self.Dy))
+        else:
+            self.b = b
         if Sigma is None and Lambda is None:
             raise RuntimeError("Either Sigma or Lambda need to be specified.")
         elif Sigma is not None:
@@ -119,6 +122,32 @@ class ConditionalGaussianDensity:
             Lambda=Lambda_new,
             ln_det_Sigma=ln_det_Sigma_new,
         )
+
+    def set_y(self, y: jnp.ndarray) -> factors.ConjugateFactor:
+        """ Sets a specific value for y in p(y|x) and returns the corresponding conjugate factor. 
+
+        :param y: Data for y, where the rth entry is associated with the rth conditional density. 
+        :type y: jnp.ndarray [R, Dy]
+        :return: The conjugate factor where the first dimension is R.
+        :rtype: factors.ConjugateFactor
+        """
+        y_minus_b = y - self.b
+        Lambda_new = jnp.einsum(
+            "abc,acd->abd", jnp.einsum("abd, abc -> adc", self.M, self.Lambda), self.M,
+        )
+        nu_new = jnp.einsum(
+            "abc, ab -> ac",
+            jnp.einsum("abc, acd -> abd", self.Lambda, self.M),
+            y_minus_b,
+        )
+        yb_Lambda_yb = jnp.einsum(
+            "ab, ab-> a",
+            jnp.einsum("ab, abc -> ac", y_minus_b, self.Lambda),
+            y_minus_b,
+        )
+        ln_beta_new = -0.5 * (yb_Lambda_yb + jnp.log(2 * jnp.pi * self.ln_det_Sigma))
+        factor_new = factors.ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
+        return factor_new
 
     @staticmethod
     def invert_matrix(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -377,6 +406,15 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         phi_x = self.evaluate_phi(x)
         mu_y = jnp.einsum("ab,cb->ca", self.M[0], phi_x) + self.b[0][None]
         return mu_y
+    
+    def set_y(self, y: jnp.ndarray):
+        """Not valid function for this model class.
+
+        :param y: Data for y, where the rth entry is associated with the rth conditional density. 
+        :type y: jnp.ndarray [R, Dy]
+        :raises AttributeError: Raised because doesn't p(y|x) is not a ConjugateFactor for x. 
+        """
+        raise AttributeError("LSEMGaussianConditional doesn't have attributee set_y.")
 
     def get_expected_moments(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
         """ Computes the expected covariance
@@ -646,6 +684,15 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
         Sigma_new = self.get_conditional_cov(x)
         return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new)
+    
+    def set_y(self, y: jnp.ndarray):
+        """Not valid function for this model class.
+
+        :param y: Data for y, where the rth entry is associated with the rth conditional density. 
+        :type y: jnp.ndarray [R, Dy]
+        :raises AttributeError: Raised because doesn't p(y|x) is not a ConjugateFactor for x. 
+        """
+        raise AttributeError("HCCovGaussianConditional doesn't have attributee set_y.")
 
     def integrate_Sigma_x(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
         """ Returns the integral
