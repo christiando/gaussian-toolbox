@@ -12,7 +12,7 @@ import sys
 
 sys.path.append("../")
 from jax import numpy as jnp
-from jax import jit, random
+from jax import jit
 
 # import numpy as np
 from timeseries_jax import observation_models, state_models
@@ -655,7 +655,7 @@ class StateSpaceEM:
         :type p0: densities.GaussianDensity, optional
         :return: Filter density of latent vairbale, mean and standard deviation of unobserved data.
         :rtype: Union[densities.GaussianDensity, jnp.array, jnp.array]
-        """        
+        """
 
         T = X.shape[0]
         if p0 is None:
@@ -737,7 +737,7 @@ class StateSpaceEM:
         :type unobserved_dims: jnp.ndarray [num_unobserved_dims]
         :return: Latent variable and data sample (only unobserved) for current time step.
         :rtype: Union[jnp.ndarray, jnp.ndarray] [num_samples, Dz] [num_samples, num_unobserved]
-        """        
+        """
         p_z = self.sm.state_density.condition_on_x(z_old)
         L = jnp.linalg.cholesky(p_z.Sigma)
         z_sample = p_z.mu + jnp.einsum("abc,ac->ab", L, rand_nums_z)
@@ -768,7 +768,7 @@ class StateSpaceEM:
         :type num_samples: int, optional
         :return: Samples of the latent variables, and the unobserved data dimensions.
         :rtype: Union[jnp.ndarray, jnp.ndarray] [T+1, nums_samples, Dz] [T, nums_samples, num_unobserved_dims]
-        """        
+        """
         T = X.shape[0]
         if p0 is None:
             p0 = densities.GaussianDensity(
