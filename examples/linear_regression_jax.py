@@ -71,19 +71,19 @@ class LinearRegression:
         :return: Likelihood object for data X, and y.
         :rtype: factors.ConjugateFactor
         """
-        Lambda = jnp.array([jnp.dot(X.T, X) / self.sigma_y ** 2.])
-        nu = jnp.dot(y.T, X) / self.sigma_y ** 2.
-        print(nu.shape)
-        ln_beta = jnp.array([- .5 * (jnp.dot(y.T, y) / self.sigma_y ** 2. +
-                         self.N * jnp.log(2. * jnp.pi * self.sigma_y ** 2.))])
-        likelihood = factors.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
-        # Sigma_lk = jnp.ones((self.N, 1, 1)) * self.sigma_y ** 2
-        # M_lk = self.X[:, None]
-        # likelihood_term = conditionals.ConditionalGaussianDensity(
-        #     M=M_lk, Sigma=Sigma_lk
-        # )
-        # likelihood = likelihood_term.set_y(self.y)
-        # likelihood = likelihood.product()
+        # Lambda = jnp.array([jnp.dot(X.T, X) / self.sigma_y ** 2.])
+        # nu = jnp.dot(y.T, X) / self.sigma_y ** 2.
+        # print(nu.shape)
+        # ln_beta = jnp.array([- .5 * (jnp.dot(y.T, y) / self.sigma_y ** 2. +
+        #                  self.N * jnp.log(2. * jnp.pi * self.sigma_y ** 2.))])
+        # likelihood = factors.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
+        Sigma_lk = jnp.ones((self.N, 1, 1)) * self.sigma_y ** 2
+        M_lk = self.X[:, None]
+        likelihood_term = conditionals.ConditionalGaussianDensity(
+            M=M_lk, Sigma=Sigma_lk
+        )
+        likelihood = likelihood_term.set_y(self.y)
+        likelihood = likelihood.product()
         return likelihood
 
     def get_posterior(self):
