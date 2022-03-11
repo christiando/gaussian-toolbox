@@ -59,6 +59,14 @@ def recommend_dims(X, smooth_window=20, cut_off=0.99):
     )
     return Dz, Du
 
+def augment_taken(X: jnp.ndim, delta: int=1, num_delays: int=1) -> jnp.ndarray:
+    T, Dx = X.shape
+    T_new, Dx_new = T - delta * (num_delays - 1), Dx * num_delays
+    X_new = np.empty((T_new, Dx_new))
+    for idelay in range(num_delays):
+        X_new[:, idelay * Dx: (idelay + 1) * Dx] = X[idelay * delta: T_new + delta * idelay]
+    return jnp.asarray(X_new)
+
 
 def logcosh(x):
     # s always has real part >= 0
