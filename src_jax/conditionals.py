@@ -12,6 +12,7 @@ __author__ = "Christian Donner"
 # import jnp
 # from densities import GaussianDensity
 from jax import numpy as jnp
+from jax import scipy as jsc
 from jax import random
 from typing import Tuple
 from src_jax import densities, factors
@@ -151,13 +152,15 @@ class ConditionalGaussianDensity:
 
     @staticmethod
     def invert_matrix(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        L = jnp.linalg.cholesky(A)
+        #L = jnp.linalg.cholesky(A)
         # TODO: Check whether we can make it mor efficienty with solve_triangular.
         # L_inv = solve_triangular(L, jnp.eye(L.shape[0]), lower=True,
         #                         check_finite=False)
-        L_inv = jnp.linalg.solve(L, jnp.eye(L.shape[1])[None])
-        A_inv = jnp.einsum("acb,acd->abd", L_inv, L_inv)
-        ln_det_A = 2.0 * jnp.sum(jnp.log(L.diagonal(axis1=1, axis2=2)), axis=1)
+        #L_inv = jnp.linalg.solve(L, jnp.eye(L.shape[1])[None])
+        #A_inv = jnp.einsum("acb,acd->abd", L_inv, L_inv)
+        L = jsc.linalg.cho_factor(A)
+        A_inv = jsc.linalg.cho_solve(L, jnp.eye(A.shape[1])[None].tile((len(A), 1, 1)))
+        ln_det_A = 2.0 * jnp.sum(jnp.log(L[0].diagonal(axis1=-1, axis2=-2)), axis=1)
         return A_inv, ln_det_A
 
     def affine_joint_transformation(
