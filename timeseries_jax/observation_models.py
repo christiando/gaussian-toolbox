@@ -390,7 +390,7 @@ class LinearObservationModel(ObservationModel):
         #     Exx += cur_smooth_density.integrate('Ax_aBx_b_outer', A_mat=A,
         #                                         a_vec=a_t[t-1], B_mat=A,
         #                                         b_vec=a_t[t-1])[0]
-        self.Qx = Exx / T
+        self.Qx = .5 * (Exx + Exx.T) / T
 
     def update_C(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
         """ This procedure updates the transition matrix of the observation model.

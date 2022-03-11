@@ -435,6 +435,7 @@ class LSEMStateModel(LinearStateModel):
         )
         Qz_kk = jnp.dot(jnp.dot(self.A[:, self.Dz :], mean_Ekk), self.A[:, self.Dz :].T)
         Qz = Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
+        Qz = .5 * (Qz + Qz.T)
 
         # E[f(z)f(z)']
         Ekk = (
