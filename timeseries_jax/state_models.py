@@ -15,7 +15,7 @@
 
 __author__ = "Christian Donner"
 import sys
-
+from typing import Union
 sys.path.append("../")
 from jax import numpy as jnp
 import numpy as np
@@ -445,9 +445,9 @@ class LSEMStateModel(LinearStateModel):
         Ekz = phi_k.integrate("x").reshape((T, self.Dk, self.Dz))
         mean_Ekz = jnp.mean(Ekz, axis=0)
         mean_Ezz = jnp.mean(phi.integrate("xx"), axis=0)
-        mean_Ekk = jnp.mean(Ekk, axis=0) + 0.0001 * jnp.eye(self.Dk)
+        mean_Ekk = jnp.mean(Ekk, axis=0) 
         Eff = jnp.block([[mean_Ezz, mean_Ekz.T], [mean_Ekz, mean_Ekk]])
-
+        Eff += .001 * jnp.eye(Eff.shape[0])
         # mean_Ekk_reg = mean_Ekk + .0001 * jnp.eye(self.Dk)
         # mean_Ezz = jnp.mean(phi.integrate('xx'), axis=0)
         # Eff = jnp.block([[mean_Ezz, Ekz_past.T],
@@ -617,7 +617,7 @@ class LSEMStateModel(LinearStateModel):
         Qz_inv,
         Dk,
         Dz,
-    ) -> (float, jnp.ndarray):
+    ) -> Union[float, jnp.ndarray]:
         """ Computes the parts of the (negative) Q-fub
 
         :param W: jnp.ndarray [Dk, Dz + 1]
@@ -690,7 +690,7 @@ class LSEMStateModel(LinearStateModel):
         ln_det_Qz,
         Dk,
         Dz,
-    ) -> (float, jnp.ndarray):
+    ) -> Union[float, jnp.ndarray]:
         """ Computes the parts of the (negative) Q-fub
 
         :param W: jnp.ndarray [Dk, Dz + 1]
@@ -802,7 +802,8 @@ class LSEMStateModel(LinearStateModel):
             np.array(self.W.flatten(), dtype=np.float64),
             method="L-BFGS-B",
             jac=True,
-            options={"disp": False, "maxiter": 10},
+            bounds=[(-1e1, 1e1)] * self.W.size,
+            options={"disp": False},
         )
         self.W = jnp.array(result.x.reshape((self.Dk, self.Dz + 1)), dtype=jax_dtype)
         phi = smoothing_density.slice(jnp.arange(0, smoothing_density.R - 1))
