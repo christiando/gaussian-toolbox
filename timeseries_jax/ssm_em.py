@@ -124,7 +124,7 @@ class StateSpaceEM:
                 )
                 converged = jnp.abs(conv) < self.conv_crit
             self.iteration += 1
-            if self.iteration % 1 == 0:
+            if self.iteration % 10 == 0:
                 print("Iteration %d - llk=%.1f" % (self.iteration, self.llk_list[-1]))
             tot_time = time.perf_counter() - time_start_total
             if self.timeit:
@@ -288,7 +288,7 @@ class StateSpaceEM:
             np.array(self.twostep_smoothing_density.Lambda),
             np.array(self.twostep_smoothing_density.ln_det_Sigma),
         )
-
+        
         backward_step = jit(lambda t, cs: self.backward_step(t, cs, self.X))
         for t in jnp.arange(self.T - 1, -1, -1):
             cs_dict, ctss_dict = backward_step(t, cs_dict)
