@@ -146,7 +146,7 @@ class ConditionalGaussianDensity:
             jnp.einsum("ab, abc -> ac", y_minus_b, self.Lambda),
             y_minus_b,
         )
-        ln_beta_new = -0.5 * (yb_Lambda_yb + jnp.log(2 * jnp.pi * self.ln_det_Sigma))
+        ln_beta_new = -0.5 * (yb_Lambda_yb + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma)
         factor_new = factors.ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
         return factor_new
 
