@@ -21,6 +21,7 @@ from jax import numpy as jnp
 import numpy as np
 from jax import jit, value_and_grad
 from scipy.optimize import minimize as minimize_sc
+from utils.jax_minimize_wrapper import minimize as minimize_jax
 
 # from src_jax
 from src_jax import densities, conditionals, factors
@@ -704,7 +705,7 @@ class LSEMStateModel(LinearStateModel):
         :return: float
             Terms of negative Q-function depending on W.
         """
-        W = jnp.reshape(W, (Dk, Dz + 1))
+        #W = jnp.reshape(W, (Dk, Dz + 1))
         # print(W.shape)
         state_density = conditionals.LSEMGaussianConditional(
             M=jnp.array([A]),
@@ -773,9 +774,7 @@ class LSEMStateModel(LinearStateModel):
         """
         #  This compiling takes a lot of time, and is only worth it for several iterations
         phi = smoothing_density.slice(jnp.arange(0, smoothing_density.R - 1))
-        func = jit(
-            value_and_grad(
-                lambda W: self._Wfunc(
+        func = lambda W: self._Wfunc(
                     W,
                     phi,
                     two_step_smoothing_density,
@@ -787,41 +786,14 @@ class LSEMStateModel(LinearStateModel):
                     self.Dk,
                     self.Dz,
                 )
-            )
-        )
-        jax_dtype = self.W.dtype
-
-        def objective(W):
-            obj, grads = func(jnp.array(W, dtype=jax_dtype))
-            return (
-                np.array(obj, dtype=np.float64),
-                np.array(grads, dtype=np.float64).flatten(),
-            )
-
-        result = minimize_sc(
-            objective,
-            np.array(self.W.flatten(), dtype=np.float64),
+        result = minimize_jax(
+            func, self.W,
             method="L-BFGS-B",
-            jac=True,
-            bounds=[(-1e1, 1e1)] * self.W.size,
+            bounds=jnp.array([(-1e1, 1e1)] * (self.Dk * (self.Dz + 1))),
             options={"disp": False},
         )
-        self.W = jnp.array(result.x.reshape((self.Dk, self.Dz + 1)), dtype=jax_dtype)
-        phi = smoothing_density.slice(jnp.arange(0, smoothing_density.R - 1))
-        func = jit(
-            lambda W: self._Wfunc(
-                W,
-                phi,
-                two_step_smoothing_density,
-                self.A,
-                self.b,
-                self.Qz,
-                self.Qz_inv,
-                self.ln_det_Qz,
-                self.Dk,
-                self.Dz,
-            )
-        )
+        self.W = result.x#.reshape((self.Dk, self.Dz + 1))
+
         # result = minimize(func, self.W.flatten(), method='BFGS', options={'maxiter': 20})
         # self.W = result.x.reshape((self.Dk, self.Dz + 1))
 
