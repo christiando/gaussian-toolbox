@@ -20,6 +20,7 @@ sys.path.append("../")
 from jax import numpy as jnp
 import numpy as np
 from jax import jit, value_and_grad
+import objax
 from scipy.optimize import minimize as minimize_sc
 from utils.jax_minimize_wrapper import minimize as minimize_jax
 
@@ -31,7 +32,7 @@ from src_jax import densities, conditionals, factors
 # from tensorflow_probability.substrates import jax as tfp
 
 
-class StateModel:
+class StateModel(objax.Module):
     def __init__(self):
         """ This is the template class for state transition models in state space models. 
         Basically these classes should contain all functionality for transition between time steps
@@ -329,7 +330,7 @@ class LSEMStateModel(LinearStateModel):
         self.A = jnp.array(np.random.randn(self.Dz, self.Dphi))
         self.A = self.A.at[:, : self.Dz].set(jnp.eye(self.Dz))
         self.b = jnp.zeros((self.Dz,))
-        self.W = jnp.array(np.random.randn(self.Dk, self.Dz + 1))
+        self.W = objax.TrainVar(jnp.array(np.random.randn(self.Dk, self.Dz + 1)))
         self.state_density = conditionals.LSEMGaussianConditional(
             M=jnp.array([self.A]),
             b=jnp.array([self.b]),
@@ -607,78 +608,6 @@ class LSEMStateModel(LinearStateModel):
             self.A[:, self.Dz :].T,
         )
         return Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
-
-    @staticmethod
-    def _Wfunc2(
-        W,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
-        A,
-        b,
-        Qz,
-        Qz_inv,
-        Dk,
-        Dz,
-    ) -> Union[float, jnp.ndarray]:
-        """ Computes the parts of the (negative) Q-fub
-
-        :param W: jnp.ndarray [Dk, Dz + 1]
-            The weights in the squared exponential of conditional mean function.
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-
-        :return: float
-            Terms of negative Q-function depending on W.
-        """
-        W = jnp.reshape(W, (Dk, Dz + 1))
-        # print(W.shape)
-        state_density = conditionals.LSEMGaussianConditional(
-            M=jnp.array([A]), b=jnp.array([b]), W=W, Sigma=jnp.array([Qz])
-        )
-        # self.state_density.update_phi()
-        T = smoothing_density.R - 1
-        # E[z f(z)'] A'
-        # v_joint = jnp.block([jnp.zeros([Dk, int(Dz)]),
-        #                      state_density.k_func.v])
-        # nu_joint = jnp.block([jnp.zeros([Dk, int(Dz)]),
-        #                       state_density.k_func.nu])
-        zero_arr = jnp.zeros([Dk, 2 * Dz])
-        v_joint = zero_arr.at[:, Dz:].set(state_density.k_func.v)
-        nu_joint = zero_arr.at[:, Dz:].set(state_density.k_func.nu)
-        joint_k_func = factors.OneRankFactor(
-            v=v_joint, nu=nu_joint, ln_beta=state_density.k_func.ln_beta
-        )
-        two_step_k_measure = two_step_smoothing_density.multiply(
-            joint_k_func, update_full=True
-        )
-        Ekz = jnp.mean(
-            jnp.reshape(two_step_k_measure.integrate("x"), (T, Dk, 2 * Dz)), axis=0
-        )
-        # Ek = jnp.mean(two_step_k_measure.integrate().reshape((T, self.Dk)), axis=0)
-        Ek = jnp.mean(
-            jnp.reshape(
-                smoothing_density.multiply(state_density.k_func).integrate(),
-                (T + 1, Dk),
-            )[:-1],
-            axis=0,
-        )
-        Qz_k_lin_err = jnp.dot(
-            A[:, Dz:],
-            (Ekz[:, :Dz] - jnp.dot(Ekz[:, Dz:], A[:, :Dz].T) - Ek[:, None] * b[None]),
-        )
-        Ekk = jnp.reshape(
-            smoothing_density.multiply(state_density.k_func, update_full=True)
-            .multiply(state_density.k_func, update_full=True)
-            .integrate(),
-            (T + 1, Dk, Dk),
-        )
-        Qz_kk = jnp.dot(jnp.dot(A[:, Dz:], jnp.mean(Ekk[:-1], axis=0)), A[:, Dz:].T)
-        Qfunc_W = 0.5 * jnp.trace(
-            jnp.dot(Qz_inv, Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T)
-        )
-        return Qfunc_W
 
     @staticmethod
     def _Wfunc(

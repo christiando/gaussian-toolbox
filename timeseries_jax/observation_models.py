@@ -27,6 +27,7 @@ from jax import scipy as jsc
 import numpy as np
 from jax import lax
 from jax import jit, value_and_grad, vmap
+import objax
 from functools import partial
 
 from src_jax import densities, conditionals, factors
@@ -75,7 +76,7 @@ def logcosh(x):
     return s + jnp.log1p(p) - jnp.log(2)
 
 
-class ObservationModel:
+class ObservationModel(objax.Module):
     def __init__(self):
         """ This is the template class for observation models in state space models. 
         Basically these classes should contain all functionality for the mapping between 
@@ -146,11 +147,11 @@ class LinearObservationModel(ObservationModel):
         """
         self.Dx, self.Dz = Dx, Dz
         if Dx == Dz:
-            self.C = jnp.eye(Dx)
+            self.C = objax.TrainVar(jnp.eye(Dx))
         else:
-            self.C = jnp.array(np.random.randn(Dx, Dz))
-        self.d = jnp.zeros(Dx)
-        self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
+            self.C = objax.TrainVar(jnp.array(np.random.randn(Dx, Dz)))
+        self.d = objax.TrainVar(jnp.zeros(Dx))
+        self.Qx = objax.TrainVar(noise_x ** 2 * jnp.eye(self.Dx))
         self.emission_density = conditionals.ConditionalGaussianDensity(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
