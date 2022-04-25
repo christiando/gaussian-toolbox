@@ -147,11 +147,11 @@ class LinearObservationModel(ObservationModel):
         """
         self.Dx, self.Dz = Dx, Dz
         if Dx == Dz:
-            self.C = objax.TrainVar(jnp.eye(Dx))
+            self.C = jnp.eye(Dx)
         else:
-            self.C = objax.TrainVar(jnp.array(np.random.randn(Dx, Dz)))
-        self.d = objax.TrainVar(jnp.zeros(Dx))
-        self.Qx = objax.TrainVar(noise_x ** 2 * jnp.eye(self.Dx))
+            self.C = jnp.array(np.random.randn(Dx, Dz))
+        self.d = jnp.zeros(Dx)
+        self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
         self.emission_density = conditionals.ConditionalGaussianDensity(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
@@ -350,7 +350,7 @@ class LinearObservationModel(ObservationModel):
             p_x = self.emission_density.affine_marginal_transformation(p_z)
             p_ux_given_ox = p_x.condition_on_explicit(observed_dims, nonobserved_dims)
             p_ux = p_ux_given_ox.condition_on_x(x_t[:, observed_dims])
-            return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))
+            return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))[0]
 
     def update_hyperparameters(
         self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs

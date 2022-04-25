@@ -721,41 +721,7 @@ class LSEMStateModel(LinearStateModel):
             bounds=jnp.array([(-1e1, 1e1)] * (self.Dk * (self.Dz + 1))),
             options={"disp": False},
         )
-        self.W = result.x#.reshape((self.Dk, self.Dz + 1))
-
-        # result = minimize(func, self.W.flatten(), method='BFGS', options={'maxiter': 20})
-        # self.W = result.x.reshape((self.Dk, self.Dz + 1))
-
-        # func = lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
-        #                                  self.Qz_inv, self.ln_det_Qz, self.Dk, self.Dz)
-        # @jit
-        # def do_minimize_jax(W0):
-        #     results = minimize(func, W0, method='BFGS', options={'maxiter': 20})
-        #     return results.x.reshape((self.Dk, self.Dz + 1))
-        #
-        # self.W = do_minimize_jax(self.W.flatten())
-        # func = jit(grad(lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
-        #                           self.Qz_inv, self.ln_det_Qz, self.Dk, self.Dz)))
-        # W = self.W.flatten()
-        # for i in range(10):
-        #     v, g = func(W)
-        #     W = W - 1e-1 * g
-        # self.W = W.reshape((self.Dk, self.Dz + 1))
-
-        # opt_init, opt_update, get_params = optimizers.adam(1e-1)
-        # opt_state = opt_init(W)
-        # def step(step, opt_state):
-        #     grads = func(get_params(opt_state))
-        #     opt_state = opt_update(step, grads, opt_state)
-        #     return opt_state
-        # for i in range(50):
-        #     opt_state = step(i, opt_state)
-        # self.W = get_params(opt_state).reshape((self.Dk, self.Dz + 1))
-        # func = jit(value_and_grad(lambda W: self._Wfunc(W, phi, two_step_smoothing_density, self.A, self.b, self.Qz,
-        #                           self.Qz_inv, self.ln_det_Qz, self.Dk, self.Dz)))
-        # result = tfp.optimizer.lbfgs_minimize(func, initial_position=self.W.flatten(), tolerance=1e-5,
-        #                                       max_iterations=10, max_line_search_iterations=20, num_correction_pairs=10)
-        # self.W = result.position.reshape((self.Dk, self.Dz + 1))
+        self.W = result.x
 
     def update_state_density(self):
         """ Updates the state density.
