@@ -569,14 +569,11 @@ class StateSpaceEM(objax.Module):
         :rtype: Union[jnp.ndarray, jnp.ndarray] [num_samples, Dz] [num_samples, num_unobserved]
         """
         
-        rand_nums_z_t, x_t, rand_nums_x_t = vars_t
-        p_z = self.sm.state_density.condition_on_x(z_old)
+        rand_nums_z_t, x_t, rand_nums_x_t, uz_t, ux_t = vars_t
+        p_z = self.sm.condition_on_past(z_old, uz_t=uz_t)
         L = jnp.linalg.cholesky(p_z.Sigma)
         z_sample = p_z.mu + jnp.einsum("abc,ac->ab", L, rand_nums_z_t)
-        p_x = self.om.emission_density.condition_on_x(z_sample)
-        if observed_dims != None:
-            p_x = p_x.condition_on_explicit(observed_dims, unobserved_dims)
-            p_x = p_x.condition_on_x(x_t[observed_dims][None])
+        p_x = self.om.condition_on_z_and_observations(z_sample, x_t, observed_dims, unobserved_dims, ux_t=ux_t)
         L = jnp.linalg.cholesky(p_x.Sigma)
         x_sample = p_x.mu + jnp.einsum("abc,ac->ab", L, rand_nums_x_t)
         result = z_sample, x_sample
@@ -588,6 +585,8 @@ class StateSpaceEM(objax.Module):
         observed_dims: jnp.ndarray = None,
         p0: densities.GaussianDensity = None,
         num_samples: int = 1,
+        u_z: jnp.ndarray=None,
+        u_x: jnp.ndarray=None,
     ) -> Union[jnp.ndarray, jnp.ndarray]:
         """Samples a trajectories, with fixed observed data dimensions.
 
@@ -603,6 +602,10 @@ class StateSpaceEM(objax.Module):
         :rtype: Union[jnp.ndarray, jnp.ndarray] [T+1, nums_samples, Dz] [T, nums_samples, num_unobserved_dims]
         """
         T = X.shape[0]
+        if u_z == None:
+            u_z = jnp.empty((T, 0))
+        if u_x == None:
+            u_x = jnp.empty((T, 0))
         if p0 is None:
             p0 = densities.GaussianDensity(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
@@ -623,7 +626,7 @@ class StateSpaceEM(objax.Module):
         rand_nums_z = objax.random.normal((T, num_samples, self.Dz))
         rand_nums_x = objax.random.normal((T, num_samples, num_unobserved_dims))
         
-        _, result = lax.scan(sample_step, init, (rand_nums_z, X, rand_nums_x))
+        _, result = lax.scan(sample_step, init, (rand_nums_z, X, rand_nums_x, u_z, u_x))
         z_sample, X_sample = result
 
         return z_sample, X_sample

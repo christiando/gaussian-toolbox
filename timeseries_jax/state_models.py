@@ -16,6 +16,7 @@
 __author__ = "Christian Donner"
 import sys
 from typing import Union
+
 sys.path.append("../")
 from jax import numpy as jnp
 import numpy as np
@@ -282,7 +283,7 @@ class LinearStateModel(StateModel):
         )
 
     def update_init_density(
-        self, init_smooth_density: densities.GaussianDensity, **kwargs
+        self, init_smooth_density: densities.GaussianDensity, *kwargs
     ) -> densities.GaussianDensity:
         """ Finds the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
@@ -299,6 +300,16 @@ class LinearStateModel(StateModel):
         )
         opt_init_density = densities.GaussianDensity(Sigma0, mu0)
         return opt_init_density
+
+    def condition_on_past(self, z_old: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
+        """ Return p(Z_t+1|Z_t=z)
+
+        :param z_old: Vector of past latent variables.
+        :type z_old: jnp.ndarray
+        :return: The density of the latent variables at the next step.
+        :rtype: densities.GaussianDensity
+        """
+        return self.state_density.condition_on_x(z_old)
 
 
 class LSEMStateModel(LinearStateModel):
@@ -437,7 +448,7 @@ class LSEMStateModel(LinearStateModel):
         )
         Qz_kk = jnp.dot(jnp.dot(self.A[:, self.Dz :], mean_Ekk), self.A[:, self.Dz :].T)
         Qz = Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
-        Qz = .5 * (Qz + Qz.T)
+        Qz = 0.5 * (Qz + Qz.T)
 
         # E[f(z)f(z)']
         Ekk = (
@@ -448,9 +459,9 @@ class LSEMStateModel(LinearStateModel):
         Ekz = phi_k.integrate("x").reshape((T, self.Dk, self.Dz))
         mean_Ekz = jnp.mean(Ekz, axis=0)
         mean_Ezz = jnp.mean(phi.integrate("xx"), axis=0)
-        mean_Ekk = jnp.mean(Ekk, axis=0) 
+        mean_Ekk = jnp.mean(Ekk, axis=0)
         Eff = jnp.block([[mean_Ezz, mean_Ekz.T], [mean_Ekz, mean_Ekk]])
-        Eff += .001 * jnp.eye(Eff.shape[0])
+        Eff += 0.001 * jnp.eye(Eff.shape[0])
         # mean_Ekk_reg = mean_Ekk + .0001 * jnp.eye(self.Dk)
         # mean_Ezz = jnp.mean(phi.integrate('xx'), axis=0)
         # Eff = jnp.block([[mean_Ezz, Ekz_past.T],
@@ -634,7 +645,7 @@ class LSEMStateModel(LinearStateModel):
         :return: float
             Terms of negative Q-function depending on W.
         """
-        #W = jnp.reshape(W, (Dk, Dz + 1))
+        # W = jnp.reshape(W, (Dk, Dz + 1))
         # print(W.shape)
         state_density = conditionals.LSEMGaussianConditional(
             M=jnp.array([A]),
@@ -704,19 +715,20 @@ class LSEMStateModel(LinearStateModel):
         #  This compiling takes a lot of time, and is only worth it for several iterations
         phi = smoothing_density.slice(jnp.arange(0, smoothing_density.R - 1))
         func = lambda W: self._Wfunc(
-                    W,
-                    phi,
-                    two_step_smoothing_density,
-                    self.A,
-                    self.b,
-                    self.Qz,
-                    self.Qz_inv,
-                    self.ln_det_Qz,
-                    self.Dk,
-                    self.Dz,
-                )
+            W,
+            phi,
+            two_step_smoothing_density,
+            self.A,
+            self.b,
+            self.Qz,
+            self.Qz_inv,
+            self.ln_det_Qz,
+            self.Dk,
+            self.Dz,
+        )
         result = minimize_jax(
-            func, self.W,
+            func,
+            self.W,
             method="L-BFGS-B",
             bounds=jnp.array([(-1e1, 1e1)] * (self.Dk * (self.Dz + 1))),
             options={"disp": False},

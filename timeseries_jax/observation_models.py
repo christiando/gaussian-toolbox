@@ -60,12 +60,15 @@ def recommend_dims(X, smooth_window=20, cut_off=0.99):
     )
     return Dz, Du
 
-def augment_taken(X: jnp.ndim, delta: int=1, num_delays: int=1) -> jnp.ndarray:
+
+def augment_taken(X: jnp.ndim, delta: int = 1, num_delays: int = 1) -> jnp.ndarray:
     T, Dx = X.shape
     T_new, Dx_new = T - delta * (num_delays - 1), Dx * num_delays
     X_new = np.empty((T_new, Dx_new))
     for idelay in range(num_delays):
-        X_new[:, idelay * Dx: (idelay + 1) * Dx] = X[idelay * delta: T_new + delta * idelay]
+        X_new[:, idelay * Dx : (idelay + 1) * Dx] = X[
+            idelay * delta : T_new + delta * idelay
+        ]
     return jnp.asarray(X_new)
 
 
@@ -391,7 +394,7 @@ class LinearObservationModel(ObservationModel):
         #     Exx += cur_smooth_density.integrate('Ax_aBx_b_outer', A_mat=A,
         #                                         a_vec=a_t[t-1], B_mat=A,
         #                                         b_vec=a_t[t-1])[0]
-        self.Qx = .5 * (Exx + Exx.T) / T
+        self.Qx = 0.5 * (Exx + Exx.T) / T
 
     def update_C(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
         """ This procedure updates the transition matrix of the observation model.
@@ -452,6 +455,33 @@ class LinearObservationModel(ObservationModel):
         for t in range(0, T):
             llk += llk_step(t)
         return llk
+
+    def condition_on_z_and_observations(
+        self,
+        z_sample: jnp.narray,
+        x_t: jnp.ndarray,
+        observed_dims: jnp.ndarray,
+        unobserved_dims: jnp.ndarray,
+        **kwargs
+    ) -> densities.GaussianDensity:
+        """ Returns the density p(x_unobserved|X_observed=x, Z=z).
+
+        :param z_sample: Values of latent variable
+        :type z_sample: jnp.narray
+        :param x_t: Data.
+        :type x_t: jnp.ndarray
+        :param observed_dims: Observed dimension
+        :type observed_dims: jnp.ndarray
+        :param unobserved_dims: Unobserved dimensions.
+        :type unobserved_dims: jnp.ndarray
+        :return: The density over unobserved dimensions.
+        :rtype: densities.GaussianDensity
+        """
+        p_x = self.emission_density.condition_on_x(z_sample)
+        if observed_dims != None:
+            p_x = p_x.condition_on_explicit(observed_dims, unobserved_dims)
+            p_x = p_x.condition_on_x(x_t[observed_dims][None])
+        return p_x
 
 
 class HCCovObservationModel(LinearObservationModel):
