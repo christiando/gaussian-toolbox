@@ -12,10 +12,10 @@ __author__ = "Christian Donner"
 # import jnp
 # from densities import GaussianDensity
 from jax import numpy as jnp
-from jax import scipy as jsc
-from jax import random
 from typing import Tuple
 from src_jax import densities, factors
+import objax
+from utils.linalg import invert_matrix
 
 
 class ConditionalGaussianDensity:
@@ -51,14 +51,14 @@ class ConditionalGaussianDensity:
         elif Sigma is not None:
             self.Sigma = Sigma
             if Lambda is None or ln_det_Sigma is None:
-                self.Lambda, self.ln_det_Sigma = self.invert_matrix(self.Sigma)
+                self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
             else:
                 self.Lambda, self.ln_det_Sigma = Lambda, ln_det_Sigma
             self.ln_det_Lambda = -self.ln_det_Sigma
         else:
             self.Lambda = Lambda
             if Sigma is None or ln_det_Sigma is None:
-                self.Sigma, self.ln_det_Lambda = self.invert_matrix(self.Sigma)
+                self.Sigma, self.ln_det_Lambda = invert_matrix(self.Sigma)
             else:
                 self.Sigma, self.ln_det_Lambda = Lambda, ln_det_Sigma
             self.ln_det_Sigma = -self.ln_det_Lambda
@@ -150,19 +150,6 @@ class ConditionalGaussianDensity:
         factor_new = factors.ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
         return factor_new
 
-    @staticmethod
-    def invert_matrix(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        #L = jnp.linalg.cholesky(A)
-        # TODO: Check whether we can make it mor efficienty with solve_triangular.
-        # L_inv = solve_triangular(L, jnp.eye(L.shape[0]), lower=True,
-        #                         check_finite=False)
-        #L_inv = jnp.linalg.solve(L, jnp.eye(L.shape[1])[None])
-        #A_inv = jnp.einsum("acb,acd->abd", L_inv, L_inv)
-        L = jsc.linalg.cho_factor(A)
-        A_inv = jsc.linalg.cho_solve(L, jnp.eye(A.shape[1])[None].tile((len(A), 1, 1)))
-        ln_det_A = 2.0 * jnp.sum(jnp.log(L[0].diagonal(axis1=-1, axis2=-2)), axis=1)
-        return A_inv, ln_det_A
-
     def affine_joint_transformation(
         self, p_x: densities.GaussianDensity
     ) -> densities.GaussianDensity:
@@ -246,7 +233,7 @@ class ConditionalGaussianDensity:
         return densities.GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
 
     def affine_marginal_transformation(
-        self, p_x: "ConditionalGaussianDensity"
+        self, p_x: densities.GaussianDensity
     ) -> densities.GaussianDensity:
         """ Returns the marginal density p(y) given  p(y|x) and p(x), 
             where p(y|x) is the object itself.
@@ -275,7 +262,7 @@ class ConditionalGaussianDensity:
         return densities.GaussianDensity(Sigma_y, mu_y)
 
     def affine_conditional_transformation(
-        self, p_x: "ConditionalGaussianDensity"
+        self, p_x: densities.GaussianDensity
     ) -> "ConditionalGaussianDensity":
         """ Returns the conditional density p(x|y), given p(y|x) and p(x),           
             where p(y|x) is the object itself.
@@ -306,7 +293,7 @@ class ConditionalGaussianDensity:
         MLambdaM = jnp.einsum("abc,abd->acd", self.M, Lambda_yM)
         Lambda_x = (p_x.Lambda[None] + MLambdaM[:, None]).reshape((R, p_x.D, p_x.D))
         # Sigma
-        Sigma_x, ln_det_Lambda_x = p_x.invert_matrix(Lambda_x)
+        Sigma_x, ln_det_Lambda_x = invert_matrix(Lambda_x)
         # M_x
         M_Lambda_y = jnp.einsum("abc,abd->acd", self.M, self.Lambda)  # [R1, D, Dy]
         M_x = jnp.einsum(
@@ -322,6 +309,175 @@ class ConditionalGaussianDensity:
         return ConditionalGaussianDensity(
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x,
         )
+
+
+class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
+    def __init__(self, Sigma: jnp.ndarray, Dx: int, Du: int, hidden_units: list=[16,], non_linearity: callable=objax.functional.tanh):
+        """A conditional Gaussian density, where the transition model is determined through a (known) control variable u.
+        
+            p(y|x, u) = N(mu(x|u), Sigma)
+
+            with the conditional mean function mu(x) = M(u) x + b(u),
+            
+            where M(u) and b(u) come from the same neural network.
+
+        :param Sigma: Covariance matrix [1, Dy, Dy]
+        :type Sigma: jnp.ndarray
+        :param Dx: Dimension of the conditional variable.
+        :type Dx: int
+        :param Du: Dimension of the control variable
+        :type Du: int
+        :param hidden_units: Determines how many hidden layers and how many units in each layer, defaults to [16,]
+        :type hidden_units: list, optional
+        :param non_linearity: Non linearity after each layer, defaults to objax.functional.tanh
+        :type non_linearity: callable, optional
+        :raises NotImplementedError: Raised when the leading dimension of Sigma is not 1.
+        """
+        self.Sigma = Sigma
+        self.R = Sigma.shape[0]
+        if self.R != 1:
+            raise NotImplementedError("So far only R=1 is supported.")
+        self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
+        self.Dy, self.Dx, self.Du = self.Sigma[1], Dx, Du
+        self.hidden_units = hidden_units
+        self.non_linearity = non_linearity
+        self.network = self._build_network()
+        
+    def _build_network(self) -> objax.Module:
+        """Constructs the network
+
+        :return: The network.
+        :rtype: objax.Module
+        """
+        nn_list = []
+        prev_layer = self.Du
+        for num_hidden in self.hidden_units:
+            nn_list += [objax.nn.Linear(prev_layer, num_hidden), self.non_linearity]
+            prev_layer = num_hidden
+        nn_list += [objax.nn.Linear(prev_layer, self.Dy * (self.Dx + 1))]
+        network = objax.nn.Sequential(nn_list)
+        return network
+    
+    def get_M_b(self, u: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Construct M(u) and b(u) from the output.
+
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: Returns M(u) [R, Dy, Dx] and b(u) [R, Dy]
+        :rtype: Tuple[jnp.ndarray, jnp.ndarray]
+        """
+        output = self.network(u)
+        M = output[:,:self.Dy * self.Dx].reshape((-1, self.Dy, self.Dx))
+        b = output[:,self.Dy * self.Dx:]
+        return M, b
+    
+    def set_control_variable(self, u: jnp.ndarray) -> ConditionalGaussianDensity:
+        """Creates the conditional for a given control variable u,
+        
+            p(Y|X, U=u).
+
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: The conditional
+        :rtype: ConditionalGaussianDensity
+        """
+        R = u.shape[0]
+        M, b = self.get_M_b(u)
+        tile_dims = (R, 1, 1)
+        return ConditionalGaussianDensity(M=M, b=b, Sigma=jnp.tile(self.Sigma, tile_dims), 
+                                   Lambda=jnp.tile(self.Lambda, tile_dims), 
+                                   ln_det_Sigma=jnp.tile(self.ln_det_Sigma, tile_dims))
+        
+    def get_conditional_mu(self, x: jnp.ndarray, u: jnp.array) -> jnp.ndarray:
+        """ Computes the conditional mean given an x and an u,
+        
+        mu(x|u) = M(u)x + b(u)
+
+        :param x: Conditional variable [N, Dx]
+        :type x: jnp.ndarray
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: Conditional mean [R, N, Dy]
+        :rtype: jnp.ndarray
+        """
+        cond_gauss = self.set_control_variable(u)
+        return cond_gauss.get_conditional_mu(x)
+    
+    def condition_on_x(self, x: jnp.ndarray, u: jnp.array) -> densities.GaussianDensity:
+        """Returns the Gaussian density
+        
+        p(Y|X=x, U=u)
+
+        :param x: Conditional variable [N, Dx]
+        :type x: jnp.ndarray
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: Gaussian density conditioned on instances x, and u.
+        :rtype: densities.GaussianDensity
+        """
+        cond_gauss = self.set_control_variable(u)
+        return cond_gauss.condition_on_x(x)
+    
+    def set_y(self, y: jnp.ndarray, u: jnp.array) -> factors.ConjugateFactor:
+        """Sets an instance of Y and U and returns
+        
+        p(Y=y|X, U=u)
+
+        :param y: Random variable [R, Dy]
+        :type y: jnp.ndarray
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: The factor with the instantiation.
+        :rtype: factors.ConjugateFactor
+        """
+        cond_gauss = self.set_control_variable(u)
+        return cond_gauss.set_y(y)
+    
+    def affine_joint_transformation(self, p_x: densities.GaussianDensity, u: jnp.array) -> densities.GaussianDensity:
+        """Does the affine joint transformation with a given control variable
+        
+        
+            p(X,Y|U=u) = p(Y|X,U=u)p(X),
+
+            where p(Y|X,U=u) is the object itself.
+
+        :param p_x: Marginal over X
+        :type p_x: densities.GaussianDensity
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: The joint density
+        :rtype: densities.GaussianDensity
+        """
+        cond_gauss = self.set_control_variable(u)
+        return cond_gauss.affine_joint_transformation(p_x)
+    
+    def affine_marginal_transformation(self, p_x: densities.GaussianDensity, u: jnp.array) -> densities.GaussianDensity:
+        """Returns the marginal density p(Y) given  p(Y|X,U=u) and p(X), 
+        where p(Y|X,U=u) is the object itself.
+
+        :param p_x: Marginal over X
+        :type p_x: densities.GaussianDensity
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: Marginal density p(Y|U=u)
+        :rtype: densities.GaussianDensity
+        """
+        cond_gauss = self.set_control_variable(u)
+        return cond_gauss.affine_marginal_transformation(p_x)
+    
+    def affine_conditional_transformation(self, p_x: densities.GaussianDensity, u: jnp.array) -> "ConditionalGaussianDensity":
+        """ Returns the conditional density p(X|Y, U=u), given p(Y|X,U=u) and p(X),           
+            where p(Y|X,U=u) is the object itself.
+
+        :param p_x: Marginal over X
+        :type p_x: densities.GaussianDensity
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: Conditional density p(X|Y, U=u)
+        :rtype: ConditionalGaussianDensity
+        """
+        cond_gauss = self.set_control_variable(u)
+        return cond_gauss.affine_conditional_transformation(p_x)
 
 
 class LSEMGaussianConditional(ConditionalGaussianDensity):
@@ -558,7 +714,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
             Returns the conditional density of x given y.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        Lambda_y = self.invert_matrix(Sigma_y)[0]
+        Lambda_y = invert_matrix(Sigma_y)[0]
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
@@ -811,7 +967,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
             Returns the conditional density of x given y.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        Lambda_y = self.invert_matrix(Sigma_y)[0]
+        Lambda_y = invert_matrix(Sigma_y)[0]
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]

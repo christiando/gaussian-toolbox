@@ -15,6 +15,7 @@ from typing import Iterable
 
 # from .
 from src_jax import measures
+from utils.linalg import invert_matrix, invert_diagonal
 
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
@@ -96,7 +97,7 @@ class GaussianDensity(measures.GaussianMeasure):
             Log determinant of the covariance matrix. (Default=None)
         """
         if Lambda is None:
-            Lambda, ln_det_Sigma = self.invert_matrix(Sigma)
+            Lambda, ln_det_Sigma = invert_matrix(Sigma)
         elif ln_det_Sigma is None:
             ln_det_Sigma = jnp.linalg.slogdet(Sigma)[1]
         nu = jnp.einsum("abc,ab->ac", Lambda, mu)
@@ -196,7 +197,7 @@ class GaussianDensity(measures.GaussianMeasure):
         dim_x = jnp.setxor1d(dim_xy, dim_y)
         # dim_x = dim_xy[jnp.logical_not(jnp.isin(dim_xy, dim_y))]
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
-        Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
+        Sigma_x, ln_det_Lambda_x = invert_matrix(Lambda_x)
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
         return conditionals.ConditionalGaussianDensity(
@@ -217,7 +218,7 @@ class GaussianDensity(measures.GaussianMeasure):
         from src_jax import conditionals
 
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
-        Sigma_x, ln_det_Lambda_x = self.invert_matrix(Lambda_x)
+        Sigma_x, ln_det_Lambda_x = invert_matrix(Lambda_x)
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
         return conditionals.ConditionalGaussianDensity(
@@ -253,7 +254,7 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         :param ln_det_Sigma: jnp.ndarray [R] or None
             Log determinant of the covariance matrix. (Default=None)
         """
-        Lambda, ln_det_Sigma = self.invert_diagonal(Sigma)
+        Lambda, ln_det_Sigma = invert_diagonal(Sigma)
         super().__init__(
             Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma,
         )

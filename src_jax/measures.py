@@ -12,6 +12,7 @@ from jax import numpy as jnp
 from src_jax import factors
 from jax.scipy.special import logsumexp
 from typing import Iterable, Tuple
+from utils.linalg import invert_matrix, invert_diagonal
 
 
 class GaussianMixtureMeasure:
@@ -241,7 +242,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         )
 
     def invert_lambda(self):
-        self.Sigma, self.ln_det_Lambda = self.invert_matrix(self.Lambda)
+        self.Sigma, self.ln_det_Lambda = invert_matrix(self.Lambda)
         self.ln_det_Sigma = -self.ln_det_Lambda
 
     def multiply(
@@ -1220,14 +1221,6 @@ class GaussianDiagMeasure(GaussianMeasure):
         self.Sigma = jnp.diag(1.0 / self.Lambda.diagonal(axis1=1, axis2=2))
         self.ln_det_Lambda = jnp.sum(jnp.log(self.Lambda.diagonal()))
         self.ln_det_Sigma = -self.ln_det_Lambda
-
-    @staticmethod
-    def invert_diagonal(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        A_inv = jnp.concatenate(
-            [jnp.diag(mat)[None] for mat in 1.0 / A.diagonal(axis1=1, axis2=2)], axis=0
-        )
-        ln_det_A = jnp.sum(jnp.log(A.diagonal(axis1=1, axis2=2)), axis=1)
-        return A_inv, ln_det_A
 
     def slice(self, indices: list) -> "GaussianDiagMeasure":
         """ Returns an object with only the specified entries.
