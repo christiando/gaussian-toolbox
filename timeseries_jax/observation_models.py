@@ -458,7 +458,7 @@ class LinearObservationModel(ObservationModel):
 
     def condition_on_z_and_observations(
         self,
-        z_sample: jnp.narray,
+        z_sample: jnp.ndarray,
         x_t: jnp.ndarray,
         observed_dims: jnp.ndarray,
         unobserved_dims: jnp.ndarray,
@@ -467,7 +467,7 @@ class LinearObservationModel(ObservationModel):
         """ Returns the density p(x_unobserved|X_observed=x, Z=z).
 
         :param z_sample: Values of latent variable
-        :type z_sample: jnp.narray
+        :type z_sample: jnp.ndarray
         :param x_t: Data.
         :type x_t: jnp.ndarray
         :param observed_dims: Observed dimension

@@ -82,7 +82,7 @@ class ConditionalGaussianDensity:
         )
         return new_measure
 
-    def get_conditional_mu(self, x: jnp.ndarray) -> jnp.ndarray:
+    def get_conditional_mu(self, x: jnp.ndarray, **kwargs) -> jnp.ndarray:
         """ Computest the conditional mu function
 
             mu(x) = M x + b.
@@ -96,7 +96,7 @@ class ConditionalGaussianDensity:
         mu_y = jnp.einsum("abc,dc->adb", self.M, x) + self.b[:, None]
         return mu_y
 
-    def condition_on_x(self, x: jnp.ndarray) -> densities.GaussianDensity:
+    def condition_on_x(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
         """ Generates the corresponding Gaussian Density conditioned on x.
 
         :param x: jnp.ndarray [N, Dx]
@@ -124,7 +124,7 @@ class ConditionalGaussianDensity:
             ln_det_Sigma=ln_det_Sigma_new,
         )
 
-    def set_y(self, y: jnp.ndarray) -> factors.ConjugateFactor:
+    def set_y(self, y: jnp.ndarray, **kwargs) -> factors.ConjugateFactor:
         """ Sets a specific value for y in p(y|x) and returns the corresponding conjugate factor. 
 
         :param y: Data for y, where the rth entry is associated with the rth conditional density. 
@@ -151,7 +151,7 @@ class ConditionalGaussianDensity:
         return factor_new
 
     def affine_joint_transformation(
-        self, p_x: densities.GaussianDensity
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
         """ Returns the joint density 
 
@@ -233,7 +233,7 @@ class ConditionalGaussianDensity:
         return densities.GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
 
     def affine_marginal_transformation(
-        self, p_x: densities.GaussianDensity
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
         """ Returns the marginal density p(y) given  p(y|x) and p(x), 
             where p(y|x) is the object itself.
@@ -262,7 +262,7 @@ class ConditionalGaussianDensity:
         return densities.GaussianDensity(Sigma_y, mu_y)
 
     def affine_conditional_transformation(
-        self, p_x: densities.GaussianDensity
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> "ConditionalGaussianDensity":
         """ Returns the conditional density p(x|y), given p(y|x) and p(x),           
             where p(y|x) is the object itself.
@@ -388,7 +388,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
                                    Lambda=jnp.tile(self.Lambda, tile_dims), 
                                    ln_det_Sigma=jnp.tile(self.ln_det_Sigma, tile_dims))
         
-    def get_conditional_mu(self, x: jnp.ndarray, u: jnp.array) -> jnp.ndarray:
+    def get_conditional_mu(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> jnp.ndarray:
         """ Computes the conditional mean given an x and an u,
         
         mu(x|u) = M(u)x + b(u)
@@ -403,7 +403,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.get_conditional_mu(x)
     
-    def condition_on_x(self, x: jnp.ndarray, u: jnp.array) -> densities.GaussianDensity:
+    def condition_on_x(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> densities.GaussianDensity:
         """Returns the Gaussian density
         
         p(Y|X=x, U=u)
@@ -418,7 +418,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.condition_on_x(x)
     
-    def set_y(self, y: jnp.ndarray, u: jnp.array) -> factors.ConjugateFactor:
+    def set_y(self, y: jnp.ndarray, u: jnp.array, **kwargs) -> factors.ConjugateFactor:
         """Sets an instance of Y and U and returns
         
         p(Y=y|X, U=u)
@@ -433,7 +433,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.set_y(y)
     
-    def affine_joint_transformation(self, p_x: densities.GaussianDensity, u: jnp.array) -> densities.GaussianDensity:
+    def affine_joint_transformation(self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs) -> densities.GaussianDensity:
         """Does the affine joint transformation with a given control variable
         
         
@@ -451,7 +451,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_joint_transformation(p_x)
     
-    def affine_marginal_transformation(self, p_x: densities.GaussianDensity, u: jnp.array) -> densities.GaussianDensity:
+    def affine_marginal_transformation(self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs) -> densities.GaussianDensity:
         """Returns the marginal density p(Y) given  p(Y|X,U=u) and p(X), 
         where p(Y|X,U=u) is the object itself.
 
@@ -465,7 +465,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_marginal_transformation(p_x)
     
-    def affine_conditional_transformation(self, p_x: densities.GaussianDensity, u: jnp.array) -> "ConditionalGaussianDensity":
+    def affine_conditional_transformation(self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs) -> "ConditionalGaussianDensity":
         """ Returns the conditional density p(X|Y, U=u), given p(Y|X,U=u) and p(X),           
             where p(Y|X,U=u) is the object itself.
 
@@ -551,7 +551,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         # phi_x[:,self.Dx:] = self.k_func.evaluate(x).T
         return phi_x
 
-    def get_conditional_mu(self, x: jnp.ndarray) -> jnp.ndarray:
+    def get_conditional_mu(self, x: jnp.ndarray, **kwargs) -> jnp.ndarray:
         """ Computes the conditional mu function
 
             mu(x) = mu(x) = M phi(x) + b
@@ -566,7 +566,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         mu_y = jnp.einsum("ab,cb->ca", self.M[0], phi_x) + self.b[0][None]
         return mu_y
     
-    def set_y(self, y: jnp.ndarray):
+    def set_y(self, y: jnp.ndarray, **kwargs):
         """Not valid function for this model class.
 
         :param y: Data for y, where the rth entry is associated with the rth conditional density. 
@@ -663,7 +663,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         return Eyx
 
     def affine_joint_transformation(
-        self, p_x: densities.GaussianDensity
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
         """ Gets an approximation of the joint density
 
@@ -701,7 +701,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         return p_xy
 
     def affine_conditional_transformation(
-        self, p_x: densities.GaussianDensity
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> "ConditionalGaussianDensity":
         """ Gets an approximation of the joint density via moment matching
 
@@ -725,7 +725,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         return cond_p_xy
 
     def affine_marginal_transformation(
-        self, p_x: densities.GaussianDensity
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
         """ Gets an approximation of the marginal density
 
@@ -830,7 +830,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         )
         return Sigma_y_x
 
-    def condition_on_x(self, x: jnp.ndarray) -> densities.GaussianDensity:
+    def condition_on_x(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
         """ Generates the corresponding Gaussian Density conditioned on x.
 
         :param x: jnp.ndarray [N, Dx]
@@ -844,7 +844,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         Sigma_new = self.get_conditional_cov(x)
         return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new)
     
-    def set_y(self, y: jnp.ndarray):
+    def set_y(self, y: jnp.ndarray, **kwargs):
         """Not valid function for this model class.
 
         :param y: Data for y, where the rth entry is associated with the rth conditional density. 
@@ -914,7 +914,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         return Eyx
 
     def affine_joint_transformation(
-        self, p_x: densities.GaussianDensity
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
         """ Gets an approximation of the joint density
 
@@ -978,7 +978,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         return cond_p_xy
 
     def affine_marginal_transformation(
-        self, p_x: densities.GaussianDensity
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
         """ Gets an approximation of the marginal density
 

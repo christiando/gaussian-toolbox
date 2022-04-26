@@ -147,7 +147,7 @@ class LinearStateModel(StateModel):
             Prediction density p(z_t|x_{1:t-1}).
         """
         # p(z_t|x_{1:t-1})
-        return self.state_density.affine_marginal_transformation(pre_filter_density)
+        return self.state_density.affine_marginal_transformation(pre_filter_density, **kwargs)
 
     def smoothing(
         self,
@@ -179,7 +179,7 @@ class LinearStateModel(StateModel):
         """
         # p(z_{t} | z_{t+1}, x_{1:t})
         backward_density = self.state_density.affine_conditional_transformation(
-            cur_filter_density
+            cur_filter_density, **kwargs
         )
         # p(z_{t}, z_{t+1} | x_{1:T})
         cur_two_step_smoothing_density = backward_density.affine_joint_transformation(
@@ -283,7 +283,7 @@ class LinearStateModel(StateModel):
         )
 
     def update_init_density(
-        self, init_smooth_density: densities.GaussianDensity, *kwargs
+        self, init_smooth_density: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
         """ Finds the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
@@ -310,7 +310,6 @@ class LinearStateModel(StateModel):
         :rtype: densities.GaussianDensity
         """
         return self.state_density.condition_on_x(z_old)
-
 
 class LSEMStateModel(LinearStateModel):
     def __init__(self, Dz: int, Dk: int, noise_z: float = 1.0):
