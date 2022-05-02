@@ -147,7 +147,9 @@ class LinearStateModel(StateModel):
             Prediction density p(z_t|x_{1:t-1}).
         """
         # p(z_t|x_{1:t-1})
-        return self.state_density.affine_marginal_transformation(pre_filter_density, **kwargs)
+        return self.state_density.affine_marginal_transformation(
+            pre_filter_density, **kwargs
+        )
 
     def smoothing(
         self,
@@ -206,9 +208,9 @@ class LinearStateModel(StateModel):
         :param two_step_smoothing_density: Gaussian Density
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
-        self.update_A(smoothing_density, two_step_smoothing_density)
-        self.update_b(smoothing_density)
-        self.update_Qz(smoothing_density, two_step_smoothing_density)
+        self.update_A(smoothing_density, two_step_smoothing_density, **kwargs)
+        self.update_b(smoothing_density, **kwargs)
+        self.update_Qz(smoothing_density, two_step_smoothing_density, **kwargs)
         self.update_state_density()
 
     def update_A(
@@ -247,6 +249,7 @@ class LinearStateModel(StateModel):
         self,
         smoothing_density: densities.GaussianDensity,
         two_step_smoothing_density: densities.GaussianDensity,
+        **kwargs
     ):
         """ The transition covariance is updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
@@ -301,7 +304,9 @@ class LinearStateModel(StateModel):
         opt_init_density = densities.GaussianDensity(Sigma0, mu0)
         return opt_init_density
 
-    def condition_on_past(self, z_old: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
+    def condition_on_past(
+        self, z_old: jnp.ndarray, **kwargs
+    ) -> densities.GaussianDensity:
         """ Return p(Z_t+1|Z_t=z)
 
         :param z_old: Vector of past latent variables.
@@ -309,8 +314,74 @@ class LinearStateModel(StateModel):
         :return: The density of the latent variables at the next step.
         :rtype: densities.GaussianDensity
         """
-        return self.state_density.condition_on_x(z_old)
-
+        return self.state_density.condition_on_x(z_old, **kwargs)
+    
+class NNControlStateModel(LinearStateModel):
+    
+    def __init__(self, Dz: int, Du: int, noise_z: float = 1, hidden_units: list = [16,],
+        non_linearity: callable = objax.functional.tanh):
+        self.Dz = Dz
+        self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
+        self.Du = Du
+        self.state_density = conditionals.NNControlGaussianConditional(Sigma=jnp.array([self.Qz]),
+                                                                       Dx=self.Dz, Du=self.Du, hidden_units=hidden_units, non_linearity=non_linearity)
+        
+    def update_Qz(
+        self,
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
+        u: jnp.ndarray, **kwargs
+    ):
+        """ The transition covariance is updated here, where the the densities p(z_t|x_{1:T}) and 
+        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
+        
+        :param smoothing_density: GaussianDensity
+            The smoothing density  p(z_t|x_{1:T}).
+        :param two_step_smoothing_density: Gaussian Density
+            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        """
+        A_u, b_u = self.state_density.get_M_b(u)
+        A_tilde = jnp.empty((two_step_smoothing_density.R, self.Dz, 2 * self.Dz))
+        A_tilde = A_tilde.at[:,:,:self.Dz].set(jnp.eye(self.Dz))
+        A_tilde = A_tilde.at[:,:,self.Dz:].set(-A_u)
+        b_tilde = -b_u
+        self.Qz = jnp.mean(
+            two_step_smoothing_density.integrate(
+                "Ax_aBx_b_outer",
+                A_mat=A_tilde,
+                a_vec=b_tilde,
+                B_mat=A_tilde,
+                b_vec=b_tilde,
+            ),
+            axis=0,
+        )
+        
+    def calc_Q_function(self,         
+                        smoothing_density: densities.GaussianDensity,
+                        two_step_smoothing_density: densities.GaussianDensity,
+                        u: jnp.ndarray, **kwargs):
+        T = two_step_smoothing_density.R
+        A_u, b_u = self.state_density.get_M_b(u)
+        A_tilde = jnp.empty((two_step_smoothing_density.R, self.Dz, 2 * self.Dz))
+        A_tilde = A_tilde.at[:,:,:self.Dz].set(jnp.eye(self.Dz))
+        A_tilde = A_tilde.at[:,:,self.Dz:].set(-A_u)
+        b_tilde = -b_u
+        A_tilde2 = jnp.einsum('ab,cbd->cad', self.state_density.Lambda[0], A_tilde)
+        b_tilde2 = jnp.einsum('ab,cb->ca', self.state_density.Lambda[0], b_tilde)
+        expectation_term = jnp.mean(
+            two_step_smoothing_density.integrate(
+                "Ax_aBx_b_inner",
+                A_mat=A_tilde,
+                a_vec=b_tilde,
+                B_mat=A_tilde2,
+                b_vec=b_tilde2,
+            ),
+            axis=0,
+        )
+        Q_func = -.5 * (expectation_term + self.Dz * jnp.log(2 * jnp.pi) + self.self.state_density.log_det_Sigma)
+        return Q_func
+                        
+        
 class LSEMStateModel(LinearStateModel):
     def __init__(self, Dz: int, Dk: int, noise_z: float = 1.0):
         """ This implements a linear+squared exponential mean (LSEM) state model

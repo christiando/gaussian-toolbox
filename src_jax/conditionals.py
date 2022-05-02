@@ -146,7 +146,9 @@ class ConditionalGaussianDensity:
             jnp.einsum("ab, abc -> ac", y_minus_b, self.Lambda),
             y_minus_b,
         )
-        ln_beta_new = -0.5 * (yb_Lambda_yb + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma)
+        ln_beta_new = -0.5 * (
+            yb_Lambda_yb + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma
+        )
         factor_new = factors.ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
         return factor_new
 
@@ -312,7 +314,14 @@ class ConditionalGaussianDensity:
 
 
 class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
-    def __init__(self, Sigma: jnp.ndarray, Dx: int, Du: int, hidden_units: list=[16,], non_linearity: callable=objax.functional.tanh):
+    def __init__(
+        self,
+        Sigma: jnp.ndarray,
+        Dx: int,
+        Du: int,
+        hidden_units: list = [16,],
+        non_linearity: callable = objax.functional.tanh,
+    ):
         """A conditional Gaussian density, where the transition model is determined through a (known) control variable u.
         
             p(y|x, u) = N(mu(x|u), Sigma)
@@ -342,7 +351,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         self.hidden_units = hidden_units
         self.non_linearity = non_linearity
         self.network = self._build_network()
-        
+
     def _build_network(self) -> objax.Module:
         """Constructs the network
 
@@ -357,7 +366,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         nn_list += [objax.nn.Linear(prev_layer, self.Dy * (self.Dx + 1))]
         network = objax.nn.Sequential(nn_list)
         return network
-    
+
     def get_M_b(self, u: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Construct M(u) and b(u) from the output.
 
@@ -367,10 +376,10 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
         output = self.network(u)
-        M = output[:,:self.Dy * self.Dx].reshape((-1, self.Dy, self.Dx))
-        b = output[:,self.Dy * self.Dx:]
+        M = output[:, : self.Dy * self.Dx].reshape((-1, self.Dy, self.Dx))
+        b = output[:, self.Dy * self.Dx :]
         return M, b
-    
+
     def set_control_variable(self, u: jnp.ndarray) -> ConditionalGaussianDensity:
         """Creates the conditional for a given control variable u,
         
@@ -384,10 +393,14 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         R = u.shape[0]
         M, b = self.get_M_b(u)
         tile_dims = (R, 1, 1)
-        return ConditionalGaussianDensity(M=M, b=b, Sigma=jnp.tile(self.Sigma, tile_dims), 
-                                   Lambda=jnp.tile(self.Lambda, tile_dims), 
-                                   ln_det_Sigma=jnp.tile(self.ln_det_Sigma, tile_dims))
-        
+        return ConditionalGaussianDensity(
+            M=M,
+            b=b,
+            Sigma=jnp.tile(self.Sigma, tile_dims),
+            Lambda=jnp.tile(self.Lambda, tile_dims),
+            ln_det_Sigma=jnp.tile(self.ln_det_Sigma, tile_dims),
+        )
+
     def get_conditional_mu(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> jnp.ndarray:
         """ Computes the conditional mean given an x and an u,
         
@@ -402,8 +415,10 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.get_conditional_mu(x)
-    
-    def condition_on_x(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> densities.GaussianDensity:
+
+    def condition_on_x(
+        self, x: jnp.ndarray, u: jnp.array, **kwargs
+    ) -> densities.GaussianDensity:
         """Returns the Gaussian density
         
         p(Y|X=x, U=u)
@@ -417,7 +432,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.condition_on_x(x)
-    
+
     def set_y(self, y: jnp.ndarray, u: jnp.array, **kwargs) -> factors.ConjugateFactor:
         """Sets an instance of Y and U and returns
         
@@ -432,8 +447,10 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.set_y(y)
-    
-    def affine_joint_transformation(self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs) -> densities.GaussianDensity:
+
+    def affine_joint_transformation(
+        self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
+    ) -> densities.GaussianDensity:
         """Does the affine joint transformation with a given control variable
         
         
@@ -450,8 +467,10 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_joint_transformation(p_x)
-    
-    def affine_marginal_transformation(self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs) -> densities.GaussianDensity:
+
+    def affine_marginal_transformation(
+        self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
+    ) -> densities.GaussianDensity:
         """Returns the marginal density p(Y) given  p(Y|X,U=u) and p(X), 
         where p(Y|X,U=u) is the object itself.
 
@@ -464,8 +483,10 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_marginal_transformation(p_x)
-    
-    def affine_conditional_transformation(self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs) -> "ConditionalGaussianDensity":
+
+    def affine_conditional_transformation(
+        self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
+    ) -> "ConditionalGaussianDensity":
         """ Returns the conditional density p(X|Y, U=u), given p(Y|X,U=u) and p(X),           
             where p(Y|X,U=u) is the object itself.
 
@@ -565,7 +586,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         phi_x = self.evaluate_phi(x)
         mu_y = jnp.einsum("ab,cb->ca", self.M[0], phi_x) + self.b[0][None]
         return mu_y
-    
+
     def set_y(self, y: jnp.ndarray, **kwargs):
         """Not valid function for this model class.
 
@@ -843,7 +864,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
         Sigma_new = self.get_conditional_cov(x)
         return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new)
-    
+
     def set_y(self, y: jnp.ndarray, **kwargs):
         """Not valid function for this model class.
 

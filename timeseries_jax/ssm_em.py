@@ -180,7 +180,7 @@ class StateSpaceEM(objax.Module):
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
         pre_filter_density = densities.GaussianDensity(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
-        cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
+        cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
         cur_filter_density = self.om.filtering(
             cur_prediction_density, X_t[None], ux_t=ux_t
         )
@@ -209,7 +209,7 @@ class StateSpaceEM(objax.Module):
         Sigma, mu, Lambda, ln_det_Sigma = carry
         post_smoothing_density = densities.GaussianDensity(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
         cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(
-            cur_filter_density, post_smoothing_density, uz_t=uz_t
+            cur_filter_density, post_smoothing_density, u=uz_t
         )
         carry =  (cur_smoothing_density.Sigma, cur_smoothing_density.mu, cur_smoothing_density.Lambda, cur_smoothing_density.ln_det_Sigma)
         result = (cur_smoothing_density.Sigma[0], cur_smoothing_density.mu[0], cur_smoothing_density.Lambda[0], cur_smoothing_density.ln_det_Sigma[0],
@@ -294,7 +294,7 @@ class StateSpaceEM(objax.Module):
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
         pre_filter_density = densities.GaussianDensity(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
-        cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
+        cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
         cur_filter_density = self.om.gappy_filtering(
             cur_prediction_density, X_t[None], ux_t=ux_t
         )
@@ -401,7 +401,7 @@ class StateSpaceEM(objax.Module):
         for t in range(1, T + 1):
             # Filter
             uz_t = u_z[t - 1]
-            cur_prediction_density = self.sm.prediction(cur_filter_density, uz_t=uz_t)
+            cur_prediction_density = self.sm.prediction(cur_filter_density, u=uz_t)
             # prediction_density.update([t], cur_prediction_density)
             ux_t = u_x[t - 1]
             cur_filter_density = self.om.gappy_filtering(
@@ -445,7 +445,7 @@ class StateSpaceEM(objax.Module):
                 uz_t = u_z[t - 1]
                 
                 cur_smoothing_density = self.sm.smoothing(
-                    cur_filter_density, cur_smoothing_density, uz_t=uz_t
+                    cur_filter_density, cur_smoothing_density, u=uz_t
                 )[0]
                 Sigma_s[t] = cur_smoothing_density.Sigma
                 mu_s[t] = cur_smoothing_density.mu
@@ -476,7 +476,7 @@ class StateSpaceEM(objax.Module):
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
         pre_filter_density = densities.GaussianDensity(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
-        cur_prediction_density = self.sm.prediction(pre_filter_density, uz_t=uz_t)
+        cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
         cur_filter_density = self.om.gappy_filtering_static(
             cur_prediction_density, X_t[None], observed_dims, ux_t=ux_t
         )
@@ -570,7 +570,7 @@ class StateSpaceEM(objax.Module):
         """
         
         rand_nums_z_t, x_t, rand_nums_x_t, uz_t, ux_t = vars_t
-        p_z = self.sm.condition_on_past(z_old, uz_t=uz_t)
+        p_z = self.sm.condition_on_past(z_old, u=uz_t)
         L = jnp.linalg.cholesky(p_z.Sigma)
         z_sample = p_z.mu + jnp.einsum("abc,ac->ab", L, rand_nums_z_t)
         p_x = self.om.condition_on_z_and_observations(z_sample, x_t, observed_dims, unobserved_dims, ux_t=ux_t)
