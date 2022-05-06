@@ -1218,8 +1218,7 @@ class GaussianMeasure(factors.ConjugateFactor):
 
 class GaussianDiagMeasure(GaussianMeasure):
     def invert_lambda(self):
-        self.Sigma = jnp.diag(1.0 / self.Lambda.diagonal(axis1=1, axis2=2))
-        self.ln_det_Lambda = jnp.sum(jnp.log(self.Lambda.diagonal()))
+        self.Sigma, self.ln_det_Lambda = invert_diagonal(self.Lambda)
         self.ln_det_Sigma = -self.ln_det_Lambda
 
     def slice(self, indices: list) -> "GaussianDiagMeasure":
