@@ -20,7 +20,7 @@ from utils.linalg import invert_matrix, invert_diagonal
 
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     def __init__(
-        self, components: Iterable['GaussianDensity'], weights: jnp.ndarray = None
+        self, components: Iterable["GaussianDensity"], weights: jnp.ndarray = None
     ):
         """ Class of mixture of Gaussian measures
         
@@ -96,8 +96,6 @@ class GaussianDensity(measures.GaussianMeasure):
         :param ln_det_Sigma: jnp.ndarray [R] or None
             Log determinant of the covariance matrix. (Default=None)
         """
-        if not isinstance(Sigma, jnp.DeviceArray) or not isinstance(mu, jnp.DeviceArray):
-            raise TypeError("Sigma or mu not properly specified")
         if Lambda is None:
             Lambda, ln_det_Sigma = invert_matrix(Sigma)
         elif ln_det_Sigma is None:
@@ -125,7 +123,7 @@ class GaussianDensity(measures.GaussianMeasure):
         x_samples = self.mu[None] + jnp.einsum("abc,dac->dab", L, rand_nums)
         return x_samples
 
-    def slice(self, indices: jnp.array) -> 'GaussianDensity':
+    def slice(self, indices: jnp.array) -> "GaussianDensity":
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -145,7 +143,7 @@ class GaussianDensity(measures.GaussianMeasure):
         new_measure = GaussianDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
 
-    def update(self, indices: jnp.array, density: 'GaussianDensity'):
+    def update(self, indices: jnp.array, density: "GaussianDensity"):
         """ Updates densities at indicated entries.
         
         :param indices: list
@@ -168,7 +166,7 @@ class GaussianDensity(measures.GaussianMeasure):
         # self.nu = lax.dynamic_update_index_in_dim(self.nu, density.nu, indices, 0)
         # self.ln_beta = lax.dynamic_update_index_in_dim(self.ln_beta, density.ln_beta, indices, 0)
 
-    def get_marginal(self, dim_x: list) -> 'GaussianDensity':
+    def get_marginal(self, dim_x: list) -> "GaussianDensity":
         """ Gets the marginal of the indicated dimensions.
         
         :param dim_x: list
@@ -184,7 +182,7 @@ class GaussianDensity(measures.GaussianMeasure):
         marginal_density = GaussianDensity(Sigma_new, mu_new)
         return marginal_density
 
-    def condition_on(self, dim_y: list) -> 'ConditionalGaussianDensity':
+    def condition_on(self, dim_y: list) -> "ConditionalGaussianDensity":
         """ Returns density conditioned on indicated dimensions, i.e. p(x|y).
         
         :param dim_y: list
@@ -279,7 +277,7 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         )
         return new_measure
 
-    def update(self, indices: list, density: 'GaussianDiagDensity'):
+    def update(self, indices: list, density: "GaussianDiagDensity"):
         """ Updates densities at indicated entries.
         
         :param indices: list
