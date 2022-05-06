@@ -312,6 +312,19 @@ class ConditionalGaussianDensity:
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x,
         )
 
+    def update_Sigma(self, Sigma_new: jnp.ndarray):
+        """Updates the covariance matrix.
+
+        :param Sigma_new: The new covariance matrix.
+        :type Sigma_new: jnp.ndarray [R, Dy, Dy]
+        :raises ValueError: Raised when dimension of old and new covariance do not match.
+        """
+        if self.Sigma.shape != Sigma_new.shape:
+            raise ValueError("Dimensions of the new Sigma don't match.")
+        self.Sigma = Sigma_new
+        self.Lambda, self.ln_det_Sigma = invert_matrix(Sigma_new)
+        self.ln_det_Lambda = -self.ln_det_Sigma
+
 
 class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
     def __init__(
