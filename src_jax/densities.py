@@ -97,7 +97,7 @@ class GaussianDensity(measures.GaussianMeasure):
             Log determinant of the covariance matrix. (Default=None)
         """
         if not isinstance(Sigma, jnp.DeviceArray) or not isinstance(mu, jnp.DeviceArray):
-            raise TypeError("Sigma not properly specified")
+            raise TypeError("Sigma or mu not properly specified")
         if Lambda is None:
             Lambda, ln_det_Sigma = invert_matrix(Sigma)
         elif ln_det_Sigma is None:
