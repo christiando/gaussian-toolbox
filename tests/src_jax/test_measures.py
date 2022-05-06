@@ -97,7 +97,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         m.compute_lnZ()
         A = Lambda
         L = jsc.linalg.cho_factor(A)
-        Sigma = jsc.linalg.cho_solve(L, jnp.eye(A.shape[1])[None].tile((len(A), 1, 1)))
+        Sigma = jsc.linalg.cho_solve(L, jnp.tile(jnp.eye(A.shape[1])[None], (len(A), 1, 1)))
         ln_det_Lambda = 2.0 * jnp.sum(
             jnp.log(L[0].diagonal(axis1=-1, axis2=-2)), axis=1
         )
