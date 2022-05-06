@@ -347,7 +347,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         if self.R != 1:
             raise NotImplementedError("So far only R=1 is supported.")
         self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
-        self.Dy, self.Dx, self.Du = self.Sigma[1], Dx, Du
+        self.Dy, self.Dx, self.Du = self.Sigma.shape[1], Dx, Du
         self.hidden_units = hidden_units
         self.non_linearity = non_linearity
         self.network = self._build_network()
