@@ -430,11 +430,6 @@ class LinearObservationModel(ObservationModel):
             self.emission_density.ln_det_Sigma[0],
         )
 
-    @staticmethod
-    def llk_step(t: int, p_x: densities.GaussianDensity, X: jnp.ndarray):
-        cur_p_x = p_x.slice(jnp.array([t]))
-        return cur_p_x.evaluate_ln(X[t].reshape((1, -1)))[0, 0]
-
     def evaluate_llk(
         self, p_z: densities.GaussianDensity, X: jnp.ndarray, **kwargs
     ) -> float:
@@ -448,12 +443,8 @@ class LinearObservationModel(ObservationModel):
         :return: float
             Log likelihood.
         """
-        T = X.shape[0]
-        llk = 0
         p_x = self.emission_density.affine_marginal_transformation(p_z)
-        llk_step = jit(lambda t: self.llk_step(t, p_x, X))
-        for t in range(0, T):
-            llk += llk_step(t)
+        llk = jnp.sum(p_x.evaluate_ln(X, element_wise=True))
         return llk
 
     def condition_on_z_and_observations(
