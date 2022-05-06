@@ -10,6 +10,7 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from jax import scipy as jsc
+from utils import linalg
 from typing import Tuple
 
 
@@ -131,7 +132,7 @@ class ConjugateFactor:
         )
         new_density_dict = {"Lambda": Lambda_new, "nu": nu_new, "ln_beta": ln_beta_new}
         if update_full:
-            Sigma_new, ln_det_Lambda_new = self.invert_matrix(Lambda_new)
+            Sigma_new, ln_det_Lambda_new = linalg.invert_matrix(Lambda_new)
             ln_det_Sigma_new = -ln_det_Lambda_new
             new_density_dict.update(
                 {
@@ -166,7 +167,7 @@ class ConjugateFactor:
         ln_beta_new = measure.ln_beta + self.ln_beta
         new_density_dict = {"Lambda": Lambda_new, "nu": nu_new, "ln_beta": ln_beta_new}
         if update_full:
-            Sigma_new, ln_det_Lambda_new = self.invert_matrix(Lambda_new)
+            Sigma_new, ln_det_Lambda_new = linalg.invert_matrix(Lambda_new)
             ln_det_Sigma_new = -ln_det_Lambda_new
             new_density_dict.update(
                 {
@@ -176,18 +177,6 @@ class ConjugateFactor:
                 }
             )
         return new_density_dict
-
-    @staticmethod
-    def invert_matrix(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        L = jsc.linalg.cho_factor(A)
-        # TODO: Check whether we can make it mor efficienty with solve_triangular.
-        # L_inv = solve_triangular(L, jnp.eye(L.shape[0]), lower=True,
-        #                         check_finite=False)
-        # L_inv = vmap(lambda B: jsc.linalg.solve_triangular(B, jnp.eye(B.shape[0])))(A)
-        A_inv = jsc.linalg.cho_solve(L, jnp.eye(A.shape[1])[None].tile((len(A), 1, 1)))
-        # A_inv = jnp.einsum('acb,acd->abd', L_inv, L_inv)
-        ln_det_A = 2.0 * jnp.sum(jnp.log(L[0].diagonal(axis1=-1, axis2=-2)), axis=1)
-        return A_inv, ln_det_A
 
     @staticmethod
     def get_trace(A: jnp.ndarray) -> jnp.ndarray:
@@ -300,7 +289,7 @@ class OneRankFactor(LowRankFactor):
         new_density_dict = {"Lambda": Lambda_new, "nu": nu_new, "ln_beta": ln_beta_new}
         if update_full:
             if measure.Sigma is None:
-                Sigma_new, ln_det_Lambda_new = self.invert_matrix(Lambda_new)
+                Sigma_new, ln_det_Lambda_new = linalg.invert_matrix(Lambda_new)
                 ln_det_Sigma_new = -ln_det_Lambda_new
             else:
                 # Sherman morrison inversion
@@ -352,7 +341,7 @@ class OneRankFactor(LowRankFactor):
         new_density_dict = {"Lambda": Lambda_new, "nu": nu_new, "ln_beta": ln_beta_new}
         if update_full:
             if measure.Sigma is None:
-                Sigma_new, ln_det_Lambda_new = self.invert_matrix(Lambda_new)
+                Sigma_new, ln_det_Lambda_new = linalg.invert_matrix(Lambda_new)
                 ln_det_Sigma_new = -ln_det_Lambda_new
             else:
                 # Sherman morrison inversion
@@ -438,7 +427,7 @@ class LinearFactor(ConjugateFactor):
         new_density_dict = {"Lambda": Lambda_new, "nu": nu_new, "ln_beta": ln_beta_new}
         if update_full:
             if measure.Sigma is None:
-                Sigma_new, ln_det_Lambda_new = self.invert_matrix(Lambda_new)
+                Sigma_new, ln_det_Lambda_new = linalg.invert_matrix(Lambda_new)
                 ln_det_Sigma_new = -ln_det_Lambda_new
             else:
                 Sigma_new = jnp.tile(measure.Sigma[:, None], (1, self.R, 1, 1)).reshape(
@@ -481,7 +470,7 @@ class LinearFactor(ConjugateFactor):
         new_density_dict = {"Lambda": Lambda_new, "nu": nu_new, "ln_beta": ln_beta_new}
         if update_full:
             if measure.Sigma is None:
-                Sigma_new, ln_det_Lambda_new = self.invert_matrix(measure.Lambda)
+                Sigma_new, ln_det_Lambda_new = linalg.invert_matrix(measure.Lambda)
                 ln_det_Sigma_new = -ln_det_Lambda_new
             else:
                 Sigma_new = measure.Sigma
@@ -552,7 +541,7 @@ class ConstantFactor(ConjugateFactor):
         new_density_dict = {"Lambda": Lambda_new, "nu": nu_new, "ln_beta": ln_beta_new}
         if update_full:
             if measure.Sigma is None:
-                Sigma_new, ln_det_Lambda_new = self.invert_matrix(Lambda_new)
+                Sigma_new, ln_det_Lambda_new = linalg.invert_matrix(Lambda_new)
                 ln_det_Sigma_new = -ln_det_Lambda_new
             else:
                 Sigma_new = jnp.tile(measure.Sigma[:, None], (1, self.R, 1, 1)).reshape(
@@ -595,7 +584,7 @@ class ConstantFactor(ConjugateFactor):
         new_density_dict = {"Lambda": Lambda_new, "nu": nu_new, "ln_beta": ln_beta_new}
         if update_full:
             if measure.Sigma is None:
-                Sigma_new, ln_det_Lambda_new = self.invert_matrix(measure.Sigma)
+                Sigma_new, ln_det_Lambda_new = linalg.invert_matrix(measure.Sigma)
                 ln_det_Sigma_new = -ln_det_Lambda_new
             else:
                 Sigma_new = measure.Sigma
