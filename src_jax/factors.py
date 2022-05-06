@@ -47,33 +47,46 @@ class ConjugateFactor:
         else:
             self.ln_beta = ln_beta
 
-    def evaluate_ln(self, x: jnp.ndarray) -> jnp.ndarray:
-        """ Evaluates the log-exponential term at x.
-        
-        :param x: jnp.ndarray [N, D]
-            Points where the factor should be evaluated.
-        :param r: list
-            Indices of densities that need to be evaluated. If empty, all densities are evaluated. (Default=[])
-            
-        :return: jnp.ndarray [R, N]
-            Log exponential term.
-        """
-        x_Lambda_x = jnp.einsum(
-            "adc,dc->ad", jnp.einsum("abc,dc->adb", self.Lambda, x), x
-        )
-        x_nu = jnp.dot(x, self.nu.T).T
-        return -0.5 * x_Lambda_x + x_nu + self.ln_beta[:, None]
+    def evaluate_ln(self, x: jnp.ndarray, element_wise: bool = False) -> jnp.ndarray:
+        """Evaluates the log-exponential term at x.
 
-    def evaluate(self, x: jnp.ndarray) -> jnp.ndarray:
+        :param x: Points where the factor should be evaluated.
+        :type x: jnp.ndarray [N, D]
+        :param element_wise: Evaluates x for only the corresponding density. Requires the N equals R., defaults to False
+        :type element_wise: bool, optional
+        :raises ValueError: Raised if N != R, and elemntwise is True.
+        :return: Log exponential term.
+        :rtype: jnp.ndarray [R, N], [N]
+        """
+
+        if element_wise:
+            if self.R != x.shape[0]:
+                raise ValueError("Leading dimension of x must equal R.")
+            x_Lambda_x = jnp.einsum(
+                "ab,ab->a", jnp.einsum("abc,ac->ab", self.Lambda, x), x
+            )
+            x_nu = jnp.sum(x * self.nu, axis=1)
+            return -0.5 * x_Lambda_x + x_nu + self.ln_beta
+
+        else:
+            x_Lambda_x = jnp.einsum(
+                "adc,dc->ad", jnp.einsum("abc,dc->adb", self.Lambda, x), x
+            )
+            x_nu = jnp.dot(x, self.nu.T).T
+            return -0.5 * x_Lambda_x + x_nu + self.ln_beta[:, None]
+
+    def evaluate(self, x: jnp.ndarray, element_wise: bool = False) -> jnp.ndarray:
         """ Evaluates the exponential term at x.
         
         :param x: jnp.ndarray [N, D]
             Points where the factor should be evaluated.
+        :param element_wise: bool
+            Evaluates x for only the corresponding density. Requires the N equals R. (Default=None)
             
-        :return: jnp.ndarray [R, N]
+        :return: jnp.ndarray [R, N], [N]
             Exponential term.
         """
-        return jnp.exp(self.evaluate_ln(x))
+        return jnp.exp(self.evaluate_ln(x, element_wise))
 
     def slice(self, indices: jnp.ndarray) -> "ConjugateFactor":
         """ Returns an object with only the specified entries.
