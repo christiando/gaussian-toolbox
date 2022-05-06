@@ -26,10 +26,6 @@ class TestGaussianDensity:
         assert d.ln_beta.shape == (d.R,)
         assert jnp.alltrue(d.is_normalized())
         assert jnp.alltrue(d.integrate() == 1)
-        Sigma = None
-        mu = None
-        with pytest.raises(TypeError):
-            d = self.test_class(Sigma, mu)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_sample(self, R, D):
