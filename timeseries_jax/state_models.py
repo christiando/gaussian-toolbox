@@ -315,22 +315,60 @@ class LinearStateModel(StateModel):
         :rtype: densities.GaussianDensity
         """
         return self.state_density.condition_on_x(z_old, **kwargs)
-    
+
+
 class NNControlStateModel(LinearStateModel):
-    
-    def __init__(self, Dz: int, Du: int, noise_z: float = 1, hidden_units: list = [16,],
-        non_linearity: callable = objax.functional.tanh):
+    def __init__(
+        self,
+        Dz: int,
+        Du: int,
+        noise_z: float = 1,
+        hidden_units: list = [16,],
+        non_linearity: callable = objax.functional.tanh,
+    ):
         self.Dz = Dz
         self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
         self.Du = Du
-        self.state_density = conditionals.NNControlGaussianConditional(Sigma=jnp.array([self.Qz]),
-                                                                       Dx=self.Dz, Du=self.Du, hidden_units=hidden_units, non_linearity=non_linearity)
+        self.state_density = conditionals.NNControlGaussianConditional(
+            Sigma=jnp.array([self.Qz]),
+            Dx=self.Dz,
+            Du=self.Du,
+            hidden_units=hidden_units,
+            non_linearity=non_linearity,
+        )
+
+    def update_hyperparameters(
+        self,
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
+        u: jnp.ndarray,
+        **kwargs
+    ):
+        """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
+        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
         
+        :param smoothing_density: GaussianDensity
+            The smoothing density  p(z_t|x_{1:T}).
+        :param two_step_smoothing_density: Gaussian Density
+            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        """
+        self.update_network_params(
+            smoothing_density, two_step_smoothing_density, u, **kwargs
+        )
+        self.update_Qz(smoothing_density, two_step_smoothing_density, u, **kwargs)
+        self.update_state_density()
+
+    def update_state_density(self):
+        """ Updates the state density.
+        """
+        self.state_density.update_Sigma(jnp.array([self.Qz]))
+
     def update_Qz(
         self,
         smoothing_density: densities.GaussianDensity,
         two_step_smoothing_density: densities.GaussianDensity,
-        u: jnp.ndarray, **kwargs
+        u: jnp.ndarray,
+        **kwargs
     ):
         """ The transition covariance is updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
@@ -342,8 +380,8 @@ class NNControlStateModel(LinearStateModel):
         """
         A_u, b_u = self.state_density.get_M_b(u)
         A_tilde = jnp.empty((two_step_smoothing_density.R, self.Dz, 2 * self.Dz))
-        A_tilde = A_tilde.at[:,:,:self.Dz].set(jnp.eye(self.Dz))
-        A_tilde = A_tilde.at[:,:,self.Dz:].set(-A_u)
+        A_tilde = A_tilde.at[:, :, : self.Dz].set(jnp.eye(self.Dz))
+        A_tilde = A_tilde.at[:, :, self.Dz :].set(-A_u)
         b_tilde = -b_u
         self.Qz = jnp.mean(
             two_step_smoothing_density.integrate(
@@ -355,19 +393,45 @@ class NNControlStateModel(LinearStateModel):
             ),
             axis=0,
         )
-        
-    def calc_Q_function(self,         
-                        smoothing_density: densities.GaussianDensity,
-                        two_step_smoothing_density: densities.GaussianDensity,
-                        u: jnp.ndarray, **kwargs):
+
+    def update_network_params(
+        self,
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
+        u: jnp.ndarray,
+        **kwargs
+    ):
+        gv = objax.GradValues(self.calc_neg_Q_function, self.vars())
+        opt = objax.optimizer.SGD(self.vars())
+
+        def train_op():
+            g, v = gv(
+                smoothing_density, two_step_smoothing_density, u
+            )  # returns gradients, loss
+            lr = 0.0001
+            opt(lr, g)
+            return v
+
+        train_op = objax.Jit(train_op, gv.vars() + opt.vars())
+        for i in range(1000):
+            v = train_op()
+            print(v)
+
+    def calc_neg_Q_function(
+        self,
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
+        u: jnp.ndarray,
+        **kwargs
+    ):
         T = two_step_smoothing_density.R
         A_u, b_u = self.state_density.get_M_b(u)
         A_tilde = jnp.empty((two_step_smoothing_density.R, self.Dz, 2 * self.Dz))
-        A_tilde = A_tilde.at[:,:,:self.Dz].set(jnp.eye(self.Dz))
-        A_tilde = A_tilde.at[:,:,self.Dz:].set(-A_u)
+        A_tilde = A_tilde.at[:, :, : self.Dz].set(jnp.eye(self.Dz))
+        A_tilde = A_tilde.at[:, :, self.Dz :].set(-A_u)
         b_tilde = -b_u
-        A_tilde2 = jnp.einsum('ab,cbd->cad', self.state_density.Lambda[0], A_tilde)
-        b_tilde2 = jnp.einsum('ab,cb->ca', self.state_density.Lambda[0], b_tilde)
+        A_tilde2 = jnp.einsum("ab,cbd->cad", self.state_density.Lambda[0], A_tilde)
+        b_tilde2 = jnp.einsum("ab,cb->ca", self.state_density.Lambda[0], b_tilde)
         expectation_term = jnp.mean(
             two_step_smoothing_density.integrate(
                 "Ax_aBx_b_inner",
@@ -378,10 +442,14 @@ class NNControlStateModel(LinearStateModel):
             ),
             axis=0,
         )
-        Q_func = -.5 * (expectation_term + self.Dz * jnp.log(2 * jnp.pi) + self.self.state_density.log_det_Sigma)
-        return Q_func
-                        
-        
+        Q_func = -0.5 * (
+            expectation_term
+            + self.Dz * jnp.log(2 * jnp.pi)
+            + self.state_density.ln_det_Sigma
+        )
+        return -Q_func.squeeze()
+
+
 class LSEMStateModel(LinearStateModel):
     def __init__(self, Dz: int, Dk: int, noise_z: float = 1.0):
         """ This implements a linear+squared exponential mean (LSEM) state model

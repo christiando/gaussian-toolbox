@@ -24,7 +24,6 @@ import time
 from typing import Union, Tuple
 
 
-
 def load_model(model_name: str, path: str = "") -> "StateSpaceEM":
     """ Loads state space em model.
     
@@ -71,16 +70,16 @@ class StateSpaceEM(objax.Module):
         """
         self.X = X
         self.T, self.Dx = self.X.shape
-        if u_x == None:
+        if u_x is None:
             self.u_x = jnp.empty((self.T, 0))
         else:
             self.u_x = u_x
-            
-        if u_z == None:
+
+        if u_z is None:
             self.u_z = jnp.empty((self.T, 0))
         else:
             self.u_z = u_z
-            
+
         self.Dz = state_model.Dz
         # observation model
         self.om = observation_model
@@ -179,59 +178,135 @@ class StateSpaceEM(objax.Module):
     def forward_step(self, carry, vars_t):
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
-        pre_filter_density = densities.GaussianDensity(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
+        pre_filter_density = densities.GaussianDensity(
+            Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma
+        )
         cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
         cur_filter_density = self.om.filtering(
             cur_prediction_density, X_t[None], ux_t=ux_t
         )
-        carry = (cur_filter_density.Sigma, cur_filter_density.mu, cur_filter_density.Lambda, cur_filter_density.ln_det_Sigma)
-        result = (cur_prediction_density.Sigma[0], cur_prediction_density.mu[0], cur_prediction_density.Lambda[0], cur_prediction_density.ln_det_Sigma[0],
-            cur_filter_density.Sigma[0], cur_filter_density.mu[0], cur_filter_density.Lambda[0], cur_filter_density.ln_det_Sigma[0])
+        carry = (
+            cur_filter_density.Sigma,
+            cur_filter_density.mu,
+            cur_filter_density.Lambda,
+            cur_filter_density.ln_det_Sigma,
+        )
+        result = (
+            cur_prediction_density.Sigma[0],
+            cur_prediction_density.mu[0],
+            cur_prediction_density.Lambda[0],
+            cur_prediction_density.ln_det_Sigma[0],
+            cur_filter_density.Sigma[0],
+            cur_filter_density.mu[0],
+            cur_filter_density.Lambda[0],
+            cur_filter_density.ln_det_Sigma[0],
+        )
         return carry, result
 
     def forward_path(self):
         """ Iterates forward, alternately doing prediction and filtering step.
         """
-        init = (self.filter_density.Sigma[:1], self.filter_density.mu[:1], self.filter_density.Lambda[:1], self.filter_density.ln_det_Sigma[:1])
+        init = (
+            self.filter_density.Sigma[:1],
+            self.filter_density.mu[:1],
+            self.filter_density.Lambda[:1],
+            self.filter_density.ln_det_Sigma[:1],
+        )
         forward_step = jit(lambda cf, vars_t: self.forward_step(cf, vars_t))
-        _, result = lax.scan(forward_step, init, (self.X, self.u_z, self.u_x))
-        Sigma_prediction, mu_prediction, Lambda_prediction, ln_det_Sigma_prediction, \
-        Sigma_filter, mu_filter, Lambda_filter, ln_det_Sigma_filter = result
-        new_prediction = densities.GaussianDensity(Sigma=Sigma_prediction, mu=mu_prediction, Lambda=Lambda_prediction, ln_det_Sigma=ln_det_Sigma_prediction)
+        _, result = lax.scan(
+            forward_step, init, (self.X, self.u_z[:, None], self.u_x[:, None])
+        )
+        (
+            Sigma_prediction,
+            mu_prediction,
+            Lambda_prediction,
+            ln_det_Sigma_prediction,
+            Sigma_filter,
+            mu_filter,
+            Lambda_filter,
+            ln_det_Sigma_filter,
+        ) = result
+        new_prediction = densities.GaussianDensity(
+            Sigma=Sigma_prediction,
+            mu=mu_prediction,
+            Lambda=Lambda_prediction,
+            ln_det_Sigma=ln_det_Sigma_prediction,
+        )
         t_range = jnp.arange(1, self.T + 1)
         self.prediction_density.update(t_range, new_prediction)
-        new_filter = densities.GaussianDensity(Sigma=Sigma_filter, mu=mu_filter, Lambda=Lambda_filter, ln_det_Sigma=ln_det_Sigma_filter)
+        new_filter = densities.GaussianDensity(
+            Sigma=Sigma_filter,
+            mu=mu_filter,
+            Lambda=Lambda_filter,
+            ln_det_Sigma=ln_det_Sigma_filter,
+        )
         self.filter_density.update(t_range, new_filter)
-        
+
     def backward_step(self, carry, vars_t: Tuple[int, jnp.array]):
         t, uz_t = vars_t
         cur_filter_density = self.filter_density.slice(jnp.array([t]))
         Sigma, mu, Lambda, ln_det_Sigma = carry
-        post_smoothing_density = densities.GaussianDensity(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
+        post_smoothing_density = densities.GaussianDensity(
+            Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma
+        )
         cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(
             cur_filter_density, post_smoothing_density, u=uz_t
         )
-        carry =  (cur_smoothing_density.Sigma, cur_smoothing_density.mu, cur_smoothing_density.Lambda, cur_smoothing_density.ln_det_Sigma)
-        result = (cur_smoothing_density.Sigma[0], cur_smoothing_density.mu[0], cur_smoothing_density.Lambda[0], cur_smoothing_density.ln_det_Sigma[0],
-                  cur_two_step_smoothing_density.Sigma[0], cur_two_step_smoothing_density.mu[0], cur_two_step_smoothing_density.Lambda[0], 
-                  cur_two_step_smoothing_density.ln_det_Sigma[0])
+        carry = (
+            cur_smoothing_density.Sigma,
+            cur_smoothing_density.mu,
+            cur_smoothing_density.Lambda,
+            cur_smoothing_density.ln_det_Sigma,
+        )
+        result = (
+            cur_smoothing_density.Sigma[0],
+            cur_smoothing_density.mu[0],
+            cur_smoothing_density.Lambda[0],
+            cur_smoothing_density.ln_det_Sigma[0],
+            cur_two_step_smoothing_density.Sigma[0],
+            cur_two_step_smoothing_density.mu[0],
+            cur_two_step_smoothing_density.Lambda[0],
+            cur_two_step_smoothing_density.ln_det_Sigma[0],
+        )
         return carry, result
-    
+
     def backward_path(self):
         """ Iterates backward doing smoothing step.
         """
         last_filter_density = self.filter_density.slice(jnp.array([self.T]))
-        cs_init = (last_filter_density.Sigma, last_filter_density.mu, last_filter_density.Lambda, last_filter_density.ln_det_Sigma)
+        cs_init = (
+            last_filter_density.Sigma,
+            last_filter_density.mu,
+            last_filter_density.Lambda,
+            last_filter_density.ln_det_Sigma,
+        )
         self.smoothing_density.update(jnp.array([self.T]), last_filter_density)
         backward_step = jit(lambda cs, vars_t: self.backward_step(cs, vars_t))
         t_range = jnp.arange(self.T - 1, -1, -1)
-        _, result = lax.scan(backward_step, cs_init, (t_range, self.u_z))
-        Sigma_smooth, mu_smooth, Lambda_smooth, ln_det_Sigma_smooth, \
-        Sigma_two_step_smooth, mu_two_step_smooth, Lambda_two_step_smooth, ln_det_Sigma_two_step_smooth = result
-        new_smooth_density = densities.GaussianDensity(Sigma=Sigma_smooth, mu=mu_smooth, Lambda=Lambda_smooth, ln_det_Sigma=ln_det_Sigma_smooth)
+        _, result = lax.scan(backward_step, cs_init, (t_range, self.u_z[:, None]))
+        (
+            Sigma_smooth,
+            mu_smooth,
+            Lambda_smooth,
+            ln_det_Sigma_smooth,
+            Sigma_two_step_smooth,
+            mu_two_step_smooth,
+            Lambda_two_step_smooth,
+            ln_det_Sigma_two_step_smooth,
+        ) = result
+        new_smooth_density = densities.GaussianDensity(
+            Sigma=Sigma_smooth,
+            mu=mu_smooth,
+            Lambda=Lambda_smooth,
+            ln_det_Sigma=ln_det_Sigma_smooth,
+        )
         self.smoothing_density.update(t_range, new_smooth_density)
-        self.twostep_smoothing_density = densities.GaussianDensity(Sigma=Sigma_two_step_smooth, mu=mu_two_step_smooth, 
-                                                                   Lambda=Lambda_two_step_smooth, ln_det_Sigma=ln_det_Sigma_two_step_smooth)
+        self.twostep_smoothing_density = densities.GaussianDensity(
+            Sigma=Sigma_two_step_smooth,
+            mu=mu_two_step_smooth,
+            Lambda=Lambda_two_step_smooth,
+            ln_det_Sigma=ln_det_Sigma_two_step_smooth,
+        )
 
     def compute_log_likelihood(self) -> float:
         """ Computes the log-likelihood of the model, given by
@@ -244,7 +319,7 @@ class StateSpaceEM(objax.Module):
             Data log likelihood.
         """
         p_z = self.prediction_density.slice(jnp.arange(1, self.T + 1))
-        return self.om.evaluate_llk(p_z, self.X, u=self.u_x)
+        return self.om.evaluate_llk(p_z, self.X, u=self.u_x[:,None])
 
     def compute_predictive_log_likelihood(
         self,
@@ -281,9 +356,22 @@ class StateSpaceEM(objax.Module):
         t_range = jnp.arange(1, T + 1)
         forward_step = jit(lambda cf, t: self.forward_step(cf, t, self.X))
         _, result = lax.scan(forward_step, init, t_range)
-        Sigma_prediction, mu_prediction, Lambda_prediction, ln_det_Sigma_prediction, \
-        Sigma_filter, mu_filter, Lambda_filter, ln_det_Sigma_filter = result
-        prediction_density = densities.GaussianDensity(Sigma=Sigma_prediction, mu=mu_prediction, Lambda=Lambda_prediction, ln_det_Sigma=ln_det_Sigma_prediction)
+        (
+            Sigma_prediction,
+            mu_prediction,
+            Lambda_prediction,
+            ln_det_Sigma_prediction,
+            Sigma_filter,
+            mu_filter,
+            Lambda_filter,
+            ln_det_Sigma_filter,
+        ) = result
+        prediction_density = densities.GaussianDensity(
+            Sigma=Sigma_prediction,
+            mu=mu_prediction,
+            Lambda=Lambda_prediction,
+            ln_det_Sigma=ln_det_Sigma_prediction,
+        )
         p_z = prediction_density.slice(jnp.arange(ignore_init_samples, T))
         if u_x is None:
             u_x = jnp.empty((T, 0))
@@ -293,14 +381,29 @@ class StateSpaceEM(objax.Module):
     def gappy_forward_step(self, carry, vars_t):
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
-        pre_filter_density = densities.GaussianDensity(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
+        pre_filter_density = densities.GaussianDensity(
+            Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma
+        )
         cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
         cur_filter_density = self.om.gappy_filtering(
             cur_prediction_density, X_t[None], ux_t=ux_t
         )
-        carry = (cur_filter_density.Sigma, cur_filter_density.mu, cur_filter_density.Lambda, cur_filter_density.ln_det_Sigma)
-        result = (cur_prediction_density.Sigma[0], cur_prediction_density.mu[0], cur_prediction_density.Lambda[0], cur_prediction_density.ln_det_Sigma[0],
-            cur_filter_density.Sigma[0], cur_filter_density.mu[0], cur_filter_density.Lambda[0], cur_filter_density.ln_det_Sigma[0])
+        carry = (
+            cur_filter_density.Sigma,
+            cur_filter_density.mu,
+            cur_filter_density.Lambda,
+            cur_filter_density.ln_det_Sigma,
+        )
+        result = (
+            cur_prediction_density.Sigma[0],
+            cur_prediction_density.mu[0],
+            cur_prediction_density.Lambda[0],
+            cur_prediction_density.ln_det_Sigma[0],
+            cur_filter_density.Sigma[0],
+            cur_filter_density.mu[0],
+            cur_filter_density.Lambda[0],
+            cur_filter_density.ln_det_Sigma[0],
+        )
 
         return carry, result
 
@@ -335,17 +438,37 @@ class StateSpaceEM(objax.Module):
         filter_density = self._setup_density(T=T + 1)
         filter_density.update(jnp.array([0]), p0)
 
-        init = (filter_density.Sigma[:1], filter_density.mu[:1], filter_density.Lambda[:1], 
-                filter_density.ln_det_Sigma[:1])
+        init = (
+            filter_density.Sigma[:1],
+            filter_density.mu[:1],
+            filter_density.Lambda[:1],
+            filter_density.ln_det_Sigma[:1],
+        )
         gappy_forward_step = jit(lambda cf, vars_t: self.gappy_forward_step(cf, vars_t))
-        _, result = lax.scan(gappy_forward_step, init, (self.X, self.u_z, self.u_x))
-            
-        Sigma_prediction, mu_prediction, Lambda_prediction, ln_det_Sigma_prediction, \
-        Sigma_filter, mu_filter, Lambda_filter, ln_det_Sigma_filter = result
-        
-        new_prediction_density = densities.GaussianDensity(Sigma=Sigma_prediction, mu=mu_prediction, Lambda=Lambda_prediction, ln_det_Sigma=ln_det_Sigma_prediction)
+        _, result = lax.scan(
+            gappy_forward_step, init, (self.X, self.u_z[:, None], self.u_x[:, None])
+        )
+
+        (
+            Sigma_prediction,
+            mu_prediction,
+            Lambda_prediction,
+            ln_det_Sigma_prediction,
+            Sigma_filter,
+            mu_filter,
+            Lambda_filter,
+            ln_det_Sigma_filter,
+        ) = result
+
+        new_prediction_density = densities.GaussianDensity(
+            Sigma=Sigma_prediction,
+            mu=mu_prediction,
+            Lambda=Lambda_prediction,
+            ln_det_Sigma=ln_det_Sigma_prediction,
+        )
         px = self.om.emission_density.affine_marginal_transformation(
-            new_prediction_density)
+            new_prediction_density
+        )
         return px
 
     def predict(
@@ -379,7 +502,7 @@ class StateSpaceEM(objax.Module):
             p0 = densities.GaussianDensity(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
-            
+
         if u_z == None:
             u_z = jnp.empty((T, 0))
         if u_x == None:
@@ -388,14 +511,14 @@ class StateSpaceEM(objax.Module):
         filter_density.update(jnp.array([0]), p0)
 
         Sigma_f, mu_f, Lambda_f, ln_det_Sigma_f = (
-           onp.array(filter_density.Sigma),
-           onp.array(filter_density.mu),
-           onp.array(filter_density.Lambda),
-           onp.array(filter_density.ln_det_Sigma),
+            onp.array(filter_density.Sigma),
+            onp.array(filter_density.mu),
+            onp.array(filter_density.Lambda),
+            onp.array(filter_density.ln_det_Sigma),
         )
 
-        mu_unobserved =onp.copy(X)
-        std_unobserved =onp.zeros(X.shape)
+        mu_unobserved = onp.copy(X)
+        std_unobserved = onp.zeros(X.shape)
         cur_filter_density = filter_density.slice(jnp.array([0]))
         # Filtering
         for t in range(1, T + 1):
@@ -433,17 +556,17 @@ class StateSpaceEM(objax.Module):
             cur_smoothing_density = filter_density.slice(jnp.array([T]))
             smoothing_density.update(jnp.array([T]), cur_smoothing_density)
             Sigma_s, mu_s, Lambda_s, ln_det_Sigma_s = (
-               onp.array(smoothing_density.Sigma),
-               onp.array(smoothing_density.mu),
-               onp.array(smoothing_density.Lambda),
-               onp.array(smoothing_density.ln_det_Sigma),
+                onp.array(smoothing_density.Sigma),
+                onp.array(smoothing_density.mu),
+                onp.array(smoothing_density.Lambda),
+                onp.array(smoothing_density.ln_det_Sigma),
             )
 
             for t in jnp.arange(T - 1, -1, -1):
                 # Smoothing step
                 cur_filter_density = filter_density.slice(jnp.array([t]))
                 uz_t = u_z[t - 1]
-                
+
                 cur_smoothing_density = self.sm.smoothing(
                     cur_filter_density, cur_smoothing_density, u=uz_t
                 )[0]
@@ -475,7 +598,9 @@ class StateSpaceEM(objax.Module):
     ) -> Union[dict, jnp.ndarray, jnp.ndarray]:
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
-        pre_filter_density = densities.GaussianDensity(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
+        pre_filter_density = densities.GaussianDensity(
+            Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma
+        )
         cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
         cur_filter_density = self.om.gappy_filtering_static(
             cur_prediction_density, X_t[None], observed_dims, ux_t=ux_t
@@ -484,10 +609,20 @@ class StateSpaceEM(objax.Module):
             cur_filter_density, X_t[None], observed_dims, nonobserved_dims
         )
 
-        carry = (cur_filter_density.Sigma, cur_filter_density.mu, cur_filter_density.Lambda, 
-                 cur_filter_density.ln_det_Sigma)
-        result = (cur_filter_density.Sigma[0], cur_filter_density.mu[0], cur_filter_density.Lambda[0], 
-                 cur_filter_density.ln_det_Sigma[0], mu_x_t, std_x_t)
+        carry = (
+            cur_filter_density.Sigma,
+            cur_filter_density.mu,
+            cur_filter_density.Lambda,
+            cur_filter_density.ln_det_Sigma,
+        )
+        result = (
+            cur_filter_density.Sigma[0],
+            cur_filter_density.mu[0],
+            cur_filter_density.Lambda[0],
+            cur_filter_density.ln_det_Sigma[0],
+            mu_x_t,
+            std_x_t,
+        )
         return carry, result
 
     def predict_static(
@@ -496,7 +631,7 @@ class StateSpaceEM(objax.Module):
         p0: densities.GaussianDensity = None,
         observed_dims: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
-        u_x: jnp.ndarray = None
+        u_x: jnp.ndarray = None,
     ) -> Union[densities.GaussianDensity, jnp.array, jnp.array]:
         """Predicts data with fixed condition dimensions. Faster, but more rigid than predict().
         
@@ -517,7 +652,7 @@ class StateSpaceEM(objax.Module):
             u_z = jnp.empty((T, 0))
         if u_x == None:
             u_x = jnp.empty((T, 0))
-            
+
         if p0 is None:
             p0 = densities.GaussianDensity(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
@@ -529,18 +664,21 @@ class StateSpaceEM(objax.Module):
             nonobserved_dims = None
         else:
             nonobserved_dims = jnp.setxor1d(jnp.arange(self.Dx), observed_dims)
-            
+
         gappy_forward_step_static = jit(
             lambda cf, vars_t: self.gappy_forward_step_static(
                 cf, vars_t, observed_dims, nonobserved_dims
             )
         )
         init = (p0.Sigma, p0.mu, p0.Lambda, p0.ln_det_Sigma)
-        _, result = lax.scan(gappy_forward_step_static, init, (X, u_z, u_x))
+        _, result = lax.scan(
+            gappy_forward_step_static, init, (X, u_z[:, None], u_x[:, None])
+        )
         Sigma_f, mu_f, Lambda_f, ln_det_Sigma_f, mu_x, std_x = result
         t_range = jnp.arange(1, T + 1)
-        filter_density_new = densities.GaussianDensity(Sigma=Sigma_f, mu=mu_f, Lambda=Lambda_f, 
-                                                       ln_det_Sigma=ln_det_Sigma_f)
+        filter_density_new = densities.GaussianDensity(
+            Sigma=Sigma_f, mu=mu_f, Lambda=Lambda_f, ln_det_Sigma=ln_det_Sigma_f
+        )
         filter_density.update(t_range, filter_density_new)
         return filter_density, mu_x, std_x
 
@@ -568,12 +706,14 @@ class StateSpaceEM(objax.Module):
         :return: Latent variable and data sample (only unobserved) for current time step.
         :rtype: Union[jnp.ndarray, jnp.ndarray] [num_samples, Dz] [num_samples, num_unobserved]
         """
-        
+
         rand_nums_z_t, x_t, rand_nums_x_t, uz_t, ux_t = vars_t
         p_z = self.sm.condition_on_past(z_old, u=uz_t)
         L = jnp.linalg.cholesky(p_z.Sigma)
         z_sample = p_z.mu + jnp.einsum("abc,ac->ab", L, rand_nums_z_t)
-        p_x = self.om.condition_on_z_and_observations(z_sample, x_t, observed_dims, unobserved_dims, ux_t=ux_t)
+        p_x = self.om.condition_on_z_and_observations(
+            z_sample, x_t, observed_dims, unobserved_dims, ux_t=ux_t
+        )
         L = jnp.linalg.cholesky(p_x.Sigma)
         x_sample = p_x.mu + jnp.einsum("abc,ac->ab", L, rand_nums_x_t)
         result = z_sample, x_sample
@@ -585,8 +725,8 @@ class StateSpaceEM(objax.Module):
         observed_dims: jnp.ndarray = None,
         p0: densities.GaussianDensity = None,
         num_samples: int = 1,
-        u_z: jnp.ndarray=None,
-        u_x: jnp.ndarray=None,
+        u_z: jnp.ndarray = None,
+        u_x: jnp.ndarray = None,
     ) -> Union[jnp.ndarray, jnp.ndarray]:
         """Samples a trajectories, with fixed observed data dimensions.
 
@@ -625,8 +765,10 @@ class StateSpaceEM(objax.Module):
         )
         rand_nums_z = objax.random.normal((T, num_samples, self.Dz))
         rand_nums_x = objax.random.normal((T, num_samples, num_unobserved_dims))
-        
-        _, result = lax.scan(sample_step, init, (rand_nums_z, X, rand_nums_x, u_z, u_x))
+
+        _, result = lax.scan(
+            sample_step, init, (rand_nums_z, X, rand_nums_x, u_z[:, None], u_x[:, None])
+        )
         z_sample, X_sample = result
 
         return z_sample, X_sample
