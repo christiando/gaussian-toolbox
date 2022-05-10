@@ -411,7 +411,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
             b=b,
             Sigma=jnp.tile(self.Sigma, tile_dims),
             Lambda=jnp.tile(self.Lambda, tile_dims),
-            ln_det_Sigma=jnp.tile(self.ln_det_Sigma, tile_dims),
+            ln_det_Sigma=jnp.tile(self.ln_det_Sigma, (R,)),
         )
 
     def get_conditional_mu(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> jnp.ndarray:
