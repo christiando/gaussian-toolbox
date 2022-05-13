@@ -185,6 +185,45 @@ class GaussianDensity(measures.GaussianMeasure):
         marginal_density = GaussianDensity(Sigma_new, mu_new)
         return marginal_density
 
+    def entropy(self) -> jnp.ndarray:
+        """Computes the entropy of the density.
+        
+        H[p] = -\int p(x)ln p(x) dx
+
+        :return: Entropy of the density 
+        :rtype: jnp.ndarray [R]
+        """
+        entropy = 0.5 * (self.D * (1.0 + jnp.log(2 * jnp.pi)) + self.ln_det_Sigma)
+        return entropy
+
+    def kl_divergence(self, p1: "GaussianDensity") -> jnp.ndarray:
+        """ Computes the Kulback Leibler divergence between two multivariate Gaussians.
+        
+        D_KL(p|p1) = \int p(x)\log p(x)/p1(x) dx
+
+        :param p1: _description_
+        :type p1: GaussianDensity
+        :return: _description_
+        :rtype: jnp.ndarray
+        """
+        assert self.R == p1.R
+        assert self.D == p1.D
+        dmu = p1.mu - self.mu
+        dmu_Sigma_dmu = jnp.einsum(
+            "ab,ab->a", jnp.einsum("ab,abc->ac", dmu, p1.Lambda), dmu
+        )
+        tr_Lambda_Sigma = jnp.trace(
+            jnp.einsum("abc,acd->abd", p1.Lambda, self.Sigma), axis1=-2, axis2=-1
+        )
+        kl_div = 0.5 * (
+            tr_Lambda_Sigma
+            + dmu_Sigma_dmu
+            - self.D
+            + p1.ln_det_Sigma
+            - self.ln_det_Sigma
+        )
+        return kl_div
+
     def condition_on(self, dim_y: list) -> "ConditionalGaussianDensity":
         """ Returns density conditioned on indicated dimensions, i.e. p(x|y).
         
