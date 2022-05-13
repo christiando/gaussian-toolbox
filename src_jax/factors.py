@@ -47,6 +47,22 @@ class ConjugateFactor:
         else:
             self.ln_beta = ln_beta
 
+    def __str__(self) -> str:
+        return "Conjugate factor u(x)"
+
+    def __call__(self, x: jnp.ndarray, element_wise: bool = False):
+        """ Evaluates the exponential term at x.
+        
+        :param x: jnp.ndarray [N, D]
+            Points where the factor should be evaluated.
+        :param element_wise: bool
+            Evaluates x for only the corresponding density. Requires the N equals R. (Default=None)
+            
+        :return: jnp.ndarray [R, N], [N]
+            Exponential term.
+        """
+        return self.evaluate(x, element_wise)
+
     def evaluate_ln(self, x: jnp.ndarray, element_wise: bool = False) -> jnp.ndarray:
         """Evaluates the log-exponential term at x.
 

@@ -204,6 +204,9 @@ class GaussianMeasure(factors.ConjugateFactor):
             "Ax_aBx_bCx_cDx_d_outer": self.integrate_general_quartic_outer,
         }
 
+    def __str__(self) -> str:
+        return "Gaussian measure phi(x)"
+
     def slice(self, indices: list) -> "GaussianMeasure":
         """ Returns an object with only the specified entries.
 
@@ -244,6 +247,21 @@ class GaussianMeasure(factors.ConjugateFactor):
     def invert_lambda(self):
         self.Sigma, self.ln_det_Lambda = invert_matrix(self.Lambda)
         self.ln_det_Sigma = -self.ln_det_Lambda
+
+    def __mul__(self, factor: factors.ConjugateFactor,) -> "GaussianMeasure":
+        """ Computes the product between the measure u and a conjugate factor f
+
+            f(x) * u(x)
+
+            and returns the resulting Gaussian measure.
+
+        :param factor: ConjugateFactor
+            The conjugate factor the measure is multiplied with.
+
+        :return: GaussianMeasure
+            Returns the resulting GaussianMeasure.
+        """
+        return self.multiply(factor)
 
     def multiply(
         self, factor: factors.ConjugateFactor, update_full: bool = False

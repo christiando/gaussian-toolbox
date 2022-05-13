@@ -109,6 +109,9 @@ class GaussianDensity(measures.GaussianMeasure):
         self._prepare_integration()
         self.normalize()
 
+    def __str__(self) -> str:
+        return "Gaussian density p(x)"
+
     def sample(self, num_samples: int) -> jnp.ndarray:
         """ Generates samples from the Gaussian density.
         

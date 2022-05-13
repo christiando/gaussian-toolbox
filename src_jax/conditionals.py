@@ -63,6 +63,12 @@ class ConditionalGaussianDensity:
                 self.Sigma, self.ln_det_Lambda = Lambda, ln_det_Sigma
             self.ln_det_Sigma = -self.ln_det_Lambda
 
+    def __str__(self) -> str:
+        return "Conditional Gaussian density p(y|x)"
+
+    def __call__(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
+        return self.condition_on_x(x)
+
     def slice(self, indices: list) -> "ConditionalGaussianDensity":
         """ Returns an object with only the specified entries.
 
