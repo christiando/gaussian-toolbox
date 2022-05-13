@@ -134,7 +134,10 @@ class StateSpaceEM(objax.Module):
                 converged = jnp.abs(conv) < self.conv_crit
             self.iteration += 1
             if self.iteration % 10 == 0:
-                print("Iteration %d - llk=%.1f" % (self.iteration, self.llk_list[-1]))
+                print(
+                    "Iteration %d - Log likelihood=%.1f"
+                    % (self.iteration, self.llk_list[-1])
+                )
             tot_time = time.perf_counter() - time_start_total
             if self.timeit:
                 print(
@@ -319,7 +322,7 @@ class StateSpaceEM(objax.Module):
             Data log likelihood.
         """
         p_z = self.prediction_density.slice(jnp.arange(1, self.T + 1))
-        return self.om.evaluate_llk(p_z, self.X, u=self.u_x[:,None])
+        return self.om.evaluate_llk(p_z, self.X, u=self.u_x[:, None])
 
     def compute_predictive_log_likelihood(
         self,

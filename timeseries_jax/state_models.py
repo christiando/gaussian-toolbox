@@ -217,6 +217,7 @@ class LinearStateModel(StateModel):
         self,
         smoothing_density: densities.GaussianDensity,
         two_step_smoothing_density: densities.GaussianDensity,
+        **kwargs
     ):
         """ The transition matrix is updated here, where the the densities
         p(z_{t+1}, z_t|x_{1:T}) is provided.
@@ -234,7 +235,7 @@ class LinearStateModel(StateModel):
         A = jnp.mean(Ezz, axis=0)  # + 1e-2 * jnp.eye(self.Dz)
         self.A = jnp.linalg.solve(A, jnp.mean(Ezz_cross - mu_b, axis=0)).T
 
-    def update_b(self, smoothing_density: densities.GaussianDensity):
+    def update_b(self, smoothing_density: densities.GaussianDensity, **kwargs):
         """ The transition offset is updated here, where the the densities p(z_t|x_{1:T}) is provided.
         
         :param smoothing_density: GaussianDensity
