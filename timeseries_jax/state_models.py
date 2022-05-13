@@ -326,6 +326,7 @@ class NNControlStateModel(LinearStateModel):
         noise_z: float = 1,
         hidden_units: list = [16,],
         non_linearity: callable = objax.functional.tanh,
+        lr: float = 1e-4,
     ):
         self.Dz = Dz
         self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
@@ -337,6 +338,7 @@ class NNControlStateModel(LinearStateModel):
             hidden_units=hidden_units,
             non_linearity=non_linearity,
         )
+        self.lr = 1e-5
 
     def update_hyperparameters(
         self,
@@ -403,20 +405,18 @@ class NNControlStateModel(LinearStateModel):
         **kwargs
     ):
         gv = objax.GradValues(self.calc_neg_Q_function, self.vars())
-        opt = objax.optimizer.SGD(self.vars())
+        opt = objax.optimizer.Adam(self.vars())
 
         def train_op():
             g, v = gv(
                 smoothing_density, two_step_smoothing_density, u
             )  # returns gradients, loss
-            lr = 0.0001
-            opt(lr, g)
+            opt(self.lr, g)
             return v
 
         train_op = objax.Jit(train_op, gv.vars() + opt.vars())
         for i in range(1000):
             v = train_op()
-            print(v)
 
     def calc_neg_Q_function(
         self,

@@ -166,7 +166,7 @@ class StateSpaceEM(objax.Module):
         self.sm.update_hyperparameters(
             self.smoothing_density,
             self.twostep_smoothing_density,
-            u_z=self.u_z,
+            u=self.u_z,
             iteration=self.iteration,
         )
         # Update initial latent density.
@@ -506,9 +506,9 @@ class StateSpaceEM(objax.Module):
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
 
-        if u_z == None:
+        if u_z is None:
             u_z = jnp.empty((T, 0))
-        if u_x == None:
+        if u_x is None:
             u_x = jnp.empty((T, 0))
         filter_density = self._setup_density(T=T + 1)
         filter_density.update(jnp.array([0]), p0)
@@ -651,9 +651,9 @@ class StateSpaceEM(objax.Module):
         """
 
         T = X.shape[0]
-        if u_z == None:
+        if u_z is None:
             u_z = jnp.empty((T, 0))
-        if u_x == None:
+        if u_x is None:
             u_x = jnp.empty((T, 0))
 
         if p0 is None:
@@ -663,7 +663,7 @@ class StateSpaceEM(objax.Module):
         filter_density = self._setup_density(T=T + 1)
         filter_density.update(jnp.array([0]), p0)
 
-        if observed_dims == None:
+        if observed_dims is None:
             nonobserved_dims = None
         else:
             nonobserved_dims = jnp.setxor1d(jnp.arange(self.Dx), observed_dims)
@@ -745,15 +745,15 @@ class StateSpaceEM(objax.Module):
         :rtype: Union[jnp.ndarray, jnp.ndarray] [T+1, nums_samples, Dz] [T, nums_samples, num_unobserved_dims]
         """
         T = X.shape[0]
-        if u_z == None:
+        if u_z is None:
             u_z = jnp.empty((T, 0))
-        if u_x == None:
+        if u_x is None:
             u_x = jnp.empty((T, 0))
         if p0 is None:
             p0 = densities.GaussianDensity(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
-        if observed_dims == None:
+        if observed_dims is None:
             unobserved_dims = jnp.arange(self.Dx)
             num_unobserved_dims = X.shape[1]
         else:
