@@ -318,6 +318,39 @@ class ConditionalGaussianDensity:
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x,
         )
 
+    def conditional_entropy(
+        self, p_x: densities.GaussianDensity, **kwargs
+    ) -> jnp.ndarray:
+        """Computes the conditional entropy
+        
+         H(y|x) = H(y,x) - H(x) = -\int p(x,y)\ln p(y|x) dx dy
+
+        :param p_x: Marginal over condtional variable
+        :type p_x: densities.GaussianDensity
+        :return: Conditional entropy 
+        :rtype: jnp.ndarray [R]
+        """
+        p_xy = self.affine_joint_transformation(p_x)
+        cond_entropy = p_xy.entropy() - p_x.entropy()
+        return cond_entropy
+
+    def mutual_information(
+        self, p_x: densities.GaussianDensity, **kwargs
+    ) -> jnp.ndarray:
+        """Computes the mutual information
+        
+         I(y,x) = H(y,x) - H(x) - H(y) 
+
+        :param p_x: Marginal over condtional variable
+        :type p_x: densities.GaussianDensity
+        :return: Mututal information
+        :rtype: jnp.ndarray [R]
+        """
+        cond_entropy = self.conditional_entropy(p_x, **kwargs)
+        p_y = self.affine_marginal_transformation(p_x, **kwargs)
+        mutual_info = cond_entropy - p_y.entropy()
+        return mutual_info
+
     def update_Sigma(self, Sigma_new: jnp.ndarray):
         """Updates the covariance matrix.
 
@@ -518,6 +551,24 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_conditional_transformation(p_x)
+
+    def conditional_entropy(
+        self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
+    ) -> jnp.ndarray:
+        """Computes the conditional entropy
+        
+         H(y|x) = H(y,x) - H(x) = -\int p(x,y)\ln p(y|x) dx dy
+
+        :param p_x: Marginal over condtional variable
+        :type p_x: densities.GaussianDensity
+        :param u: Control variables [R, Du]
+        :type u: jnp.ndarray
+        :return: Conditional entropy 
+        :rtype: jnp.ndarray [R]
+        """
+        p_xy = self.affine_joint_transformation(p_x, u)
+        cond_entropy = p_xy.entropy() - p_x.entropy()
+        return cond_entropy
 
 
 class LSEMGaussianConditional(ConditionalGaussianDensity):
