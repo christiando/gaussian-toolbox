@@ -71,15 +71,18 @@ from timeseries.ssm_em import StateSpaceEM
 
 dz = 3
 dk = 10
+du = 3
 dx = X.shape[1]
-sm = state_models.LSEMStateModel(dz, dk)
-# sm = state_models.LinearStateModel(dz)
-om = observation_models.LinearObservationModel(dx, dz, noise_x=1.)
+# sm = state_models.LSEMStateModel(dz, dk)
+sm = state_models.LinearStateModel(dz)
+# om = observation_models.LinearObservationModel(dx, dz, noise_x=1.)
+om = observation_models.HCCovObservationModel(Dx=dx, Dz=dz, Du=du)
 
-ssm_em_lin = StateSpaceEM(X, observation_model=om, state_model=sm)
+ssm_em_lin = StateSpaceEM(X[:2000], observation_model=om, state_model=sm, timeit=True)
 # ssm_em_lin.estep()
+# ssm_em_lin.mstep()
 # smoothing_density = ssm_em_lin.smoothing_density
 # two_step_smoothing_density = ssm_em_lin.twostep_smoothing_density
-# self = ssm_em_lin.sm
-# ssm_em_lin.run()
+# self = ssm_em_lin.om
+ssm_em_lin.run()
 

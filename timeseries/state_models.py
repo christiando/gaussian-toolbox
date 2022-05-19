@@ -361,7 +361,7 @@ class LSEMStateModel(LinearStateModel):
         A_tilde = numpy.eye(2*self.Dz, self.Dz)
         A_tilde[self.Dz:] = -self.A[:,:self.Dz].T
         b_tilde = -self.b
-        Qz_lin = numpy.mean(two_step_smoothing_density.integrate('Ax_aBx_b_outer', 
+        Qz_lin = numpy.mean(two_step_smoothing_density.integrate('Ax_aBx_b_outer',
                                                                   A_mat=A_tilde.T, 
                                                                   a_vec=b_tilde, 
                                                                   B_mat=A_tilde.T, 
@@ -407,14 +407,14 @@ class LSEMStateModel(LinearStateModel):
         nu_joint = numpy.concatenate([nu_joint, self.state_density.k_func.nu], axis=1)
         joint_k_func = factors.OneRankFactor(v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta)
         two_step_k_measure = two_step_smoothing_density.multiply(joint_k_func, update_full=True)
-        Ekz = numpy.mean(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2*self.Dz)), axis=0)
+        Ekz = numpy.sum(two_step_k_measure.integrate('x').reshape((T, self.Dk, 2*self.Dz)), axis=0)
         #Ek = numpy.mean(two_step_k_measure.integrate().reshape((T, self.Dk)), axis=0)
         phi_k = smoothing_density.multiply( self.state_density.k_func, update_full=True)
-        Ek = numpy.mean(phi_k.integrate().reshape((T+1, self.Dk))[:-1], axis=0)
+        Ek = numpy.sum(phi_k.integrate().reshape((T+1, self.Dk))[:-1], axis=0)
         Qz_k_lin_err = numpy.dot(self.A[:,self.Dz:],
                   (Ekz[:,:self.Dz] - numpy.dot(self.A[:,:self.Dz], Ekz[:,self.Dz:].T).T - Ek[:,None] * self.b[None]))
         Ekk = phi_k.multiply(self.state_density.k_func, update_full=True).integrate().reshape((T+1, self.Dk, self.Dk))
-        Qz_kk = numpy.dot(numpy.dot(self.A[:,self.Dz:], numpy.mean(Ekk[:-1], axis=0)), self.A[:,self.Dz:].T)
+        Qz_kk = numpy.dot(numpy.dot(self.A[:,self.Dz:], numpy.sum(Ekk[:-1], axis=0)), self.A[:,self.Dz:].T)
         Qfunc_W = .5 * numpy.trace(numpy.dot(self.Qz_inv, Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T))
     
         return Qfunc_W
@@ -428,9 +428,10 @@ class LSEMStateModel(LinearStateModel):
         :param two_step_smoothing_density: Gaussian Density
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
+
         objective = lambda W: self._Wfunc(W, smoothing_density, two_step_smoothing_density)
         result = minimize(value_and_grad(objective), self.W.flatten(),
-                          method='BFGS', jac=True, options={'disp': False, 'maxiter': 10})
+                          method='L-BFGS-B', jac=True, options={'disp': False, 'maxiter': 10})
         self.W = result.x.reshape((self.Dk, self.Dz + 1))
         
     def update_state_density(self):
