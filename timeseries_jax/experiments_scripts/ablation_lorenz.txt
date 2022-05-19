@@ -1,0 +1,47 @@
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 4 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 5 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 6 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 7 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 8 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 9 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 10 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 11 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 12 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 13 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 14 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 15 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 16 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 17 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 18 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name hmm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --num_states 19 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 1 --du 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 1 --du 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 1 --du 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 2 --du 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 2 --du 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 2 --du 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 3 --du 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 3 --du 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name lin_hsk_ssm  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --dz 3 --du 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 1 --p_arimax 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 1 --p_arimax 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 1 --p_arimax 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 1 --p_arimax 4 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 2 --p_arimax 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 2 --p_arimax 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 2 --p_arimax 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 2 --p_arimax 4 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 3 --p_arimax 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 3 --p_arimax 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 3 --p_arimax 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 3 --p_arimax 4 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 4 --p_arimax 1 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 4 --p_arimax 2 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 4 --p_arimax 3 
+python run_experiment.py --dataset lorenz --exp_num 1 --model_name arimax  --init_w_pca 1 --results_file lorenz --train_ratio 0.75 --q_arimax 4 --p_arimax 4 
