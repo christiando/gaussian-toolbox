@@ -17,7 +17,7 @@ FROM ${RENKU_BASE_IMAGE}
 
 USER root
 
-RUN rm /etc/apt/sources.list.d/cuda.list
+RUN rm /etc/apt/sources.list.d/cuda.list && \ apt-key del 7fa2af80 && \ apt-key adv --fetch-keys
 ENV CUDA_VERSION=11.1.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cuda-cudart-11-1=11.1.74-1 \
