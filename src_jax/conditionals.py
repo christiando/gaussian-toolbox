@@ -13,7 +13,7 @@ __author__ = "Christian Donner"
 # from densities import GaussianDensity
 from jax import numpy as jnp
 from typing import Tuple
-from src_jax import densities, factors
+from src_jax import densities, factors, measures
 import objax
 from utils.linalg import invert_matrix
 
@@ -41,6 +41,7 @@ class ConditionalGaussianDensity:
         """
 
         self.R, self.Dy, self.Dx = M.shape
+
         self.M = M
         if b is None:
             self.b = jnp.zeros((self.R, self.Dy))
@@ -317,6 +318,75 @@ class ConditionalGaussianDensity:
         return ConditionalGaussianDensity(
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x,
         )
+
+    def integrate_log_conditional(
+        self, phi_yx: measures.GaussianMeasure, **kwargs
+    ) -> jnp.ndarray:
+        """Integrates over the log conditional with respect to the pdf p_yx. I.e.
+        
+        int log(p(y|x))p(y,x)dydx.
+
+        :param p_yx: Probability density function (first dimensions are y, last ones are x).
+        :type p_yx: measures.GaussianMeasure
+        :raises NotImplementedError: Only implemented for R=1.
+        :return: Returns the integral with respect to density p_yx.
+        :rtype: jnp.ndarray
+        """
+        if self.R != 1:
+            raise NotImplementedError("Only implemented for R=1.")
+        int_phi = phi_yx.integrate()
+        A = jnp.empty((self.R, self.Dy, self.Dy + self.Dx))
+        A = A.at[:, :, : self.Dy].set(jnp.eye(self.Dy, self.Dy)[None])
+        A = A.at[:, :, self.Dy :].set(-self.M)
+        b = -self.b
+        A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
+        b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
+        quadratic_integral = phi_yx.integrate(
+            "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+        )
+        log_expectation = -0.5 * (
+            quadratic_integral
+            + int_phi * (self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi))
+        )
+        return log_expectation
+
+    def integrate_log_conditional_y(
+        self, phi_x: measures.GaussianMeasure, **kwargs
+    ) -> callable:
+        """Computes the expectation over the log conditional, but just over x. I.e. it returns
+
+           f(y) = int log(p(y|x))p(x)dx.
+        
+        :param p_x: Density over x.
+        :type p_x: measures.GaussianMeasure
+        :raises NotImplementedError: Only implemented for R=1.
+        :return: The integral as function of y.
+        :rtype: callable
+        """
+        if self.R != 1:
+            raise NotImplementedError("Only implemented for R=1.")
+
+        int_phi = phi_x.integrate()
+        A = self.M
+        b = self.b
+        A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
+        b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
+        quadratic_integral = phi_x.integrate(
+            "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+        )
+        linear_integral = phi_x.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde)
+        log_expectation_constant = -0.5 * (
+            quadratic_integral
+            + int_phi * (self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi))
+        )
+        log_expectation_y = (
+            lambda y: -0.5
+            * jnp.einsum("ab,acb -> ac", y, jnp.einsum("abc,dc->dab", self.Lambda, y))
+            * int_phi
+            + jnp.einsum("ab,cb->ac", y, linear_integral)
+            + log_expectation_constant[None]
+        )
+        return log_expectation_y
 
     def conditional_entropy(
         self, p_x: densities.GaussianDensity, **kwargs
