@@ -1015,6 +1015,63 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         )
         return log_expectation
 
+    def integrate_log_conditional_y(
+        self, p_x: densities.GaussianDensity, **kwargs
+    ) -> callable:
+        """Computes the expectation over the log conditional, but just over x. I.e. it returns
+
+           f(y) = int log(p(y|x))p(x)dx.
+        
+        :param p_x: Density over x.
+        :type p_x: measures.GaussianDensity
+        :raises NotImplementedError: Only implemented for R=1.
+        :return: The integral as function of y.
+        :rtype: callable
+        """
+        if self.R != 1:
+            raise NotImplementedError("Only implemented for R=1.")
+
+        A = self.M[:, :, : self.Dx]
+        b = self.b
+        A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
+        b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
+
+        Mk = self.M[:, :, self.Dx :]
+        linear_integral = p_x.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde)
+        p_x_k = p_x.multiply(self.k_func, update_full=True)
+        E_k = jnp.reshape(p_x_k.integrate(), (p_x.R, self.Dk))
+        E_Mk = jnp.einsum("abc,ac->ab", self.Lambda, jnp.einsum("abc,ac->ab", Mk, E_k))
+        linear_term = linear_integral + E_Mk
+        quadratic_integral = p_x.integrate(
+            "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+        )
+        E_k_lin = jnp.reshape(
+            p_x_k.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde),
+            (p_x.R, self.Dk, self.Dy),
+        )
+        E_Mk_lin = jnp.einsum("abc,acb->a", Mk, E_k_lin)
+        p_x_kk = p_x_k.multiply(self.k_func, update_full=True)
+        E_kk = jnp.reshape(p_x_kk.integral_light(), (p_x.R, self.Dk, self.Dk))
+        E_MkkM = jnp.einsum("abc,adc->adb", jnp.einsum("abc,acd-> abd", Mk, E_kk), Mk)
+        kernel_kernel_integral = jnp.trace(
+            jnp.einsum("abc,acd->abd", self.Lambda, E_MkkM), axis1=-2, axis2=-1
+        )
+        constant_term = -0.5 * (
+            quadratic_integral
+            + 2 * E_Mk_lin
+            + kernel_kernel_integral
+            + self.ln_det_Sigma
+            + self.Dy * jnp.log(2.0 * jnp.pi)
+        )
+
+        log_expectation_y = (
+            lambda y: -0.5
+            * jnp.einsum("ab,ab -> a", y, jnp.einsum("abc,ac->ab", self.Lambda, y))
+            + jnp.einsum("ab,ab->a", y, linear_term)
+            + constant_term
+        )
+        return log_expectation_y
+
 
 class HCCovGaussianConditional(ConditionalGaussianDensity):
     def __init__(
