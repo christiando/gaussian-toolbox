@@ -381,10 +381,10 @@ class ConditionalGaussianDensity:
         )
         log_expectation_y = (
             lambda y: -0.5
-            * jnp.einsum("ab,acb -> ac", y, jnp.einsum("abc,dc->dab", self.Lambda, y))
+            * jnp.einsum("ab,ab -> a", y, jnp.einsum("abc,ac->ab", self.Lambda, y))
             * int_phi
-            + jnp.einsum("ab,cb->ac", y, linear_integral)
-            + log_expectation_constant[None]
+            + jnp.einsum("ab,ab->a", y, linear_integral)
+            + log_expectation_constant
         )
         return log_expectation_y
 
@@ -640,6 +640,47 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         cond_entropy = p_xy.entropy() - p_x.entropy()
         return cond_entropy
 
+    def integrate_log_conditional(
+        self, phi_yx: measures.GaussianMeasure, u: jnp.ndarray, **kwargs
+    ) -> jnp.ndarray:
+        """Integrates over the log conditional with respect to the pdf p_yx. I.e.
+        
+        int log(p(y|x))p(y,x)dydx.
+
+        :param p_yx: Probability density function (first dimensions are y, last ones are x).
+        :type p_yx: measures.GaussianMeasure
+        :param u: Control variables [1, Du]
+        :type u: jnp.ndarray
+        :raises NotImplementedError: Only one network input allowed.
+        :return: Returns the integral with respect to density p_yx.
+        :rtype: jnp.ndarray
+        """
+        if u.shape[0] != 1:
+            raise NotImplementedError("Only implemented for a single input.")
+        cond_gauss = self.set_control_variable(u)
+        return cond_gauss.integrate_log_conditional(phi_yx)
+
+    def integrate_log_conditional_y(
+        self, phi_x: measures.GaussianMeasure, u: jnp.ndarray, **kwargs
+    ) -> callable:
+        """Computes the expectation over the log conditional, but just over x. I.e. it returns
+
+           f(y) = int log(p(y|x))p(x)dx.
+        
+        :param p_x: Density over x.
+        :type p_x: measures.GaussianMeasure
+        :param u: Control variables [1, Du]
+        :type u: jnp.ndarray
+        :raises NotImplementedError: Only one network input allowed.
+        :return: The integral as function of y.
+        :rtype: callable
+        """
+        if u.shape[0] != 1:
+            raise NotImplementedError("Only implemented for a single input.")
+
+        cond_gauss = self.set_control_variable(u)
+        return cond_gauss.integrate_log_conditional_y(phi_x)
+
 
 class LSEMGaussianConditional(ConditionalGaussianDensity):
     def __init__(
@@ -670,7 +711,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
                 Matrix in the mean function.
             :param b: jnp.ndarray [1, Dy]
                 Vector in the conditional mean function.
-            :param W: jnp.ndarray [Dphi, Dx + 1]
+            :param W: jnp.ndarray [Dk, Dx + 1]
                 Parameters for linear mapping in the nonlinear functions
             :param Sigma: jnp.ndarray [1, Dy, Dy]
                 The covariance matrix of the conditional. (Default=None)
@@ -909,6 +950,70 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y,)
         return p_y
+
+    def integrate_log_conditional(
+        self,
+        p_yx: densities.GaussianDensity,
+        p_x: densities.GaussianDensity = None,
+        **kwargs
+    ) -> jnp.ndarray:
+        """Integrates over the log conditional with respect to the pdf p_yx. I.e.
+        
+        int log(p(y|x))p(y,x)dydx.
+
+        :param p_yx: Probability density function (first dimensions are y, last ones are x).
+        :type p_yx: measures.GaussianMeasure
+        :raises NotImplementedError: Only implemented for R=1.
+        :return: Returns the integral with respect to density p_yx.
+        :rtype: jnp.ndarray
+        """
+        if self.R != 1:
+            raise NotImplementedError("Only implemented for R=1.")
+
+        # E[(y - Mx - b)' Lambda (y - Mx - b)]
+        A = jnp.empty((self.R, self.Dy, self.Dy + self.Dx))
+        A = A.at[:, :, : self.Dy].set(jnp.eye(self.Dy, self.Dy)[None])
+        A = A.at[:, :, self.Dy :].set(-self.M[:, :, : self.Dx])
+        b = -self.b
+        A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
+        b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
+        quadratic_integral = p_yx.integrate(
+            "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+        )
+        # E[(y - Mx - b) Lambda Mk phi(x)]
+        zero_arr = jnp.zeros([self.Dk, self.Dy + self.Dx])
+        v_joint = zero_arr.at[:, self.Dy :].set(self.k_func.v)
+        nu_joint = zero_arr.at[:, self.Dy :].set(self.k_func.nu)
+        joint_k_func = factors.OneRankFactor(
+            v=v_joint, nu=nu_joint, ln_beta=self.k_func.ln_beta
+        )
+        p_yx_k = p_yx.multiply(joint_k_func, update_full=True)
+        E_k_lin_term = jnp.reshape(
+            p_yx_k.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde),
+            (p_yx.R, self.Dk, self.Dy),
+        )
+        Mk = self.M[:, :, self.Dx :]
+        lin_kernel_integral = jnp.einsum("abc,acb->a", Mk, E_k_lin_term)
+
+        # E[phi(x)' Mk'  Lambda Mk phi(x)]
+        if p_x is None:
+            p_x = p_yx.get_marginal(jnp.arange(self.Dy, self.Dy + self.Dx))
+        p_x_kk = p_x.multiply(self.k_func, update_full=True).multiply(
+            self.k_func, update_full=True
+        )
+        E_kk = jnp.reshape(p_x_kk.integral_light(), (p_x.R, self.Dk, self.Dk))
+        E_MkkM = jnp.einsum("abc,adc->adb", jnp.einsum("abc,acd-> abd", Mk, E_kk), Mk)
+        kernel_kernel_integral = jnp.trace(
+            jnp.einsum("abc,acd->abd", self.Lambda, E_MkkM), axis1=-2, axis2=-1
+        )
+        constant = self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi)
+        log_expectation = -0.5 * (
+            quadratic_integral
+            - 2 * lin_kernel_integral
+            + kernel_kernel_integral
+            + constant
+        )
+        return log_expectation
 
 
 class HCCovGaussianConditional(ConditionalGaussianDensity):
