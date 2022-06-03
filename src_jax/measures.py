@@ -203,8 +203,6 @@ class GaussianMeasure(factors.ConjugateFactor):
             "Ax_aBx_bCx_cDx_d_inner": self.integrate_general_quartic_inner,
             "Ax_aBx_bCx_cDx_d_outer": self.integrate_general_quartic_outer,
             "log_factor": self.integrate_log_factor,
-            "log_conditional": self.integrate_log_conditional,
-            "log_conditional_y": self.integrate_log_conditional_y,
         }
 
     def __str__(self) -> str:
@@ -1249,30 +1247,6 @@ class GaussianMeasure(factors.ConjugateFactor):
         :rtype: jnp.array
         """
         return factor.intergate_log_factor(self)
-
-    def integrate_log_conditional(
-        self, p_cond: "ConditionalGaussianDensity"
-    ) -> jnp.array:
-        """Integrates over a log of the conditional.
-
-        :param p_cond: The conditional density. Must be R=1.
-        :type p_cond: ConditionalGaussianDensity
-        :return: The inegrated term.
-        :rtype: jnp.array
-        """
-        return p_cond.integrate_log_conditional(self)
-
-    def integrate_log_conditional_y(
-        self, p_cond: "ConditionalGaussianDensity", y: jnp.ndarray
-    ) -> jnp.ndarray:
-        """Integrates over a log of the conditional.
-
-        :param p_cond: The conditional density. Must be R=1.
-        :type p_cond: ConditionalGaussianDensity
-        :return: The inegrated term.
-        :rtype: jnp.array
-        """
-        return p_cond.integrate_log_conditional_y(self)(y)
 
 
 class GaussianDiagMeasure(GaussianMeasure):

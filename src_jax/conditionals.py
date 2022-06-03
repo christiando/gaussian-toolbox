@@ -211,11 +211,6 @@ class ConditionalGaussianDensity:
             (R, self.Dy, p_x.D)
         )
         Lambda_xy = jnp.block([[Lambda_x, jnp.swapaxes(L_xy, 1, 2)], [L_xy, Lambda_y]])
-        # Lambda_xy = jnp.empty((R, D_xy, D_xy))
-        # Lambda_xy[:,:p_x.D,:p_x.D] = Lambda_x
-        # Lambda_xy[:,p_x.D:,p_x.D:] = Lambda_y
-        # Lambda_xy[:,p_x.D:,:p_x.D] = L_xy
-        # Lambda_xy[:,:p_x.D,p_x.D:] = jnp.swapaxes(L_xy, 1, 2)
         # Log determinant
         if p_x.D > self.Dy:
             CLambda_x = jnp.einsum(
@@ -320,7 +315,7 @@ class ConditionalGaussianDensity:
         )
 
     def integrate_log_conditional(
-        self, phi_yx: measures.GaussianMeasure, **kwargs
+        self, p_yx: densities.GaussianDensity, **kwargs
     ) -> jnp.ndarray:
         """Integrates over the log conditional with respect to the pdf p_yx. I.e.
         
@@ -334,24 +329,22 @@ class ConditionalGaussianDensity:
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
-        int_phi = phi_yx.integrate()
         A = jnp.empty((self.R, self.Dy, self.Dy + self.Dx))
         A = A.at[:, :, : self.Dy].set(jnp.eye(self.Dy, self.Dy)[None])
         A = A.at[:, :, self.Dy :].set(-self.M)
         b = -self.b
         A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
         b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
-        quadratic_integral = phi_yx.integrate(
+        quadratic_integral = p_yx.integrate(
             "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
         )
         log_expectation = -0.5 * (
-            quadratic_integral
-            + int_phi * (self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi))
+            quadratic_integral + (self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi))
         )
         return log_expectation
 
     def integrate_log_conditional_y(
-        self, phi_x: measures.GaussianMeasure, **kwargs
+        self, p_x: densities.GaussianDensity, **kwargs
     ) -> callable:
         """Computes the expectation over the log conditional, but just over x. I.e. it returns
 
@@ -366,23 +359,20 @@ class ConditionalGaussianDensity:
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
 
-        int_phi = phi_x.integrate()
         A = self.M
         b = self.b
         A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
         b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
-        quadratic_integral = phi_x.integrate(
+        quadratic_integral = p_x.integrate(
             "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
         )
-        linear_integral = phi_x.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde)
+        linear_integral = p_x.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde)
         log_expectation_constant = -0.5 * (
-            quadratic_integral
-            + int_phi * (self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi))
+            quadratic_integral + (self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi))
         )
         log_expectation_y = (
             lambda y: -0.5
             * jnp.einsum("ab,ab -> a", y, jnp.einsum("abc,ac->ab", self.Lambda, y))
-            * int_phi
             + jnp.einsum("ab,ab->a", y, linear_integral)
             + log_expectation_constant
         )
@@ -1325,3 +1315,14 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
         return p_y
+
+    def integrate_log_conditional(
+        self, p_yx: measures.GaussianMeasure, **kwargs
+    ) -> jnp.ndarray:
+        raise NotImplementedError("Log integal not implemented!")
+
+    def integrate_log_conditional_y(
+        self, p_x: measures.GaussianMeasure, **kwargs
+    ) -> callable:
+        raise NotImplementedError("Log integal not implemented!")
+
