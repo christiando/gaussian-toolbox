@@ -799,8 +799,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         # Eff[:,self.Dx:,:self.Dx] = Ekx
         # kernel terms E[k(x)k(x)']
         Ekk = (
-            p_x.multiply(self.k_func, update_full=True)
-            .multiply(self.k_func, update_full=True)
+            p_k.multiply(self.k_func, update_full=True)
             .integrate()
             .reshape((p_x.R, self.Dk, self.Dk))
         )
