@@ -358,8 +358,9 @@ class LinearObservationModel(ObservationModel):
     def compute_Q_function(
         self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
     ) -> float:
-        phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
-        return jnp.sum(self.emission_density.integrate_log_conditional_y(phi)(X))
+        return jnp.sum(
+            self.emission_density.integrate_log_conditional_y(smoothing_density)(X)
+        )
 
     def update_hyperparameters(
         self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
@@ -479,6 +480,131 @@ class LinearObservationModel(ObservationModel):
             p_x = p_x.condition_on_explicit(observed_dims, unobserved_dims)
             p_x = p_x.condition_on_x(x_t[observed_dims][None])
         return p_x
+
+
+class LSEMObservationModel(LinearObservationModel, objax.Module):
+    def __init__(
+        self, Dx: int, Dz: int, Dk: int, noise_x: float = 1.0, lr: float = 1e-3,
+    ):
+        self.Dx, self.Dz, self.Dk = Dx, Dz, Dk
+        self.Dphi = self.Dk + self.Dz
+        self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
+        self.C = jnp.array(np.random.randn(self.Dx, self.Dphi))
+        if self.Dx == self.Dz:
+            self.C = self.C.at[:, : self.Dz].set(jnp.eye(self.Dx))
+        else:
+            self.C = self.C.at[:, : self.Dz].set(
+                objax.random.normal((self.Dx, self.Dz))
+            )
+        self.d = jnp.zeros((self.Dx,))
+        self.W = objax.TrainVar(jnp.array(np.random.randn(self.Dk, self.Dz + 1)))
+        self.emission_density = conditionals.LSEMGaussianConditional(
+            M=jnp.array([self.C]),
+            b=jnp.array([self.d]),
+            W=self.W,
+            Sigma=jnp.array([self.Qx]),
+        )
+        self.Qx_inv, self.ln_det_Qx = (
+            self.emission_density.Lambda[0],
+            self.emission_density.ln_det_Sigma[0],
+        )
+        self.lr = lr
+
+    def update_hyperparameters(
+        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+    ):
+        phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
+        self.update_Qx(phi, X)
+        self.update_Cd(phi, X)
+        self.update_emission_density()
+        self.update_W(phi, X)
+        self.update_emission_density()
+
+    def update_emission_density(self):
+        self.emission_density = conditionals.LSEMGaussianConditional(
+            M=jnp.array([self.C]),
+            b=jnp.array([self.d]),
+            W=self.W,
+            Sigma=jnp.array([self.Qx]),
+        )
+        self.Qx_inv, self.ln_det_Qx = (
+            self.emission_density.Lambda[0],
+            self.emission_density.ln_det_Sigma[0],
+        )
+
+    def update_Qx(
+        self, smoothing_density: densities.GaussianDensity, X: jnp.array
+    ) -> jnp.ndarray:
+        T = X.shape[0]
+        mu_x, Sigma_x = self.emission_density.get_expected_moments(smoothing_density)
+        sum_mu_x2 = jnp.sum(
+            Sigma_x - self.emission_density.Sigma + mu_x[:, None] * mu_x[:, :, None],
+            axis=0,
+        )
+        sum_X_mu = jnp.sum(X[:, None] * mu_x[:, :, None], axis=0)
+        self.Qx = (
+            jnp.sum(X[:, None] * X[:, :, None], axis=0)
+            - sum_X_mu
+            - sum_X_mu.T
+            + sum_mu_x2
+        ) / T
+
+    def update_Cd(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+        #### E[f(x)] ####
+        # E[x] [R, Dx]
+        T = X.shape[0]
+        Ex = smoothing_density.integrate("x")
+        # E[k(x)] [R, Dphi - Dx]
+        p_k = smoothing_density.multiply(self.emission_density.k_func, update_full=True)
+        Ekx = p_k.integrate().reshape((smoothing_density.R, self.Dphi - self.Dz))
+        # E[f(x)]
+        Ef = jnp.concatenate([Ex, Ekx], axis=1)
+        B = jnp.einsum("ab,ac->bc", X - self.d[None], Ef)
+
+        #### E[f(x)f(x)'] ####
+        # Eff = jnp.empty([p_x.R, self.Dphi, self.Dphi])
+        # Linear terms E[xx']
+        Exx = jnp.sum(smoothing_density.integrate("xx"), axis=0)
+        # Eff[:,:self.Dx,:self.Dx] =
+        # Cross terms E[x k(x)']
+        Ekx = jnp.sum(
+            p_k.integrate("x").reshape((smoothing_density.R, self.Dk, self.Dz)), axis=0
+        )
+        # Eff[:,:self.Dx,self.Dx:] = jnp.swapaxes(Ekx, axis1=1, axis2=2)
+        # Eff[:,self.Dx:,:self.Dx] = Ekx
+        # kernel terms E[k(x)k(x)']
+        Ekk = jnp.sum(
+            p_k.multiply(self.emission_density.k_func, update_full=True)
+            .integrate()
+            .reshape((smoothing_density.R, self.Dk, self.Dk)),
+            axis=0,
+        )
+        # Eff[:,self.Dx:,self.Dx:] = Ekk
+        A = jnp.block([[Exx, Ekx.T], [Ekx, Ekk]])
+        self.C = jnp.linalg.solve(A / T, B.T / T).T
+        self.d = jnp.mean(X, axis=0) - jnp.dot(self.C, jnp.mean(Ef, axis=0))
+
+    def update_W(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+        opt = objax.optimizer.SGD(self.vars())
+        T = X.shape[0]
+
+        @objax.Function.with_vars(self.vars())
+        def loss():
+            self.emission_density.W = self.W
+            return -self.compute_Q_function(smoothing_density, X) / T
+
+        gv = objax.GradValues(loss, self.vars())
+
+        @objax.Function.with_vars(self.vars() + opt.vars())
+        def train_op():
+            g, v = gv()  # returns gradients g and loss v
+            opt(self.lr, g)  # update weights
+            return v
+
+        train_op = objax.Jit(train_op)
+
+        for i in range(1000):
+            v = train_op()
 
 
 class HCCovObservationModel(LinearObservationModel):

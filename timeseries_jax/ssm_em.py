@@ -90,7 +90,6 @@ class StateSpaceEM(objax.Module):
         self.timeit = timeit
         self.iteration = 0
         self.llk_list = []
-        self.Q_list = []
         # Setup densities
         self.prediction_density = self._setup_density(T=self.T + 1)
         self.filter_density = self._setup_density(T=self.T + 1)
@@ -186,7 +185,8 @@ class StateSpaceEM(objax.Module):
         sm_Q = self.sm.compute_Q_function(
             self.smoothing_density, self.twostep_smoothing_density
         )
-        om_Q = self.om.compute_Q_function(self.smoothing_density, self.X)
+        phi = self.smoothing_density.slice(jnp.array(1, self.T))
+        om_Q = self.om.compute_Q_function(phi_density, self.X)
         total_Q = init_Q + sm_Q + om_Q
         return total_Q
 

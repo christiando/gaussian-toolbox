@@ -351,7 +351,7 @@ class NNControlStateModel(LinearStateModel):
             hidden_units=hidden_units,
             non_linearity=non_linearity,
         )
-        self.lr = 1e-5
+        self.lr = lr
 
     def update_hyperparameters(
         self,
