@@ -6,8 +6,8 @@
 # Implemented so far:                                                                            #
 #       + LinearObservationModel (Gaussian Emission)                                             #
 #       + HCCovObservationModel (Gaussian Emission with state dependent covariance)              #
+#       + LSEMObservationModel (Gaussian Emission with non linear mean)                          #
 # Yet to be implemented:                                                                         #
-#       - LSEMObservationModel (Gaussian Emission with non linear mean)                          #
 #       - HCCovLSEMObservationModel (Gaussian Emission with non linear mean and state dependent  #
 #                                    covariance)                                                 #
 #       - BernoulliObservationModel (Emissions for binary data)                                  #
