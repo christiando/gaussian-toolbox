@@ -341,6 +341,25 @@ class NNControlStateModel(LinearStateModel):
         non_linearity: callable = objax.functional.tanh,
         lr: float = 1e-4,
     ):
+        """Model with linear state equation
+        
+        z_t = A(u_t) z_{t-1} + b(u_t) + zeta_t     with      zeta_t ~ N(0,Qz),
+        
+        where the coefficients are output of a neural network, which gets control variables u as input.
+
+        :param Dz: Dimension of latent space
+        :type Dz: int
+        :param Du: Dimension of control variables.
+        :type Du: int
+        :param noise_z: Initial state noise, defaults to 1
+        :type noise_z: float, optional
+        :param hidden_units: List of number of hidden units in each layer, defaults to [16,]
+        :type hidden_units: list, optional
+        :param non_linearity: Which non-linearity between layers, defaults to objax.functional.tanh
+        :type non_linearity: callable, optional
+        :param lr: Learning rate for learning the network, defaults to 1e-4
+        :type lr: float, optional
+        """
         self.Dz = Dz
         self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
         self.Du = Du
