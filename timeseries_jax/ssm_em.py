@@ -181,7 +181,7 @@ class StateSpaceEM(objax.Module):
     def compute_Q_function(self) -> float:
         p0 = self.filter_density.slice(jnp.array([0]))
         p0_smoothing = self.smoothing_density.slice(jnp.array([0]))
-        init_Q = p0_smoothing.integrate("log_factor", factor=p0).squeeze()
+        init_Q = p0_smoothing.integrate("log u(x)", factor=p0).squeeze()
         sm_Q = self.sm.compute_Q_function(
             self.smoothing_density, self.twostep_smoothing_density
         )

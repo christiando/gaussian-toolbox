@@ -219,7 +219,7 @@ class ConjugateFactor:
         if self.R != 1 and self.R != phi_x.R:
             raise NotImplementedError("Only implemented for R=1 or R=phi_x.R.")
         int_phi = phi_x.integrate()
-        quadratic_integral = phi_x.integrate("Ax_aBx_b_inner", B_mat=self.Lambda)
+        quadratic_integral = phi_x.integrate("(Ax+a)'(Bx+b)", B_mat=self.Lambda)
         linear_integral = jnp.einsum("ab,ab->a", self.nu, phi_x.integrate("x"))
         int_log_factor = (
             -0.5 * quadratic_integral + linear_integral + self.ln_beta * int_phi

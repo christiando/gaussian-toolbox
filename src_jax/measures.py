@@ -193,16 +193,16 @@ class GaussianMeasure(factors.ConjugateFactor):
         self.integration_dict = {
             "1": self.integral,
             "x": self.integrate_x,
-            "Ax_a": self.integrate_general_linear,
-            "xx": self.integrate_xxT,
-            "Ax_aBx_b_inner": self.integrate_general_quadratic_inner,
-            "Ax_aBx_b_outer": self.integrate_general_quadratic_outer,
-            "Ax_aBx_bCx_c_inner": self.integrate_general_cubic_inner,
-            "Ax_aBx_bCx_c_outer": self.integrate_general_cubic_outer,
-            "xAx_ax": self.integrate_cubic_outer,  # Rename
-            "Ax_aBx_bCx_cDx_d_inner": self.integrate_general_quartic_inner,
-            "Ax_aBx_bCx_cDx_d_outer": self.integrate_general_quartic_outer,
-            "log_factor": self.integrate_log_factor,
+            "(Ax+a)": self.integrate_general_linear,
+            "xx'": self.integrate_xxT,
+            "(Ax+a)'(Bx+b)": self.integrate_general_quadratic_inner,
+            "(Ax+a)(Bx+b)'": self.integrate_general_quadratic_outer,
+            "(Ax+a)(Bx+b)'(Cx+c)": self.integrate_general_cubic_inner,
+            "(Bx+b)'(Cx+c)(Dx+d)'": self.integrate_general_cubic_outer,
+            "x(A'x + a)x'": self.integrate_cubic_outer,  # Rename
+            "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)": self.integrate_general_quartic_inner,
+            "(Ax+a)(Bx+b)'(Cx+c)(Dx+d)'": self.integrate_general_quartic_outer,
+            "log u(x)": self.integrate_log_factor,
         }
 
     def __str__(self) -> str:
@@ -657,7 +657,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def _expectation_xbxx(self, b_vec: jnp.ndarray) -> jnp.ndarray:
         """ Computes the cubic expectation.
 
-            int xb'xx' dphi(x),
+            int xb"xx'" dphi(x),
 
             with phi(x) = u(x) / int du(x).
 
@@ -726,7 +726,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def intergate_xbxx(self, b_vec: jnp.ndarray) -> jnp.ndarray:
         """ Computes the cubic integral.
 
-            int xb'xx' du(x)
+            int xb"xx'" du(x)
         :param b_vec: jnp.ndarray [D,]
             Vector of 
         :return: jnp.ndarray [R, D, D]
@@ -935,7 +935,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def _expectation_xxTxxT(self) -> jnp.ndarray:
         """ Computes the cubic integral.
 
-            int xx'xx' dphi(x),
+            int xx"xx'" dphi(x),
 
             with phi(x) = u(x) / int du(x).
 
@@ -957,7 +957,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def integrate_xxTxxT(self) -> jnp.ndarray:
         """ Computes the quartic integral.
 
-            int xx'xx' du(x).
+            int xx"xx'" du(x).
 
         :return: jnp.ndarray [R, D, D]
             The solved intergal.
@@ -998,7 +998,7 @@ class GaussianMeasure(factors.ConjugateFactor):
     def integrate_xxTAxxT(self, A_mat: jnp.ndarray) -> jnp.ndarray:
         """ Computes the quartic integral.
 
-            int xx'xx' du(x)
+            int xx"xx'" du(x)
         :return: jnp.ndarray [R, D, D]
             The solved intergal.
         """

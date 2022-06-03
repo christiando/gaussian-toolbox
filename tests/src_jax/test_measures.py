@@ -244,7 +244,7 @@ class TestGaussianMeasure(TestConjugateFactor):
                 axis=1,
             )
         )
-        integral_analytic = m.integrate("Ax_a", A_mat=A, a_vec=a)
+        integral_analytic = m.integrate("(Ax+a)", A_mat=A, a_vec=a)
         integral = normalization[:, None] * (jnp.einsum("ab,cb->ca", A, mu) + a)
         assert np.allclose(integral, integral_analytic, rtol=1e-4)
 
@@ -266,7 +266,7 @@ class TestGaussianMeasure(TestConjugateFactor):
                 axis=1,
             )
         )
-        integral_analytic = m.integrate("xx")
+        integral_analytic = m.integrate("xx'")
         integral = normalization[:, None, None] * (
             jnp.linalg.inv(Lambda) + jnp.einsum("ab,ac->abc", mu, mu)
         )
@@ -299,8 +299,9 @@ class TestGaussianMeasure(TestConjugateFactor):
                 )
             )
         r_sample = jnp.array(r_sample) * int_m
-        r_ana = m.integrate("log_factor", factor=u)
+        r_ana = m.integrate("log u(x)", factor=u)
         assert np.allclose(r_sample, r_ana, rtol=1e-2)
+
 
 """    @pytest.mark.parametrize(
         "R, Dx, Dy", [(2, 5, 2), (1, 5, 1), (10, 1, 6), (10, 5, 5),],

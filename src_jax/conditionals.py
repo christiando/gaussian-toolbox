@@ -336,7 +336,7 @@ class ConditionalGaussianDensity:
         A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
         b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
         quadratic_integral = p_yx.integrate(
-            "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+            "(Ax+a)'(Bx+b)", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
         )
         log_expectation = -0.5 * (
             quadratic_integral + (self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi))
@@ -364,9 +364,9 @@ class ConditionalGaussianDensity:
         A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
         b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
         quadratic_integral = p_x.integrate(
-            "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+            "(Ax+a)'(Bx+b)", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
         )
-        linear_integral = p_x.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde)
+        linear_integral = p_x.integrate("(Ax+a)", A_mat=A_tilde, a_vec=b_tilde)
         log_expectation_constant = -0.5 * (
             quadratic_integral + (self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi))
         )
@@ -791,7 +791,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         #### E[f(x)f(x)'] ####
         # Eff = jnp.empty([p_x.R, self.Dphi, self.Dphi])
         # Linear terms E[xx']
-        Exx = p_x.integrate("xx")
+        Exx = p_x.integrate("xx'")
         # Eff[:,:self.Dx,:self.Dx] =
         # Cross terms E[x k(x)']
         Ekx = p_k.integrate("x").reshape((p_x.R, self.Dk, self.Dx))
@@ -836,7 +836,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         """
 
         # E[xx']
-        Exx = p_x.integrate("xx")
+        Exx = p_x.integrate("xx'")
         # E[k(x)x']
         Ekx = (
             p_x.multiply(self.k_func, update_full=True)
@@ -967,7 +967,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
         b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
         quadratic_integral = p_yx.integrate(
-            "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+            "(Ax+a)'(Bx+b)", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
         )
         # E[(y - Mx - b) Lambda Mk phi(x)]
         zero_arr = jnp.zeros([self.Dk, self.Dy + self.Dx])
@@ -978,7 +978,7 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         )
         p_yx_k = p_yx.multiply(joint_k_func, update_full=True)
         E_k_lin_term = jnp.reshape(
-            p_yx_k.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde),
+            p_yx_k.integrate("(Ax+a)", A_mat=A_tilde, a_vec=b_tilde),
             (p_yx.R, self.Dk, self.Dy),
         )
         Mk = self.M[:, :, self.Dx :]
@@ -1026,16 +1026,16 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
 
         Mk = self.M[:, :, self.Dx :]
-        linear_integral = p_x.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde)
+        linear_integral = p_x.integrate("(Ax+a)", A_mat=A_tilde, a_vec=b_tilde)
         p_x_k = p_x.multiply(self.k_func, update_full=True)
         E_k = jnp.reshape(p_x_k.integrate(), (p_x.R, self.Dk))
         E_Mk = jnp.einsum("abc,ac->ab", self.Lambda, jnp.einsum("abc,ac->ab", Mk, E_k))
         linear_term = linear_integral + E_Mk
         quadratic_integral = p_x.integrate(
-            "Ax_aBx_b_inner", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+            "(Ax+a)'(Bx+b)", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
         )
         E_k_lin = jnp.reshape(
-            p_x_k.integrate("Ax_a", A_mat=A_tilde, a_vec=b_tilde),
+            p_x_k.integrate("(Ax+a)", A_mat=A_tilde, a_vec=b_tilde),
             (p_x.R, self.Dk, self.Dy),
         )
         E_Mk_lin = jnp.einsum("abc,acb->a", Mk, E_k_lin)
@@ -1202,7 +1202,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
 
         mu_y = self.get_conditional_mu(p_x.mu)[0]
         Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
-            "Ax_aBx_b_outer", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
+            "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
         )
         Sigma_y = Eyy - mu_y[:, None] * mu_y[:, :, None]
         # Sigma_y = .5 * (Sigma_y + Sigma_y.T)
@@ -1221,7 +1221,7 @@ class HCCovGaussianConditional(ConditionalGaussianDensity):
         """
 
         Eyx = p_x.integrate(
-            "Ax_aBx_b_outer", A_mat=self.M, a_vec=self.b, B_mat=None, b_vec=None
+            "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=None, b_vec=None
         )
         return Eyx
 

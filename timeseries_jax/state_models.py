@@ -240,9 +240,9 @@ class LinearStateModel(StateModel):
         :param two_step_smoothing_density: Gaussian Density
             The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         """
-        # Ezz = smoothing_density.integrate('xx')
+        # Ezz = smoothing_density.integrate("xx'")
         mu_b = smoothing_density.mu[:-1, None] * self.b[None, :, None]
-        Ezz_two_step = two_step_smoothing_density.integrate("xx")
+        Ezz_two_step = two_step_smoothing_density.integrate("xx'")
         Ezz = Ezz_two_step[:, self.Dz :, self.Dz :]
         Ezz_cross = Ezz_two_step[:, self.Dz :, : self.Dz]
         A = jnp.mean(Ezz, axis=0)  # + 1e-2 * jnp.eye(self.Dz)
@@ -279,7 +279,7 @@ class LinearStateModel(StateModel):
         b_tilde = -self.b
         self.Qz = jnp.mean(
             two_step_smoothing_density.integrate(
-                "Ax_aBx_b_outer",
+                "(Ax+a)(Bx+b)'",
                 A_mat=A_tilde.T,
                 a_vec=b_tilde,
                 B_mat=A_tilde.T,
@@ -313,7 +313,7 @@ class LinearStateModel(StateModel):
         """
         mu0 = init_smooth_density.integrate("x")
         Sigma0 = init_smooth_density.integrate(
-            "Ax_aBx_b_outer", A_mat=None, a_vec=-mu0[0], B_mat=None, b_vec=-mu0[0]
+            "(Ax+a)(Bx+b)'", A_mat=None, a_vec=-mu0[0], B_mat=None, b_vec=-mu0[0]
         )
         opt_init_density = densities.GaussianDensity(Sigma0, mu0)
         return opt_init_density
@@ -420,7 +420,7 @@ class NNControlStateModel(LinearStateModel):
         b_tilde = -b_u
         self.Qz = jnp.mean(
             two_step_smoothing_density.integrate(
-                "Ax_aBx_b_outer",
+                "(Ax+a)(Bx+b)'",
                 A_mat=A_tilde,
                 a_vec=b_tilde,
                 B_mat=A_tilde,
@@ -467,7 +467,7 @@ class NNControlStateModel(LinearStateModel):
         b_tilde2 = jnp.einsum("ab,cb->ca", self.state_density.Lambda[0], b_tilde)
         expectation_term = jnp.mean(
             two_step_smoothing_density.integrate(
-                "Ax_aBx_b_inner",
+                "(Ax+a)'(Bx+b)",
                 A_mat=A_tilde,
                 a_vec=b_tilde,
                 B_mat=A_tilde2,
@@ -574,7 +574,7 @@ class LSEMStateModel(LinearStateModel):
         b_tilde = -self.b
         Qz_lin = jnp.mean(
             two_step_smoothing_density.integrate(
-                "Ax_aBx_b_outer",
+                "(Ax+a)(Bx+b)'",
                 A_mat=A_tilde.T,
                 a_vec=b_tilde,
                 B_mat=A_tilde.T,
@@ -627,12 +627,12 @@ class LSEMStateModel(LinearStateModel):
         )
         Ekz = phi_k.integrate("x").reshape((T, self.Dk, self.Dz))
         mean_Ekz = jnp.mean(Ekz, axis=0)
-        mean_Ezz = jnp.mean(phi.integrate("xx"), axis=0)
+        mean_Ezz = jnp.mean(phi.integrate("xx'"), axis=0)
         mean_Ekk = jnp.mean(Ekk, axis=0)
         Eff = jnp.block([[mean_Ezz, mean_Ekz.T], [mean_Ekz, mean_Ekk]])
         Eff += 0.001 * jnp.eye(Eff.shape[0])
         # mean_Ekk_reg = mean_Ekk + .0001 * jnp.eye(self.Dk)
-        # mean_Ezz = jnp.mean(phi.integrate('xx'), axis=0)
+        # mean_Ezz = jnp.mean(phi.integrate("xx'"), axis=0)
         # Eff = jnp.block([[mean_Ezz, Ekz_past.T],
         #                  [Ekz_past, mean_Ekk_reg]])
         Ez = jnp.mean(phi.integrate("x"), axis=0)
@@ -640,7 +640,7 @@ class LSEMStateModel(LinearStateModel):
         Ebf = Ef[None] * self.b[:, None]
         # E[z f(z)']
         Ezz_cross = jnp.mean(
-            two_step_smoothing_density.integrate("xx")[:, self.Dz :, : self.Dz], axis=0
+            two_step_smoothing_density.integrate("xx'")[:, self.Dz :, : self.Dz], axis=0
         )
         Ezf = jnp.concatenate([Ezz_cross.T, Ekz_future.T], axis=1)
         A = jnp.linalg.solve(Eff / T, (Ezf - Ebf).T / T).T
@@ -674,11 +674,11 @@ class LSEMStateModel(LinearStateModel):
         )
         Ekz = phi_k.integrate("x").reshape((T, self.Dk, self.Dz))
         mean_Ekz = jnp.mean(Ekz, axis=0)
-        mean_Ezz = jnp.mean(phi.integrate("xx"), axis=0)
+        mean_Ezz = jnp.mean(phi.integrate("xx'"), axis=0)
         mean_Ekk = jnp.mean(Ekk, axis=0) + 0.0001 * jnp.eye(self.Dk)
         Eff = jnp.block([[mean_Ezz, mean_Ekz.T], [mean_Ekz, mean_Ekk]])
         # Eff = jnp.empty((self.Dphi, self.Dphi))
-        # Eff[:self.Dz,:self.Dz] = jnp.mean(phi.integrate('xx'), axis=0)
+        # Eff[:self.Dz,:self.Dz] = jnp.mean(phi.integrate("xx'"), axis=0)
         # Eff[self.Dz:,self.Dz:] = jnp.mean(Ekk, axis=0)
         # Eff[self.Dz:,:self.Dz] = jnp.mean(Ekz, axis=0)
         # Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
@@ -699,7 +699,7 @@ class LSEMStateModel(LinearStateModel):
             v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta
         )
         Ezz_cross = jnp.mean(
-            two_step_smoothing_density.integrate("xx")[:, self.Dz :, : self.Dz], axis=0
+            two_step_smoothing_density.integrate("xx'")[:, self.Dz :, : self.Dz], axis=0
         )
         Ezk = jnp.mean(
             two_step_smoothing_density.multiply(joint_k_func, update_full=True)
@@ -744,7 +744,7 @@ class LSEMStateModel(LinearStateModel):
         b_tilde = -self.b
         Qz_lin = jnp.mean(
             two_step_smoothing_density.integrate(
-                "Ax_aBx_b_outer",
+                "(Ax+a)(Bx+b)'",
                 A_mat=A_tilde.T,
                 a_vec=b_tilde,
                 B_mat=A_tilde.T,

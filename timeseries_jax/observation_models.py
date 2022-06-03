@@ -392,13 +392,13 @@ class LinearObservationModel(ObservationModel):
 
         Exx = jnp.sum(
             smoothing_density.integrate(
-                "Ax_aBx_b_outer", A_mat=A, a_vec=a_t, B_mat=A, b_vec=a_t
+                "(Ax+a)(Bx+b)'", A_mat=A, a_vec=a_t, B_mat=A, b_vec=a_t
             )[1:],
             axis=0,
         )
         # for t in range(1, T+1):
         #     cur_smooth_density = smoothing_density.slice(jnp.array([t]))
-        #     Exx += cur_smooth_density.integrate('Ax_aBx_b_outer', A_mat=A,
+        #     Exx += cur_smooth_density.integrate("(Ax+a)(Bx+b)'", A_mat=A,
         #                                         a_vec=a_t[t-1], B_mat=A,
         #                                         b_vec=a_t[t-1])[0]
         self.Qx = 0.5 * (Exx + Exx.T) / T
@@ -411,7 +411,7 @@ class LinearObservationModel(ObservationModel):
         :param X: jnp.ndarray [T, Dx]
             The observations.
         """
-        Ezz = jnp.sum(smoothing_density.integrate("xx")[1:], axis=0)
+        Ezz = jnp.sum(smoothing_density.integrate("xx'")[1:], axis=0)
         Ez = smoothing_density.integrate("x")[1:]
         zx = jnp.sum(Ez[:, :, None] * (X[:, None] - self.d[None, None]), axis=0)
         self.C = jnp.linalg.solve(Ezz, zx).T
@@ -615,7 +615,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         #### E[f(x)f(x)'] ####
         # Eff = jnp.empty([p_x.R, self.Dphi, self.Dphi])
         # Linear terms E[xx']
-        Exx = jnp.sum(smoothing_density.integrate("xx"), axis=0)
+        Exx = jnp.sum(smoothing_density.integrate("xx'"), axis=0)
         # Eff[:,:self.Dx,:self.Dx] =
         # Cross terms E[x k(x)']
         Ekx = jnp.sum(
@@ -1034,7 +1034,7 @@ class HCCovObservationModel(LinearObservationModel):
         T = X.shape[0]
         vec = X - d
         E_epsilon2 = jnp.sum(
-            phi.integrate("Ax_aBx_b_inner", A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec),
+            phi.integrate("(Ax+a)'(Bx+b)", A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec),
             axis=0,
         )
         uRu, log_lb_sum = HCCovObservationModel.get_lb_i(
@@ -1067,7 +1067,7 @@ class HCCovObservationModel(LinearObservationModel):
         phi = densities.GaussianDensity(**phi_dict)
         vec = X - d
         E_epsilon2 = jnp.sum(
-            phi.integrate("Ax_aBx_b_inner", A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec),
+            phi.integrate("(Ax+a)'(Bx+b)", A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec),
             axis=0,
         )
         uRu, log_lb_sum = HCCovObservationModel.get_lb_i(
@@ -1103,7 +1103,7 @@ class HCCovObservationModel(LinearObservationModel):
         ux_d = jnp.dot(u_i.T, (X - d).T)
         # Lower bound for E[ln (sigma_x^2 + f(h))]
         omega_dagger = jnp.sqrt(
-            phi.integrate("Ax_aBx_b_inner", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
+            phi.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
         )
         omega_star = 1e-15 * jnp.ones(T)
         # omega_star = omega_star_init
@@ -1134,7 +1134,7 @@ class HCCovObservationModel(LinearObservationModel):
             exp_phi_minus = phi.hadamard(exp_factor_minus, update_full=True)
             # Fourth order integrals E[h^2 (x-Cz-d)^2]
             quart_int_plus = exp_phi_plus.integrate(
-                "Ax_aBx_bCx_cDx_d_inner",
+                "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
                 A_mat=uC,
                 a_vec=ux_d.T,
                 B_mat=uC,
@@ -1145,7 +1145,7 @@ class HCCovObservationModel(LinearObservationModel):
                 d_vec=b_i,
             )
             quart_int_minus = exp_phi_minus.integrate(
-                "Ax_aBx_bCx_cDx_d_inner",
+                "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
                 A_mat=uC,
                 a_vec=ux_d.T,
                 B_mat=uC,
@@ -1158,10 +1158,10 @@ class HCCovObservationModel(LinearObservationModel):
             quart_int = quart_int_plus + quart_int_minus
             # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
             quad_int_plus = exp_phi_plus.integrate(
-                "Ax_aBx_b_inner", A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T
+                "(Ax+a)'(Bx+b)", A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T
             )
             quad_int_minus = exp_phi_minus.integrate(
-                "Ax_aBx_b_inner", A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T
+                "(Ax+a)'(Bx+b)", A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T
             )
             quad_int = quad_int_plus + quad_int_minus
             omega_old = omega_star
@@ -1216,7 +1216,7 @@ class HCCovObservationModel(LinearObservationModel):
         # Lower bound for E[ln (sigma_x^2 + f(h))]
 
         omega_dagger = jnp.sqrt(
-            phi.integrate("Ax_aBx_b_inner", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
+            phi.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
         )
         g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
         nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
@@ -1240,7 +1240,7 @@ class HCCovObservationModel(LinearObservationModel):
         exp_phi_minus = phi.hadamard(exp_factor_minus, update_full=True)
         # Fourth order integrals E[h^2 (x-Cz-d)^2]
         quart_int_plus = exp_phi_plus.integrate(
-            "Ax_aBx_bCx_cDx_d_inner",
+            "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
             A_mat=uC,
             a_vec=ux_d.T,
             B_mat=uC,
@@ -1251,7 +1251,7 @@ class HCCovObservationModel(LinearObservationModel):
             d_vec=b_i,
         )
         quart_int_minus = exp_phi_minus.integrate(
-            "Ax_aBx_bCx_cDx_d_inner",
+            "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
             A_mat=uC,
             a_vec=ux_d.T,
             B_mat=uC,
@@ -1264,10 +1264,10 @@ class HCCovObservationModel(LinearObservationModel):
         quart_int = quart_int_plus + quart_int_minus
         # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
         quad_int_plus = exp_phi_plus.integrate(
-            "Ax_aBx_b_inner", A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T
+            "(Ax+a)'(Bx+b)", A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T
         )
         quad_int_minus = exp_phi_minus.integrate(
-            "Ax_aBx_b_inner", A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T
+            "(Ax+a)'(Bx+b)", A_mat=uC, a_vec=ux_d.T, B_mat=uC, b_vec=ux_d.T
         )
         quad_int = quad_int_plus + quad_int_minus
         omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
@@ -1296,10 +1296,10 @@ class HCCovObservationModel(LinearObservationModel):
         mat1 = -C
         vec1 = X - d
         R_plus = exp_phi_plus.integrate(
-            "Ax_aBx_b_outer", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
+            "(Ax+a)(Bx+b)'", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
         )
         R_minus = exp_phi_minus.integrate(
-            "Ax_aBx_b_outer", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
+            "(Ax+a)(Bx+b)'", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
         )
         R = R_plus + R_minus
         R = jnp.sum(R, axis=0)
@@ -1352,10 +1352,10 @@ class HCCovObservationModel(LinearObservationModel):
         mat1 = -C
         vec1 = X - d
         R_plus = exp_phi_plus.integrate(
-            "Ax_aBx_b_outer", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
+            "(Ax+a)(Bx+b)'", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
         )
         R_minus = exp_phi_minus.integrate(
-            "Ax_aBx_b_outer", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
+            "(Ax+a)(Bx+b)'", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
         )
         R = R_plus + R_minus
         R = jnp.mean(R, axis=0)
@@ -1524,7 +1524,7 @@ class BernoulliObservationModel(ObservationModel):
         T = density.R
 
         Ez = density.integrate("x")
-        Ezz = density.integrate("xx")
+        Ezz = density.integrate("xx'")
 
         Ephi_outer = jnp.zeros((T, self.Dx, self.Dphi, self.Dphi))
         Ephi_outer[:, :, 0, 0] = 1  # 1
@@ -1577,7 +1577,7 @@ class BernoulliObservationModel(ObservationModel):
             if ux_t is not None:
                 a_vec = a_vec + theta_ux
             Eh2 = sigma_density.integrate(
-                "Ax_aBx_b_inner", A_mat=A_mat, a_vec=a_vec, B_mat=A_mat, b_vec=a_vec
+                "(Ax+a)'(Bx+b)", A_mat=A_mat, a_vec=a_vec, B_mat=A_mat, b_vec=a_vec
             )
             omega_star = jnp.sqrt(Eh2)
             omega_star[omega_star < 1e-10] = 1e-10
@@ -1636,7 +1636,7 @@ class BernoulliObservationModel(ObservationModel):
             theta_ux = jnp.einsum("ab,b->a", self.Theta[:, self.Dz + 1 :], ux_t[0])
             a_vec = a_vec + theta_ux
         Eh2 = density.integrate(
-            "Ax_aBx_b_inner", A_mat=A_mat, a_vec=a_vec, B_mat=A_mat, b_vec=a_vec
+            "(Ax+a)'(Bx+b)", A_mat=A_mat, a_vec=a_vec, B_mat=A_mat, b_vec=a_vec
         )
         omega_dagger = jnp.sqrt(Eh2)
         omega_dagger[omega_dagger < 1e-10] = 1e-10
