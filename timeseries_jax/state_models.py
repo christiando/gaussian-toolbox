@@ -472,13 +472,11 @@ class LSEMStateModel(LinearStateModel):
             
             The feature function is 
             
-            f(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
+            phi(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
             
             The kernel and linear activation function are given by
             
-            k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
-            
-            Hence, the 
+            k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}. 
             
         :param Dz: int
             Dimensionality of latent space.

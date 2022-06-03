@@ -486,6 +486,31 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
     def __init__(
         self, Dx: int, Dz: int, Dk: int, noise_x: float = 1.0, lr: float = 1e-3,
     ):
+        """
+        This implements a linear+squared exponential mean (LSEM) observation model
+        
+            x_t = C phi(z_{t}) + d + xi_t     with      xi_t ~ N(0,Qx).
+            
+            The feature function is 
+            
+            phi(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
+            
+            The kernel and linear activation function are given by
+            
+            k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
+            
+
+        :param Dx: Dimensions of observations.
+        :type Dx: int
+        :param Dz: Dimensions of latent space.
+        :type Dz: int
+        :param Dk: Number of kernels.
+        :type Dk: int
+        :param noise_x: Initial observation noise, defaults to 1.0
+        :type noise_x: float, optional
+        :param lr: Learnig rate for learning W, defaults to 1e-3
+        :type lr: float, optional
+        """
         self.Dx, self.Dz, self.Dk = Dx, Dz, Dk
         self.Dphi = self.Dk + self.Dz
         self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
@@ -513,6 +538,13 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
     def update_hyperparameters(
         self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
     ):
+        """Update the hyperparameters C,d,Qx,W.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param X: Observations.
+        :type X: jnp.ndarray
+        """
         phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
         self.update_Qx(phi, X)
         self.update_Cd(phi, X)
@@ -521,6 +553,8 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         self.update_emission_density()
 
     def update_emission_density(self):
+        """Create new emission density with current parameters.
+        """
         self.emission_density = conditionals.LSEMGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
@@ -532,9 +566,16 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
             self.emission_density.ln_det_Sigma[0],
         )
 
-    def update_Qx(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.array
-    ) -> jnp.ndarray:
+    def update_Qx(self, smoothing_density: densities.GaussianDensity, X: jnp.array):
+        """Update observation covariance matrix Qx.
+        
+        Qx* = E[(X-C phi(z) - d)(X-C phi(z) - d)']
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param X: Observations.
+        :type X: jnp.ndarray
+        """
         T = X.shape[0]
         mu_x, Sigma_x = self.emission_density.get_expected_moments(smoothing_density)
         sum_mu_x2 = jnp.sum(
@@ -550,6 +591,16 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         ) / T
 
     def update_Cd(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+        """Update observation observation matrix C and vector d.
+        
+        C* = E[(X - d)phi(z)']E[phi(z)phi(z)']^{-1}
+        d* = E[(X - C phi(x))]
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param X: Observations.
+        :type X: jnp.ndarray
+        """
         #### E[f(x)] ####
         # E[x] [R, Dx]
         T = X.shape[0]
@@ -585,6 +636,15 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         self.d = jnp.mean(X, axis=0) - jnp.dot(self.C, jnp.mean(Ef, axis=0))
 
     def update_W(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+        """Updates the kernel weights.
+        
+        Using gradient descent on the (negative) Q-function.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param X: Observations.
+        :type X: jnp.ndarray
+        """
         opt = objax.optimizer.SGD(self.vars())
         T = X.shape[0]
 
