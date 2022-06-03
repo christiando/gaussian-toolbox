@@ -194,6 +194,18 @@ class LinearStateModel(StateModel):
 
         return cur_smoothing_density, cur_two_step_smoothing_density
 
+    def compute_Q_function(
+        self,
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
+        **kwargs
+    ) -> float:
+        return jnp.sum(
+            self.state_density.integrate_log_conditional(
+                two_step_smoothing_density, p_x=smoothing_density
+            )
+        )
+
     def update_hyperparameters(
         self,
         smoothing_density: densities.GaussianDensity,

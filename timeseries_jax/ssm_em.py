@@ -90,6 +90,7 @@ class StateSpaceEM(objax.Module):
         self.timeit = timeit
         self.iteration = 0
         self.llk_list = []
+        self.Q_list = []
         # Setup densities
         self.prediction_density = self._setup_density(T=self.T + 1)
         self.filter_density = self._setup_density(T=self.T + 1)
@@ -177,6 +178,17 @@ class StateSpaceEM(objax.Module):
         self.om.update_hyperparameters(
             self.smoothing_density, self.X, u_x=self.u_x, iteration=self.iteration
         )
+
+    def compute_Q_function(self) -> float:
+        p0 = self.filter_density.slice(jnp.array([0]))
+        p0_smoothing = self.smoothing_density.slice(jnp.array([0]))
+        init_Q = p0_smoothing.integrate("log_factor", factor=p0).squeeze()
+        sm_Q = self.sm.compute_Q_function(
+            self.smoothing_density, self.twostep_smoothing_density
+        )
+        om_Q = self.om.compute_Q_function(self.smoothing_density, self.X)
+        total_Q = init_Q + sm_Q + om_Q
+        return total_Q
 
     def forward_step(self, carry, vars_t):
         X_t, uz_t, ux_t = vars_t
@@ -305,10 +317,10 @@ class StateSpaceEM(objax.Module):
         )
         self.smoothing_density.update(t_range, new_smooth_density)
         self.twostep_smoothing_density = densities.GaussianDensity(
-            Sigma=Sigma_two_step_smooth,
-            mu=mu_two_step_smooth,
-            Lambda=Lambda_two_step_smooth,
-            ln_det_Sigma=ln_det_Sigma_two_step_smooth,
+            Sigma=Sigma_two_step_smooth[::-1],
+            mu=mu_two_step_smooth[::-1],
+            Lambda=Lambda_two_step_smooth[::-1],
+            ln_det_Sigma=ln_det_Sigma_two_step_smooth[::-1],
         )
 
     def compute_log_likelihood(self) -> float:
@@ -356,9 +368,13 @@ class StateSpaceEM(objax.Module):
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
         init = (p0.Sigma[:1], p0.mu[:1], p0.Lambda[:1], p0.ln_det_Sigma[:1])
-        t_range = jnp.arange(1, T + 1)
-        forward_step = jit(lambda cf, t: self.forward_step(cf, t, self.X))
-        _, result = lax.scan(forward_step, init, t_range)
+        if u_x is None:
+            u_x = jnp.empty((T, 0))
+
+        if u_z is None:
+            u_z = jnp.empty((T, 0))
+        forward_step = jit(lambda cf, vars_t: self.forward_step(cf, vars_t))
+        _, result = lax.scan(forward_step, init, (X, u_z[:, None], u_x[:, None]))
         (
             Sigma_prediction,
             mu_prediction,
@@ -433,6 +449,11 @@ class StateSpaceEM(objax.Module):
             Data log likelihood.
         """
         T = X.shape[0]
+        if u_x is None:
+            u_x = jnp.empty((T, 0))
+
+        if u_z is None:
+            u_z = jnp.empty((T, 0))
         if p0 is None:
             # p0 = self.filter_density.slice([0])
             p0 = densities.GaussianDensity(
@@ -448,9 +469,7 @@ class StateSpaceEM(objax.Module):
             filter_density.ln_det_Sigma[:1],
         )
         gappy_forward_step = jit(lambda cf, vars_t: self.gappy_forward_step(cf, vars_t))
-        _, result = lax.scan(
-            gappy_forward_step, init, (self.X, self.u_z[:, None], self.u_x[:, None])
-        )
+        _, result = lax.scan(gappy_forward_step, init, (X, u_z[:, None], u_x[:, None]))
 
         (
             Sigma_prediction,

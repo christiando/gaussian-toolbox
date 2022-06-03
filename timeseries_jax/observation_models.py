@@ -355,6 +355,12 @@ class LinearObservationModel(ObservationModel):
             p_ux = p_ux_given_ox.condition_on_x(x_t[:, observed_dims])
             return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))[0]
 
+    def compute_Q_function(
+        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+    ) -> float:
+        phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
+        return jnp.sum(self.emission_density.integrate_log_conditional_y(phi)(X))
+
     def update_hyperparameters(
         self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
     ):
@@ -587,6 +593,32 @@ class HCCovObservationModel(LinearObservationModel):
             U=self.U,
             W=self.W,
             beta=self.beta,
+        )
+
+    def compute_Q_function(
+        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray,
+    ):
+        T = X.shape[0]
+        phi_dict = smoothing_density.slice(jnp.arange(1, smoothing_density.R)).to_dict()
+        params = conditionals.HCCovGaussianConditional.params_to_vector(
+            self.C, self.d, self.sigma_x, self.beta, self.W
+        )
+        omega_dagger, omega_star, not_converged = self.get_omegas(
+            phi_dict, X, self.W, self.U, self.beta, self.C, self.d, self.sigma_x
+        )
+        Q_val = (
+            conditionals.HCCovGaussianConditional.Qfunc(
+                params,
+                phi_dict,
+                X,
+                self.U,
+                omega_dagger,
+                omega_star,
+                self.Dx,
+                self.Dz,
+                self.Du,
+            )
+            * T
         )
 
     def update_hyperparameters(
