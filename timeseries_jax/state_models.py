@@ -202,7 +202,8 @@ class LinearStateModel(StateModel):
     ) -> float:
         return jnp.sum(
             self.state_density.integrate_log_conditional(
-                two_step_smoothing_density, p_x=smoothing_density
+                two_step_smoothing_density,
+                p_x=smoothing_density.slice(jnp.arange(1, smoothing_density.R)),
             )
         )
 
