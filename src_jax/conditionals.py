@@ -880,8 +880,9 @@ class LSEMGaussianConditional(ConditionalGaussianDensity):
         mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
         mu_xy = jnp.concatenate([mu_x, mu_y], axis=1)
+        
         Sigma_xy = jnp.block(
-            [[p_x.Sigma, cov_yx], [jnp.swapaxes(cov_yx, axis1=1, axis2=2), Sigma_y]]
+            [[p_x.Sigma, jnp.swapaxes(cov_yx, axis1=1, axis2=2)], [cov_yx, Sigma_y]]
         )
         # Sigma_xy = jnp.empty((p_x.R, self.Dy + self.Dx, self.Dy + self.Dx))
         # Sigma_xy[:,:self.Dx,:self.Dx] = p_x.Sigma
