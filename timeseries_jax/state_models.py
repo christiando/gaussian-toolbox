@@ -21,6 +21,7 @@ sys.path.append("../")
 from jax import numpy as jnp
 import numpy as np
 import objax
+from typing import Tuple
 from utils.jax_minimize_wrapper import minimize as minimize_jax
 
 # from src_jax
@@ -45,15 +46,15 @@ class StateModel(objax.Module):
     def prediction(
         self, pre_filter_density: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Here the prediction density is calculated.
+        """Calculate prediction density.
         
-        p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1
-        
-        :param pre_filter_density: GaussianDensity
-            Density p(z_t-1|x_{1:t-1})
-            
-        :return: GaussianDensity
-            Prediction density p(z_t|x_{1:t-1}).
+        p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1.
+
+        :param pre_filter_density: Density p(z_t-1|x_{1:t-1}).
+        :type pre_filter_density: densities.GaussianDensity
+        :raises NotImplementedError: Must be implemented.
+        :return: Prediction density p(z_t|x_{1:t-1}).
+        :rtype: densities.GaussianDensity
         """
         raise NotImplementedError("Prediction for state model not implemented.")
 
@@ -62,17 +63,17 @@ class StateModel(objax.Module):
         cur_filter_density: densities.GaussianDensity,
         post_smoothing_density: densities.GaussianDensity,
         **kwargs
-    ) -> densities.GaussianDensity:
-        """ Here we do the smoothing step to acquire p(z_{t} | x_{1:T}), 
+    ) -> Tuple[densities.GaussianDensity, densities.GaussianDensity]:
+        """Calculate smoothing density p(z_{t} | x_{1:T}), 
         given p(z_{t+1} | x_{1:T}) and p(z_{t} | x_{1:t}).
         
-        :param cur_filter_density: GaussianDensity
-            Density p(z_t|x_{1:t})
-        :param post_smoothing_density: GaussianDensity
-            Density p(z_{t+1}|x_{1:T})
-            
-        :return: [GaussianDensity, GaussianDensity]
-            Smoothing density p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T})
+        :param cur_filter_density: Density p(z_t|x_{1:t})
+        :type cur_filter_density: densities.GaussianDensity
+        :param post_smoothing_density: Density p(z_{t+1}|x_{1:T})
+        :type post_smoothing_density: densities.GaussianDensity
+        :raises NotImplementedError: Must be implemented.
+        :return: Smoothing density p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T})
+        :rtype: Tuple[densities.GaussianDensity, densities.GaussianDensity]
         """
         raise NotImplementedError("Smoothing for state model not implemented.")
 
@@ -82,27 +83,28 @@ class StateModel(objax.Module):
         two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ):
-        """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
+        """The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
-        
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
+        :raises NotImplementedError: Must be implemented.
         """
         raise NotImplementedError("Hyperparamers for state model not implemented.")
 
     def update_init_density(
         self, init_smooth_density: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Finds the optimal distribution over the initial state z_0, 
+        """Find the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
-        
-        :param init_smooth_density: GaussianDensity
-            Smoothing density over z_0.
-        
-        :return: GaussianDensity
-            The optimal initial distribution.
+
+        :param init_smooth_density: Smoothing density over z_0.
+        :type init_smooth_density: densities.GaussianDensity
+        :raises NotImplementedError: Must be implemented.
+        :return: The optimal initial distribution.
+        :rtype: densities.GaussianDensity
         """
         raise NotImplementedError(
             "Initial distribution update for state model not implemented."
@@ -111,14 +113,14 @@ class StateModel(objax.Module):
 
 class LinearStateModel(StateModel):
     def __init__(self, Dz: int, noise_z: float = 1.0):
-        """ This implements a linear state transition model
+        """This implements a linear state transition model
         
-            z_t = A z_{t-1} + b + zeta_t     with      zeta_t ~ N(0,Qz).
-            
-        :param Dz: int
-            Dimensionality of latent space.
-        :param noise_z: float
-            Intial isoptropic std. on the state transition.
+        z_t = A z_{t-1} + b + zeta_t     with      zeta_t ~ N(0,Qz).
+
+        :param Dz: Dimensionality of latent space.
+        :type Dz: int
+        :param noise_z: Intial isoptropic std. on the state transition, defaults to 1.0
+        :type noise_z: float, optional
         """
         self.Dz = Dz
         self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
@@ -134,15 +136,14 @@ class LinearStateModel(StateModel):
     def prediction(
         self, pre_filter_density: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Here the prediction density is calculated.
+        """Calculate the prediction density.
         
         p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1
-        
-        :param pre_filter_density: GaussianDensity
-            Density p(z_t-1|x_{1:t-1})
-            
-        :return: GaussianDensity
-            Prediction density p(z_t|x_{1:t-1}).
+
+        :param pre_filter_density: Density p(z_t-1|x_{1:t-1})
+        :type pre_filter_density: densities.GaussianDensity
+        :return: Prediction density p(z_t|x_{1:t-1}).
+        :rtype: densities.GaussianDensity
         """
         # p(z_t|x_{1:t-1})
         return self.state_density.affine_marginal_transformation(
@@ -154,8 +155,8 @@ class LinearStateModel(StateModel):
         cur_filter_density: densities.GaussianDensity,
         post_smoothing_density: densities.GaussianDensity,
         **kwargs
-    ) -> densities.GaussianDensity:
-        """ Here we do the smoothing step.
+    ) -> Tuple[densities.GaussianDensity, densities.GaussianDensity]:
+        """ Perform smoothing step.
         
         First we calculate the backward density
         
@@ -168,14 +169,13 @@ class LinearStateModel(StateModel):
         $$
         p(z_{t} | x_{1:T}) = int p(z_{t} | z_{t+1}, x_{1:t}) p(z_{t+1}|x_{1:T}) dz_{t+1}
         $$
-        
-        :param cur_filter_density: GaussianDensity
-            Density p(z_t|x_{1:t})
-        :param post_smoothing_density: GaussianDensity
-            Density p(z_{t+1}|x_{1:T})
-            
-        :return: [GaussianDensity, GaussianDensity]
-            Smoothing density p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T})
+
+        :param cur_filter_density: Density p(z_t|x_{1:t})
+        :type cur_filter_density: densities.GaussianDensity
+        :param post_smoothing_density: Density p(z_{t+1}|x_{1:T})
+        :type post_smoothing_density: densities.GaussianDensity
+        :return: Smoothing density p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T})
+        :rtype: Tuple[densities.GaussianDensity, densities.GaussianDensity]
         """
         # p(z_{t} | z_{t+1}, x_{1:t})
         backward_density = self.state_density.affine_conditional_transformation(
@@ -198,6 +198,19 @@ class LinearStateModel(StateModel):
         two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ) -> float:
+        """Compute Q-function.
+        
+        Q = \sum E[log p(z_t|z_{t-1})], 
+        
+        where the expection is over the smoothing density.
+        
+        :param smoothing_density: Smoothing density p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
+        :return: Evaluated Q-function.
+        :rtype: float
+        """
         return jnp.sum(
             self.state_density.integrate_log_conditional(
                 two_step_smoothing_density,
@@ -211,13 +224,14 @@ class LinearStateModel(StateModel):
         two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ):
-        """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
-        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
+        """Update hyperparameters. 
         
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        The densities p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T}) need to be provided (the latter for the cross-terms.)
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
         """
         self.update_A(smoothing_density, two_step_smoothing_density, **kwargs)
         self.update_b(smoothing_density, **kwargs)
@@ -230,13 +244,12 @@ class LinearStateModel(StateModel):
         two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ):
-        """ The transition matrix is updated here, where the the densities
-        p(z_{t+1}, z_t|x_{1:T}) is provided.
-        
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        """ Update transition matrix.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
         """
         # Ezz = smoothing_density.integrate("xx'")
         mu_b = smoothing_density.mu[:-1, None] * self.b[None, :, None]
@@ -247,10 +260,10 @@ class LinearStateModel(StateModel):
         self.A = jnp.linalg.solve(A, jnp.mean(Ezz_cross - mu_b, axis=0)).T
 
     def update_b(self, smoothing_density: densities.GaussianDensity, **kwargs):
-        """ The transition offset is updated here, where the the densities p(z_t|x_{1:T}) is provided.
-        
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
+        """Update transition offset.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
         """
         self.b = jnp.mean(
             smoothing_density.mu[1:] - jnp.dot(self.A, smoothing_density.mu[:-1].T).T,
@@ -263,13 +276,12 @@ class LinearStateModel(StateModel):
         two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ):
-        """ The transition covariance is updated here, where the the densities p(z_t|x_{1:T}) and 
-        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
-        
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        """Update transition covariance.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
         """
         A_tilde = jnp.eye(2 * self.Dz, self.Dz)
         A_tilde = A_tilde.at[self.Dz :].set(-self.A.T)
@@ -287,7 +299,7 @@ class LinearStateModel(StateModel):
         )
 
     def update_state_density(self):
-        """ Updates the state density.
+        """ Update the state density.
         """
         self.state_density = conditionals.ConditionalGaussianDensity(
             jnp.array([self.A]), jnp.array([self.b]), jnp.array([self.Qz])
@@ -300,14 +312,13 @@ class LinearStateModel(StateModel):
     def update_init_density(
         self, init_smooth_density: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Finds the optimal distribution over the initial state z_0, 
+        """Find the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
-        
-        :param init_smooth_density: GaussianDensity
-            Smoothing density over z_0.
-        
-        :return: GaussianDensity
-            The optimal initial distribution.
+
+        :param init_smooth_density: Smoothing density over z_0.
+        :type init_smooth_density: densities.GaussianDensity
+        :return: The optimal initial distribution.
+        :rtype: densities.GaussianDensity
         """
         mu0 = init_smooth_density.integrate("x")
         Sigma0 = init_smooth_density.integrate(
@@ -377,13 +388,16 @@ class NNControlStateModel(LinearStateModel):
         u: jnp.ndarray,
         **kwargs
     ):
-        """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
-        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
+        """Update hyperparameters. 
         
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        The densities p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T}) need to be provided (the latter for the cross-terms.)
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
+        :param u: Control variables. Dimensions should be [T, Du]
+        :type u: jnp.ndarray
         """
         self.update_network_params(
             smoothing_density, two_step_smoothing_density, u, **kwargs
@@ -392,7 +406,7 @@ class NNControlStateModel(LinearStateModel):
         self.update_state_density()
 
     def update_state_density(self):
-        """ Updates the state density.
+        """ Update the state density.
         """
         self.state_density.update_Sigma(jnp.array([self.Qz]))
 
@@ -403,13 +417,14 @@ class NNControlStateModel(LinearStateModel):
         u: jnp.ndarray,
         **kwargs
     ):
-        """ The transition covariance is updated here, where the the densities p(z_t|x_{1:T}) and 
-        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
+        """ Update the transition covariance.
         
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
+        :param u: Control variables. Dimensions should be [T, Du]
+        :type u: jnp.ndarray
         """
         A_u, b_u = self.state_density.get_M_b(u)
         A_tilde = jnp.empty((two_step_smoothing_density.R, self.Dz, 2 * self.Dz))
@@ -434,6 +449,15 @@ class NNControlStateModel(LinearStateModel):
         u: jnp.ndarray,
         **kwargs
     ):
+        """Update the network parameters by gradient descent.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
+        :param u: Control variables. Dimensions should be [T, Du]
+        :type u: jnp.ndarray
+        """
         gv = objax.GradValues(self.calc_neg_Q_function, self.vars())
         opt = objax.optimizer.Adam(self.vars())
 
@@ -454,7 +478,18 @@ class NNControlStateModel(LinearStateModel):
         two_step_smoothing_density: densities.GaussianDensity,
         u: jnp.ndarray,
         **kwargs
-    ):
+    ) -> float:
+        """Calculate negative Q-function,
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
+        :param u: Control variables. Dimensions should be [T, Du]
+        :type u: jnp.ndarray
+        :return: Negative Q-function
+        :rtype: float
+        """
         T = two_step_smoothing_density.R
         A_u, b_u = self.state_density.get_M_b(u)
         A_tilde = jnp.empty((two_step_smoothing_density.R, self.Dz, 2 * self.Dz))
@@ -483,7 +518,7 @@ class NNControlStateModel(LinearStateModel):
 
 class LSEMStateModel(LinearStateModel):
     def __init__(self, Dz: int, Dk: int, noise_z: float = 1.0):
-        """ This implements a linear+squared exponential mean (LSEM) state model
+        """This implements a linear+squared exponential mean (LSEM) state model
         
             z_t = A phi(z_{t-1}) + b + zeta_t     with      zeta_t ~ N(0,Qz).
             
@@ -495,12 +530,12 @@ class LSEMStateModel(LinearStateModel):
             
             k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}. 
             
-        :param Dz: int
-            Dimensionality of latent space.
-        :param Dk: int
-            Number of kernels to use.
-        :param noise_z: float
-            Intial isoptropic std. on the state transition.
+        :param Dz: Dimensionality of latent space.
+        :type Dz: int
+        :param Dk: Number of kernels to use.
+        :type Dk: int
+        :param noise_z: Initial isoptropic std. on the state transition., defaults to 1.0
+        :type noise_z: float, optional
         """
         self.Dz, self.Dk = Dz, Dk
         self.Dphi = self.Dk + self.Dz
@@ -526,13 +561,14 @@ class LSEMStateModel(LinearStateModel):
         two_step_smoothing_density: densities.GaussianDensity,
         **kwargs
     ):
-        """ The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
-        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms).
+        """Update hyperparameters. 
         
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        The densities p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T}) need to be provided (the latter for the cross-terms.)
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
         """
         # self.Qz = jit(self.update_Qz, static_argnums=(0,1))(smoothing_density, two_step_smoothing_density)
         # self.update_state_density()
@@ -557,13 +593,12 @@ class LSEMStateModel(LinearStateModel):
         smoothing_density: densities.GaussianDensity,
         two_step_smoothing_density: densities.GaussianDensity,
     ):
-        """ The transition matrix is updated here, where the the densities
-        p(z_{t+1}, z_t|x_{1:T}) is provided.
+        """Update transition matrix, offset and covariance are updated here.
 
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
         """
         T = smoothing_density.R - 1
         phi = smoothing_density.slice(jnp.arange(T))
@@ -647,171 +682,19 @@ class LSEMStateModel(LinearStateModel):
         # b = self.b
         return A, b, Qz
 
-    def update_A(
-        self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
-    ):
-        """ The transition matrix is updated here, where the the densities
-        p(z_{t+1}, z_t|x_{1:T}) is provided.
-        
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        """
-        T = two_step_smoothing_density.R
-        phi = smoothing_density.slice(jnp.arange(T))
-
-        # E[f(z)f(z)']
-        phi_k = phi.multiply(self.state_density.k_func, update_full=True)
-        Ekk = (
-            phi_k.multiply(self.state_density.k_func, update_full=True)
-            .integral_light()
-            .reshape((T, self.Dk, self.Dk))
-        )
-        Ekz = phi_k.integrate("x").reshape((T, self.Dk, self.Dz))
-        mean_Ekz = jnp.mean(Ekz, axis=0)
-        mean_Ezz = jnp.mean(phi.integrate("xx'"), axis=0)
-        mean_Ekk = jnp.mean(Ekk, axis=0) + 0.0001 * jnp.eye(self.Dk)
-        Eff = jnp.block([[mean_Ezz, mean_Ekz.T], [mean_Ekz, mean_Ekk]])
-        # Eff = jnp.empty((self.Dphi, self.Dphi))
-        # Eff[:self.Dz,:self.Dz] = jnp.mean(phi.integrate("xx'"), axis=0)
-        # Eff[self.Dz:,self.Dz:] = jnp.mean(Ekk, axis=0)
-        # Eff[self.Dz:,:self.Dz] = jnp.mean(Ekz, axis=0)
-        # Eff[:self.Dz,self.Dz:] = Eff[self.Dz:,:self.Dz].T
-        # E[f(z)] b'
-        Ez = jnp.mean(phi.integrate("x"), axis=0)
-        Ek = jnp.mean(phi_k.integral_light().reshape((T, self.Dk)), axis=0)
-        Ef = jnp.concatenate([Ez, Ek])
-        Ebf = Ef[None] * self.b[:, None]
-        # E[z f(z)']
-        # v_joint = jnp.block([jnp.zeros([self.Dk, int(self.Dz)]),
-        #                      self.state_density.k_func.v])
-        # nu_joint = jnp.block([jnp.zeros([self.Dk, int(self.Dz)]),
-        #                       self.state_density.k_func.nu])
-        zero_arr = jnp.zeros([self.Dk, 2 * self.Dz])
-        v_joint = zero_arr.at[:, self.Dz :].set(self.state_density.k_func.v)
-        nu_joint = zero_arr.at[:, self.Dz :].set(self.state_density.k_func.nu)
-        joint_k_func = factors.OneRankFactor(
-            v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta
-        )
-        Ezz_cross = jnp.mean(
-            two_step_smoothing_density.integrate("xx'")[:, self.Dz :, : self.Dz], axis=0
-        )
-        Ezk = jnp.mean(
-            two_step_smoothing_density.multiply(joint_k_func, update_full=True)
-            .integrate("x")
-            .reshape((T, self.Dk, (2 * self.Dz)))[:, :, : self.Dz],
-            axis=0,
-        ).T
-        Ezf = jnp.concatenate([Ezz_cross.T, Ezk], axis=1)
-        return jnp.linalg.solve(Eff / T, (Ezf - Ebf).T / T).T
-
-    def update_b(self, smoothing_density: densities.GaussianDensity):
-        """ The transition offset is updated here, where the the densities p(z_t|x_{1:T}) is provided.
-        
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        """
-        T = smoothing_density.R - 1
-        Ez = smoothing_density.integrate("x")
-        Ek = (
-            smoothing_density.multiply(self.state_density.k_func, update_full=True)
-            .integral_light()
-            .reshape((T + 1, self.Dk))
-        )
-        Ef = jnp.concatenate([Ez, Ek], axis=1)
-        return jnp.mean(smoothing_density.mu[1:] - jnp.dot(self.A, Ef[:-1].T).T, axis=0)
-
-    def update_Qz(
-        self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
-    ):
-        """ The transition covariance is updated here, where the the densities p(z_t|x_{1:T}) and 
-        p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
-        
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        """
-        T = smoothing_density.R - 1
-        A_tilde = jnp.block([[jnp.eye(self.Dz, self.Dz)], [-self.A[:, : self.Dz].T]])
-        b_tilde = -self.b
-        Qz_lin = jnp.mean(
-            two_step_smoothing_density.integrate(
-                "(Ax+a)(Bx+b)'",
-                A_mat=A_tilde.T,
-                a_vec=b_tilde,
-                B_mat=A_tilde.T,
-                b_vec=b_tilde,
-            ),
-            axis=0,
-        )
-        # v_joint = jnp.block([jnp.zeros([self.Dk, int(self.Dz)]),
-        #                      self.state_density.k_func.v])
-        # nu_joint = jnp.block([jnp.zeros([self.Dk, int(self.Dz)]),
-        #                       self.state_density.k_func.nu])
-        zero_arr = jnp.zeros([self.Dk, 2 * self.Dz])
-        v_joint = zero_arr.at[:, self.Dz :].set(self.state_density.k_func.v)
-        nu_joint = zero_arr.at[:, self.Dz :].set(self.state_density.k_func.nu)
-        joint_k_func = factors.OneRankFactor(
-            v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta
-        )
-        two_step_k_measure = two_step_smoothing_density.multiply(
-            joint_k_func, update_full=True
-        )
-        Ekz = jnp.mean(
-            two_step_k_measure.integrate("x").reshape((T, self.Dk, 2 * self.Dz)), axis=0
-        )
-        phi_k = smoothing_density.multiply(self.state_density.k_func, update_full=True)
-        Ek = jnp.mean(phi_k.integral_light().reshape((T + 1, self.Dk))[:-1], axis=0)
-        Qz_k_lin_err = jnp.dot(
-            self.A[:, self.Dz :],
-            (
-                Ekz[:, : self.Dz]
-                - jnp.dot(self.A[:, : self.Dz], Ekz[:, self.Dz :].T).T
-                - Ek[:, None] * self.b[None]
-            ),
-        )
-        Ekk = (
-            phi_k.multiply(self.state_density.k_func, update_full=True)
-            .integral_light()
-            .reshape((T + 1, self.Dk, self.Dk))
-        )
-        Qz_kk = jnp.dot(
-            jnp.dot(self.A[:, self.Dz :], jnp.mean(Ekk[:-1], axis=0)),
-            self.A[:, self.Dz :].T,
-        )
-        return Qz_lin + Qz_kk - Qz_k_lin_err - Qz_k_lin_err.T
-
     @staticmethod
     def _Wfunc(
-        W,
+        W: jnp.ndarray,
         smoothing_density: densities.GaussianDensity,
         two_step_smoothing_density: densities.GaussianDensity,
-        A,
-        b,
-        Qz,
-        Qz_inv,
-        ln_det_Qz,
-        Dk,
-        Dz,
+        A: jnp.ndarray,
+        b: jnp.ndarray,
+        Qz: jnp.ndarray,
+        Qz_inv: jnp.ndarray,
+        ln_det_Qz: jnp.ndarray,
+        Dk: int,
+        Dz: int,
     ) -> Union[float, jnp.ndarray]:
-        """ Computes the parts of the (negative) Q-fub
-
-        :param W: jnp.ndarray [Dk, Dz + 1]
-            The weights in the squared exponential of conditional mean function.
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-
-        :return: float
-            Terms of negative Q-function depending on W.
-        """
         # W = jnp.reshape(W, (Dk, Dz + 1))
         # print(W.shape)
         state_density = approximate_conditionals.LSEMGaussianConditional(
@@ -872,12 +755,12 @@ class LSEMStateModel(LinearStateModel):
         smoothing_density: densities.GaussianDensity,
         two_step_smoothing_density: densities.GaussianDensity,
     ):
-        """ Updates the weights in the squared exponential of the state conditional mean.
+        """Update the weights in the squared exponential of the state conditional mean by gradient descent.
 
-        :param smoothing_density: GaussianDensity
-            The smoothing density  p(z_t|x_{1:T}).
-        :param two_step_smoothing_density: Gaussian Density
-            The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
         """
         #  This compiling takes a lot of time, and is only worth it for several iterations
         phi = smoothing_density.slice(jnp.arange(0, smoothing_density.R - 1))
@@ -903,7 +786,7 @@ class LSEMStateModel(LinearStateModel):
         self.W = result.x
 
     def update_state_density(self):
-        """ Updates the state density.
+        """ Update the state density.
         """
         self.state_density = approximate_conditionals.LSEMGaussianConditional(
             M=jnp.array([self.A]),
