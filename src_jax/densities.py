@@ -60,7 +60,7 @@ class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
             samples[comp_idx] = self.components[icomp].sample(len(comp_idx))
         return samples
 
-    def slice(self, indices: list) -> "GaussianMixtureDensity":
+    def slice(self, indices: jnp.ndarray) -> "GaussianMixtureDensity":
         """ Returns an object with only the specified entries.
         
         :param indices: list
@@ -85,16 +85,16 @@ class GaussianDensity(measures.GaussianMeasure):
         Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
     ):
-        """ A normalized Gaussian density, with specified mean and covariance matrix.
-        
-        :param Sigma: jnp.ndarray [R, D, D]
-            Covariance matrices of the Gaussian densities.
-        :param mu: jnp.ndarray [R, D]
-            Mean of the Gaussians.
-        :param Lambda: jnp.ndarray [R, D, D] or None
-            Information (precision) matrix of the Gaussians. (Default=None)
-        :param ln_det_Sigma: jnp.ndarray [R] or None
-            Log determinant of the covariance matrix. (Default=None)
+        """A normalized Gaussian density, with specified mean and covariance matrix.
+
+        :param Sigma: Covariance matrices of the Gaussian densities. Dimensions should be [R, D, D].
+        :type Sigma: jnp.ndarray
+        :param mu: Mean of the Gaussians. Dimensions should be
+        :type mu: jnp.ndarray
+        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, D, D], defaults to None
+        :type Lambda: jnp.ndarray, optional
+        :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
+        :type ln_det_Sigma: jnp.ndarray, optional
         """
         if Lambda is None:
             Lambda, ln_det_Sigma = invert_matrix(Sigma)
@@ -113,27 +113,25 @@ class GaussianDensity(measures.GaussianMeasure):
         return "Gaussian density p(x)"
 
     def sample(self, num_samples: int) -> jnp.ndarray:
-        """ Generates samples from the Gaussian density.
-        
-        :param num_samples: int
-            Number of samples that are generated.
-        
-        :return: jnp.ndarray [num_samples, R, D]
-            The samples.
+        """Sample from the Gaussian density.
+
+        :param num_samples: Number of samples that are generated.
+        :type num_samples: int
+        :return: Samples. Dimensions are [num_samples, R, D].
+        :rtype: jnp.ndarray
         """
         rand_nums = np.random.randn(num_samples, self.R, self.D)
         L = jnp.linalg.cholesky(self.Sigma)
         x_samples = self.mu[None] + jnp.einsum("abc,dac->dab", L, rand_nums)
         return x_samples
 
-    def slice(self, indices: jnp.array) -> "GaussianDensity":
-        """ Returns an object with only the specified entries.
-        
-        :param indices: list
-            The entries that should be contained in the returned object.
-            
-        :return: GaussianDensity
-            The resulting Gaussian density.
+    def slice(self, indices: jnp.ndarray) -> "GaussianDensity":
+        """Return an object with only the specified entries.
+
+        :param indices: The entries that should be contained in the returned object.
+        :type indices: jnp.ndarray
+        :return: The resulting Gaussian density.
+        :rtype: GaussianDensity
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
@@ -146,13 +144,13 @@ class GaussianDensity(measures.GaussianMeasure):
         new_measure = GaussianDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
 
-    def update(self, indices: jnp.array, density: "GaussianDensity"):
-        """ Updates densities at indicated entries.
-        
-        :param indices: list
-            The entries that should be updated.
-        :param density: GaussianDensity
-            New densities.
+    def update(self, indices: jnp.ndarray, density: "GaussianDensity"):
+        """Update densities at indicated entries.
+
+        :param indices: The entries that should be updated.
+        :type indices: jnp.ndarray
+        :param density: New densities.
+        :type density: GaussianDensity
         """
         self.Lambda = self.Lambda.at[indices].set(density.Lambda)
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
@@ -169,14 +167,13 @@ class GaussianDensity(measures.GaussianMeasure):
         # self.nu = lax.dynamic_update_index_in_dim(self.nu, density.nu, indices, 0)
         # self.ln_beta = lax.dynamic_update_index_in_dim(self.ln_beta, density.ln_beta, indices, 0)
 
-    def get_marginal(self, dim_x: list) -> "GaussianDensity":
-        """ Gets the marginal of the indicated dimensions.
-        
-        :param dim_x: list
-            The dimensions of the variables, ther marginal is required for.
-            
-        :return: GaussianDensity
-            The resulting marginal Gaussian density.
+    def get_marginal(self, dim_x: jnp.ndarray) -> "GaussianDensity":
+        """Get the marginal of the indicated dimensions.
+
+        :param dim_x: The dimensions of the variables, the marginal is required for.
+        :type dim_x: jnp.ndarray
+        :return: The resulting marginal Gaussian density.
+        :rtype: GaussianDensity
         """
         idx = jnp.ix_(jnp.arange(self.Sigma.shape[0]), dim_x, dim_x)
         Sigma_new = self.Sigma[idx]
@@ -197,13 +194,13 @@ class GaussianDensity(measures.GaussianMeasure):
         return entropy
 
     def kl_divergence(self, p1: "GaussianDensity") -> jnp.ndarray:
-        """ Computes the Kulback Leibler divergence between two multivariate Gaussians.
+        """ Compute the Kulback Leibler divergence between two multivariate Gaussians.
         
         D_KL(p|p1) = \int p(x)\log p(x)/p1(x) dx
 
-        :param p1: _description_
+        :param p1: The other Gaussian Density.
         :type p1: GaussianDensity
-        :return: _description_
+        :return: Kulback Leibler divergence. Dimensions should be [R].
         :rtype: jnp.ndarray
         """
         assert self.R == p1.R
@@ -224,14 +221,13 @@ class GaussianDensity(measures.GaussianMeasure):
         )
         return kl_div
 
-    def condition_on(self, dim_y: list) -> "ConditionalGaussianDensity":
-        """ Returns density conditioned on indicated dimensions, i.e. p(x|y).
-        
-        :param dim_y: list
-            The dimensions of the variables, that should be conditioned on.
-        
-        :return: ConditionalGaussianDensity
-            The corresponding conditional Gaussian density p(x|y).
+    def condition_on(self, dim_y: jnp.ndarray) -> "ConditionalGaussianDensity":
+        """Return density conditioned on indicated dimensions, i.e. p(x|y).
+
+        :param dim_y: The dimensions of the variables, that should be conditioned on.
+        :type dim_y: jnp.ndarray
+        :return: The corresponding conditional Gaussian density p(x|y).
+        :rtype: ConditionalGaussianDensity
         """
         from src_jax import conditionals
 
@@ -247,15 +243,16 @@ class GaussianDensity(measures.GaussianMeasure):
         )
 
     def condition_on_explicit(
-        self, dim_y: list, dim_x: list
+        self, dim_y: jnp.ndarray, dim_x: jnp.ndarray
     ) -> "ConditionalGaussianDensity":
-        """ Returns density conditioned on indicated dimensions, i.e. p(x|y).
-        
-        :param dim_y: list
-            The dimensions of the variables, that should be conditioned on.
-        
-        :return: ConditionalGaussianDensity
-            The corresponding conditional Gaussian density p(x|y).
+        """Returns density conditioned on indicated dimensions, i.e. p(x|y).
+
+        :param dim_y: The dimensions of the variables, that should be conditioned on.
+        :type dim_y: jnp.ndarray
+        :param dim_x: The dimensions of the variables, that should be still be free.
+        :type dim_x: jnp.ndarray
+        :return: The corresponding conditional Gaussian density p(x|y).
+        :rtype: ConditionalGaussianDensity
         """
         from src_jax import conditionals
 
@@ -285,30 +282,31 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
     ):
-        """ A normalized Gaussian density, with specified mean and covariance matrix.
+        """A normalized Gaussian density, with specified mean and covariance matrix. 
         
-        :param Sigma: jnp.ndarray [R, D, D]
-            Covariance matrices of the Gaussian densities.
-        :param mu: jnp.ndarray [R, D]
-            Mean of the Gaussians.
-        :param Lambda: jnp.ndarray [R, D, D] or None
-            Information (precision) matrix of the Gaussians. (Default=None)
-        :param ln_det_Sigma: jnp.ndarray [R] or None
-            Log determinant of the covariance matrix. (Default=None)
+        Sigma should be diagonal (and hence Lambda).
+
+        :param Sigma: Covariance matrices of the Gaussian densities. Dimensions should be [R, D, D].
+        :type Sigma: jnp.ndarray
+        :param mu: Mean of the Gaussians. Dimensions should be
+        :type mu: jnp.ndarray
+        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, D, D], defaults to None
+        :type Lambda: jnp.ndarray, optional
+        :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
+        :type ln_det_Sigma: jnp.ndarray, optional
         """
         Lambda, ln_det_Sigma = invert_diagonal(Sigma)
         super().__init__(
             Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma,
         )
 
-    def slice(self, indices: list) -> "GaussianDiagDensity":
-        """ Returns an object with only the specified entries.
-        
-        :param indices: list
-            The entries that should be contained in the returned object.
-            
-        :return: GaussianDiagDensity
-            The resulting Gaussian diagonal density.
+    def slice(self, indices: jnp.ndarray) -> "GaussianDiagDensity":
+        """Return an object with only the specified entries.
+
+        :param indices: The entries that should be contained in the returned object.
+        :type indices: jnp.ndarray
+        :return: The resulting Gaussian diagonal density.
+        :rtype: GaussianDiagDensity
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
@@ -319,13 +317,13 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         )
         return new_measure
 
-    def update(self, indices: list, density: "GaussianDiagDensity"):
-        """ Updates densities at indicated entries.
-        
-        :param indices: list
-            The entries that should be updated.
-        :param density: GaussianDiagDensity
-            New densities.
+    def update(self, indices: jnp.ndarray, density: "GaussianDiagDensity"):
+        """Update densities at indicated entries.
+
+        :param indices: The entries that should be updated.
+        :type indices: jnp.ndarray
+        :param density: New densities.
+        :type density: GaussianDiagDensity
         """
         self.Lambda = self.Lambda.at[indices].add(density.Lambda)
         self.Sigma = self.Sigma.at[indices].add(density.Sigma)
@@ -335,14 +333,13 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         self.nu = self.nu.at[indices].add(density.nu)
         self.ln_beta = self.ln_beta.at[indices].add(density.ln_beta)
 
-    def get_marginal(self, dim_idx: list) -> "GaussianDiagDensity":
-        """ Gets the marginal of the indicated dimensions.
-        
-        :param dim_idx: list
-            The dimensions of the variables, ther marginal is required for.
-            
-        :return: GaussianDiagDensity
-            The resulting marginal Gaussian density.
+    def get_marginal(self, dim_idx: jnp.ndarray) -> "GaussianDiagDensity":
+        """Get the marginal of the indicated dimensions.
+
+        :param dim_idx: The dimensions of the variables, ther marginal is required for.
+        :type dim_idx: jnp.ndarray
+        :return: The resulting marginal Gaussian density.
+        :rtype: GaussianDiagDensity
         """
         Sigma_new = self.Sigma[:, dim_idx][:, :, dim_idx]
         mu_new = self.mu[:, dim_idx]
