@@ -49,24 +49,24 @@ class StateSpaceEM(objax.Module):
         u_z: jnp.ndarray = None,
         timeit: bool = False,
     ):
-        """ Class to fit a state space model with the expectation-maximization procedure.
-        
-        :param X: jnp.ndarray [T, Dx]
-            Training data.
-        :param observation_model: ObservationModel
-            The observation model of the data.
-        :param state_model: StateModel
-            The state model for the latent variables.
-        :param max_iter: int
-            Maximal number of EM iteration performed. (Default=100)
-        :param conv_crit: float
-            Convergence criterion for the EM procedure.
-        :param u_x: jnp.ndarray [T,...]
-            Control variables for observation model. (Default=None)
-        :param u_z: jnp.ndarray [T,...]
-            Control variables for state model. (Default=None)
-        :param timeit: bool
-            If true, prints the timings. (Default=False)
+        """Class to fit a state space model with the expectation-maximization procedure.
+
+        :param X: Training data. Dimensions should be [T, Dx].
+        :type X: jnp.ndarray
+        :param observation_model: The observation model of the data.
+        :type observation_model: observation_models.ObservationModel
+        :param state_model: The state model for the latent variables.
+        :type state_model: state_models.StateModel
+        :param max_iter: Maximal number of EM iteration performed_, defaults to 100
+        :type max_iter: int, optional
+        :param conv_crit: Convergence criterion for the EM procedure, defaults to 1e-3
+        :type conv_crit: float, optional
+        :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
+        :type u_x: jnp.ndarray, optional
+        :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
+        :type u_z: jnp.ndarray, optional
+        :param timeit:  If true, prints the timings. , defaults to False
+        :type timeit: bool, optional
         """
         self.X = X
         self.T, self.Dx = self.X.shape
@@ -98,7 +98,7 @@ class StateSpaceEM(objax.Module):
         # self.twostep_smoothing_density = self.twostep_smoothing_density.slice(range(self.T))
 
     def _setup_density(self, D: int = None, T: int = None) -> densities.GaussianDensity:
-        """ Initializes a density object (with uniform densities).
+        """ Initialize a density object (with uniform densities).
         """
         if D is None:
             D = self.Dz
@@ -111,7 +111,7 @@ class StateSpaceEM(objax.Module):
         return densities.GaussianDensity(Sigma, mu, Lambda, ln_det_Sigma)
 
     def run(self):
-        """ Runs the expectation-maximization algorithm, until converged 
+        """ Run the expectation-maximization algorithm, until converged 
             or maximal number of iterations is reached.
         """
         converged = False
@@ -154,13 +154,13 @@ class StateSpaceEM(objax.Module):
             print("EM did converge.")
 
     def estep(self):
-        """ Performs the expectation step, i.e. the forward-backward algorithm.
+        """ Perform the expectation step, i.e. the forward-backward algorithm.
         """
         self.forward_path()
         self.backward_path()
 
     def mstep(self):
-        """ Performs the maximization step, i.e. the updates of model parameters.
+        """ Perform the maximization step, i.e. the updates of model parameters.
         """
         # Update parameters of state model
         self.sm.update_hyperparameters(
@@ -179,6 +179,11 @@ class StateSpaceEM(objax.Module):
         )
 
     def compute_Q_function(self) -> float:
+        """Compute Q-function.
+
+        :return: Eavluated Q-function.
+        :rtype: float
+        """
         p0 = self.filter_density.slice(jnp.array([0]))
         p0_smoothing = self.smoothing_density.slice(jnp.array([0]))
         init_Q = p0_smoothing.integrate("log u(x)", factor=p0).squeeze()
@@ -186,7 +191,7 @@ class StateSpaceEM(objax.Module):
             self.smoothing_density, self.twostep_smoothing_density
         )
         phi = self.smoothing_density.slice(jnp.array(1, self.T))
-        om_Q = self.om.compute_Q_function(phi_density, self.X)
+        om_Q = self.om.compute_Q_function(phi, self.X)
         total_Q = init_Q + sm_Q + om_Q
         return total_Q
 
@@ -219,7 +224,7 @@ class StateSpaceEM(objax.Module):
         return carry, result
 
     def forward_path(self):
-        """ Iterates forward, alternately doing prediction and filtering step.
+        """ Iterate forward, alternately doing prediction and filtering step.
         """
         init = (
             self.filter_density.Sigma[:1],
@@ -286,7 +291,7 @@ class StateSpaceEM(objax.Module):
         return carry, result
 
     def backward_path(self):
-        """ Iterates backward doing smoothing step.
+        """ Iterate backward doing smoothing step.
         """
         last_filter_density = self.filter_density.slice(jnp.array([self.T]))
         cs_init = (
@@ -330,8 +335,8 @@ class StateSpaceEM(objax.Module):
         \ell = \sum_t \ln p(x_t|x_{1:t-1}).
         $$
         
-        :return: float
-            Data log likelihood.
+        :return: Data log likelihood.
+        :rtype: float
         """
         p_z = self.prediction_density.slice(jnp.arange(1, self.T + 1))
         return self.om.evaluate_llk(p_z, self.X, u=self.u_x[:, None])
@@ -343,23 +348,21 @@ class StateSpaceEM(objax.Module):
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
         ignore_init_samples: int = 0,
-    ):
-        """ Computes the likelihood for given data X.
-        
-        :param X: jnp.ndarray [T, Dx]
-            Data for which likelihood is computed.
-        :param p0: GaussianDensity
-            Density for the initial latent state. If None, the initial density 
-            of the training data is taken. (Default=None)
-        :param u_x: jnp.ndarray [T, ...]
-            Control parameters for observation model. (Default=None)
-        :param u_z: jnp.ndarray [T, ...]
-            Control parameters for state model. (Default=None)
-        :param ignore_init_samples: int
-            How many initial samples should be ignored. 
-            
-        :return: float
-            Data log likelihood.
+    ) -> float:
+        """Compute the likelihood for given data X.
+
+        :param X: Data for which likelihood is computed. Dimensions should be [T, Dx].
+        :type X: jnp.ndarray
+        :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
+        :type p0: densities.GaussianDensity, optional
+        :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
+        :type u_x: jnp.ndarray, optional
+        :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
+        :type u_z: jnp.ndarray, optional
+        :param ignore_init_samples: How many initial samples should be ignored in the beginning, defaults to 0
+        :type ignore_init_samples: int, optional
+        :return: Data log likelihood.
+        :rtype: float
         """
         T = X.shape[0]
         if p0 is None:
@@ -432,21 +435,19 @@ class StateSpaceEM(objax.Module):
         p0: densities.GaussianDensity = None,
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
-    ):
-        """ Computes the likelihood for given data X.
-        
-        :param X: jnp.ndarray [T, Dx]
-            Data for which likelihood is computed.
-        :param p0: GaussianDensity
-            Density for the initial latent state. If None, the initial density 
-            of the training data is taken. (Default=None)
-        :param u_x: jnp.ndarray [T, ...]
-            Control parameters for observation model. (Default=None)
-        :param u_z: jnp.ndarray [T, ...]
-            Control parameters for state model. (Default=None)
-            
-        :return: float
-            Data log likelihood.
+    ) -> densities.GaussianDensity:
+        """Compute the likelihood for given data X.
+
+        :param X: Data for which likelihood is computed. Dimensions should be [T, Dx].
+        :type X: jnp.ndarray
+        :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
+        :type p0: densities.GaussianDensity, optional
+        :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
+        :type u_x: jnp.ndarray, optional
+        :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
+        :type u_z: jnp.ndarray, optional
+        :return: Predictive density over data.
+        :rtype: densities.GaussianDensity
         """
         T = X.shape[0]
         if u_x is None:
@@ -500,24 +501,23 @@ class StateSpaceEM(objax.Module):
         smoothed: bool = False,
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
-    ):
-        """ Obtains predictions for data.
+    ) -> Tuple[densities.GaussianDensity, jnp.ndarray, jnp.ndarray]:
+        """Obtain predictions for data.
+
+        Remark: Slow!
         
-        :param X: jnp.ndarray [T, Dx]
-            Data for which predictions are computed. Non observed values are NaN.
-        :param p0: GaussianDensity
-            Density for the initial latent state. If None, the initial density 
-            of the training data is taken. (Default=None)
-        :param smoothed: bool
-            Uses the smoothed density for prediction. (Default=False)
-        :param u_x: jnp.ndarray [T,...]
-            Control variables for observation model. (Default=None)
-        :param u_z: jnp.ndarray [T,...]
-            Control variables for state model. (Default=None)
-        
-        :return: (GaussianDensity, jnp.ndarray [T, Dx], jnp.ndarray [T, Dx])
-            Filter/smoothed density, mean, and standard deviation of predictions. Mean 
-            is equal to the data and std equal to 0 for entries, where data is observed.
+        :param X: Data for which predictions are computed. Non observed values are NaN. Dimensions should be [T, Dx].
+        :type X: jnp.ndarray
+        :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
+        :type p0: densities.GaussianDensity, optional
+        :param smoothed: Use the smoothed density for prediction. , defaults to False
+        :type smoothed: bool, optional
+        :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
+        :type u_x: jnp.ndarray, optional
+        :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
+        :type u_z: jnp.ndarray, optional
+        :return: Density over data, mean and standard deviation.
+        :rtype: Tuple[densities.GaussianDensity, jnp.ndarray, jnp.ndarray]
         """
         T = X.shape[0]
         if p0 is None:
@@ -654,19 +654,21 @@ class StateSpaceEM(objax.Module):
         observed_dims: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
         u_x: jnp.ndarray = None,
-    ) -> Union[densities.GaussianDensity, jnp.array, jnp.array]:
+    ) -> Tuple[densities.GaussianDensity, jnp.array, jnp.array]:
         """Predicts data with fixed condition dimensions. Faster, but more rigid than predict().
         
         TODO: Implement also smoothing.
 
-        :param X: Data array containing the variabels to condition on, and indicating how long we wish to sample.
-        :type X: jnp.ndarray [T, Dx]
-        :param observed_dims: Dimension that are observed. If none no dimension is observed, defaults to None
-        :type observed_dims: jnp.ndarray, optional [num_observed_dimensions]
-        :param p0: Initial state density. If none, standard normal., defaults to None
+        :param X: Data for which predictions are computed. Non observed values are NaN. Dimensions should be [T, Dx].
+        :type X: jnp.ndarray
+        :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
         :type p0: densities.GaussianDensity, optional
-        :return: Filter density of latent vairbale, mean and standard deviation of unobserved data.
-        :rtype: Union[densities.GaussianDensity, jnp.array, jnp.array]
+        :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
+        :type u_x: jnp.ndarray, optional
+        :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
+        :type u_z: jnp.ndarray, optional
+        :return: Density over data, mean and standard deviation.
+        :rtype: Tuple[densities.GaussianDensity, jnp.ndarray, jnp.ndarray]
         """
 
         T = X.shape[0]
@@ -796,10 +798,10 @@ class StateSpaceEM(objax.Module):
         return z_sample, X_sample
 
     def compute_data_density(self) -> densities.GaussianDensity:
-        """ Computes the data density for the training data, given the prediction density.
-        
-        :return: GaussianDensity
-            Data density.
+        """Compute the data density for the training data, given the prediction density.
+
+        :return: Data density
+        :rtype: densities.GaussianDensity
         """
         px = self.om.emission_density.affine_marginal_transformation(
             self.prediction_density.slice(jnp.arange(1, self.T + 1))
@@ -807,12 +809,15 @@ class StateSpaceEM(objax.Module):
         return px
 
     def save(self, model_name: str, path: str = "", overwrite: bool = False):
-        """ Saves the model.
-        
-        :param model_name: str
-            Name of the model, which is used as file name.
-        :param path: str
-            Path to which model is saved to. (Default='')
+        """Save the model.
+
+        :param model_name: Name of the model, which is used as file name.
+        :type model_name: str
+        :param path:  Path to which model is saved to, defaults to ""
+        :type path: str, optional
+        :param overwrite: Overwrite existing file, defaults to False
+        :type overwrite: bool, optional
+        :raises RuntimeError: If file exists and overwrite is False.
         """
         if os.path.isfile(path) and not overwrite:
             raise RuntimeError(
