@@ -20,13 +20,11 @@ from typing import Union
 sys.path.append("../")
 from jax import numpy as jnp
 import numpy as np
-from jax import jit, value_and_grad
 import objax
-from scipy.optimize import minimize as minimize_sc
 from utils.jax_minimize_wrapper import minimize as minimize_jax
 
 # from src_jax
-from src_jax import densities, conditionals, factors
+from src_jax import densities, conditionals, approximate_conditionals, factors
 
 # from jax.scipy.optimize import minimize
 # from jax.experimental import optimizers
@@ -511,7 +509,7 @@ class LSEMStateModel(LinearStateModel):
         self.A = self.A.at[:, : self.Dz].set(jnp.eye(self.Dz))
         self.b = jnp.zeros((self.Dz,))
         self.W = objax.TrainVar(jnp.array(np.random.randn(self.Dk, self.Dz + 1)))
-        self.state_density = conditionals.LSEMGaussianConditional(
+        self.state_density = approximate_conditionals.LSEMGaussianConditional(
             M=jnp.array([self.A]),
             b=jnp.array([self.b]),
             W=self.W,
@@ -816,7 +814,7 @@ class LSEMStateModel(LinearStateModel):
         """
         # W = jnp.reshape(W, (Dk, Dz + 1))
         # print(W.shape)
-        state_density = conditionals.LSEMGaussianConditional(
+        state_density = approximate_conditionals.LSEMGaussianConditional(
             M=jnp.array([A]),
             b=jnp.array([b]),
             W=W,
@@ -907,7 +905,7 @@ class LSEMStateModel(LinearStateModel):
     def update_state_density(self):
         """ Updates the state density.
         """
-        self.state_density = conditionals.LSEMGaussianConditional(
+        self.state_density = approximate_conditionals.LSEMGaussianConditional(
             M=jnp.array([self.A]),
             b=jnp.array([self.b]),
             W=self.W,

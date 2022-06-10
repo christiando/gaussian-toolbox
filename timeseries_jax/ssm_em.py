@@ -815,7 +815,7 @@ class StateSpaceEM(objax.Module):
             Path to which model is saved to. (Default='')
         """
         if os.path.isfile(path) and not overwrite:
-            raise RuntimeException(
+            raise RuntimeError(
                 "File already exists. Pick another name or indicate overwrite."
             )
         else:

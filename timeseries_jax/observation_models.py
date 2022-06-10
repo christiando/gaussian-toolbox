@@ -30,7 +30,7 @@ from jax import jit, value_and_grad, vmap
 import objax
 from functools import partial
 
-from src_jax import densities, conditionals, factors
+from src_jax import densities, conditionals, approximate_conditionals, factors
 
 # from pathos.multiprocessing import ProcessingPool as Pool
 
@@ -523,7 +523,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
             )
         self.d = jnp.zeros((self.Dx,))
         self.W = objax.TrainVar(jnp.array(np.random.randn(self.Dk, self.Dz + 1)))
-        self.emission_density = conditionals.LSEMGaussianConditional(
+        self.emission_density = approximate_conditionals.LSEMGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             W=self.W,
@@ -555,7 +555,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
     def update_emission_density(self):
         """Create new emission density with current parameters.
         """
-        self.emission_density = conditionals.LSEMGaussianConditional(
+        self.emission_density = approximate_conditionals.LSEMGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             W=self.W,
@@ -703,7 +703,7 @@ class HCCovObservationModel(LinearObservationModel):
         self.W = jnp.array(W)
         self.beta = noise_x ** 2 * jnp.ones(self.Du)
         self.sigma_x = jnp.array([noise_x])
-        self.emission_density = conditionals.HCCovGaussianConditional(
+        self.emission_density = approximate_conditionals.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
@@ -772,7 +772,7 @@ class HCCovObservationModel(LinearObservationModel):
         self.U = jnp.array(
             scipy.linalg.eigh(cov, eigvals=(self.Dx - self.Du, self.Dx - 1))[1]
         )
-        self.emission_density = conditionals.HCCovGaussianConditional(
+        self.emission_density = approximate_conditionals.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
@@ -786,14 +786,14 @@ class HCCovObservationModel(LinearObservationModel):
     ):
         T = X.shape[0]
         phi_dict = smoothing_density.slice(jnp.arange(1, smoothing_density.R)).to_dict()
-        params = conditionals.HCCovGaussianConditional.params_to_vector(
+        params = approximate_conditionals.HCCovGaussianConditional.params_to_vector(
             self.C, self.d, self.sigma_x, self.beta, self.W
         )
         omega_dagger, omega_star, not_converged = self.get_omegas(
             phi_dict, X, self.W, self.U, self.beta, self.C, self.d, self.sigma_x
         )
         Q_val = (
-            conditionals.HCCovGaussianConditional.Qfunc(
+            approximate_conditionals.HCCovGaussianConditional.Qfunc(
                 params,
                 phi_dict,
                 X,
@@ -837,7 +837,7 @@ class HCCovObservationModel(LinearObservationModel):
     def update_emission_density(self):
         """ Updates the emission density.
         """
-        self.emission_density = conditionals.HCCovGaussianConditional(
+        self.emission_density = approximate_conditionals.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
