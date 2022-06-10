@@ -1,4 +1,5 @@
 from jax import numpy as jnp
+from typing import Tuple
 from src_jax import densities, factors, measures, conditionals
 from utils.linalg import invert_matrix
 
@@ -13,33 +14,34 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
         Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
     ):
-        """ A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
+        """A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
 
-            p(y|x) = N(mu(x), Sigma)
+        p(y|x) = N(mu(x), Sigma)
 
-            with the conditional mean function mu(x) = M phi(x) + b. 
-            phi(x) is a feature vector of the form
+        with the conditional mean function mu(x) = M phi(x) + b. 
+        phi(x) is a feature vector of the form
 
-            phi(x) = (1,x_1,...,x_m,k(h_1(x)),...,k(h_n(x))),
+        phi(x) = (1,x_1,...,x_m,k(h_1(x)),...,k(h_n(x))),
 
-            with
+        with
 
-            k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
+        k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
 
-            Note, that the affine transformations will be approximated via moment matching.
+        Note, that the affine transformations will be approximated via moment matching.
 
-            :param M: jnp.ndarray [1, Dy, Dphi]
-                Matrix in the mean function.
-            :param b: jnp.ndarray [1, Dy]
-                Vector in the conditional mean function.
-            :param W: jnp.ndarray [Dk, Dx + 1]
-                Parameters for linear mapping in the nonlinear functions
-            :param Sigma: jnp.ndarray [1, Dy, Dy]
-                The covariance matrix of the conditional. (Default=None)
-            :param Lambda: jnp.ndarray [1, Dy, Dy] or None
-                Information (precision) matrix of the Gaussians. (Default=None)
-            :param ln_det_Sigma: jnp.ndarray [1] or None
-                Log determinant of the covariance matrix. (Default=None)
+
+        :param M: Matrix in the mean function. Dimensions should be [1, Dy, Dphi]
+        :type M: jnp.ndarray
+        :param b: Vector in the conditional mean function. Dimensions should be [1, Dy]
+        :type b: jnp.ndarray
+        :param W: Parameters for linear mapping in the nonlinear functions. Dimensions should be [Dk, Dx + 1]
+        :type W: jnp.ndarray
+        :param Sigma: The covariance matrix of the conditional. Dimensions should be [1, Dy, Dy], defaults to None
+        :type Sigma: jnp.ndarray, optional
+        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [1, Dy, Dy], defaults to None
+        :type Lambda: jnp.ndarray, optional
+        :param ln_det_Sigma:  Log determinant of the covariance matrix. Dimensions should be [1], defaults to None
+        :type ln_det_Sigma: jnp.ndarray, optional
         """
         super().__init__(M, b, Sigma, Lambda, ln_det_Sigma)
         self.w0 = W[:, 0]
@@ -50,40 +52,36 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
         self.update_phi()
 
     def update_phi(self):
-        """ Sets up the non-linear kernel function in phi(x).
+        """ Set up the non-linear kernel function in phi(x).
         """
         v = self.W
         nu = self.W * self.w0[:, None]
         ln_beta = -0.5 * self.w0 ** 2
         self.k_func = factors.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
 
-    def evaluate_phi(self, x: jnp.ndarray):
-        """ Evaluates the phi
+    def evaluate_phi(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Evaluate the feature vector
 
         phi(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
 
-        :param x: jnp.ndarray [N, Dx]
-            Points where f should be evaluated.
-
-        :return: jnp.ndarray [N, Dphi]
-            Deature vector.
+        :param x: Points where phi should be evaluated. Dimensions should be [N, Dx].
+        :type x: jnp.ndarray
+        :return: Feature vector. Dimensions are [N, Dphi].
+        :rtype: jnp.ndarray
         """
-        N = x.shape[0]
         # phi_x = jnp.empty((N, self.Dphi))
         phi_x = jnp.block([x, self.k_func.evaluate(x).T])
         # phi_x[:,self.Dx:] = self.k_func.evaluate(x).T
         return phi_x
 
     def get_conditional_mu(self, x: jnp.ndarray, **kwargs) -> jnp.ndarray:
-        """ Computes the conditional mu function
+        """Compute the conditional mu function mu(x) = mu(x) = M phi(x) + b.
 
-            mu(x) = mu(x) = M phi(x) + b
 
-        :param x: jnp.ndarray [N, Dx]
-            Instances, the mu should be conditioned on.
-
-        :return: jnp.ndarray [1, N, Dy]
-            Conditional means.
+        :param x: Points where phi should be evaluated. Dimensions should be [N, Dx].
+        :type x: jnp.ndarray
+        :return: Conditional mu. Dimensions are [1, N, Dy].
+        :rtype: jnp.ndarray
         """
         phi_x = self.evaluate_phi(x)
         mu_y = jnp.einsum("ab,cb->ca", self.M[0], phi_x) + self.b[0][None]
@@ -98,18 +96,16 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
         """
         raise AttributeError("LSEMGaussianConditional doesn't have attributee set_y.")
 
-    def get_expected_moments(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
-        """ Computes the expected covariance
+    def get_expected_moments(
+        self, p_x: densities.GaussianDensity
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Compute the expected covariance Sigma_y = E[yy'] - E[y]E[y]'.
 
-            Sigma_y = E[yy'] - E[y]E[y]'
-
-        :param p_x: GaussianDensity
-            The density which we average over.
-
-        :return: jnp.ndarray [p_R, Dy, Dy]
-            Returns the expected mean
+        :param p_x: The density which we average over.
+        :type p_x: densities.GaussianDensity
+        :return: Returns the expected mean and covariance. Dimensions are [p_R, Dy], and  [p_R, Dy, Dy].
+        :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
-
         #### E[f(x)] ####
         # E[x] [R, Dx]
         Ex = p_x.integrate("x")
@@ -155,17 +151,13 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
         return mu_y, Sigma_y
 
     def get_expected_cross_terms(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
-        """ Computes
+        """Compute E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx.
 
-            E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx
-
-        :param p_x: GaussianDensity
-            The density which we average over.
-
-        :return: jnp.ndarray [p_R, Dx, Dy]
-            Returns the cross expectations.
+        :param p_x: The density which we average over.
+        :type p_x: densities.GaussianDensity
+        :return: Returns the cross expectations. Dimensions are [p_R, Dx, Dy].
+        :rtype: jnp.ndarray
         """
-
         # E[xx']
         Exx = p_x.integrate("xx'")
         # E[k(x)x']
@@ -187,7 +179,7 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
     def affine_joint_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Gets an approximation of the joint density
+        """Get an approximation of the joint density
 
             p(x,y) ~= N(mu_{xy},Sigma_{xy}),
 
@@ -200,11 +192,10 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
             Sigma_{xy} = (Sigma_x            E[xy'] - mu_xmu_y'
                           E[yx'] - mu_ymu_x' E[yy'] - mu_ymu_y').
 
-        :param p_x: GaussianDensity
-            Marginal Gaussian density over x.
-
-        :return: GaussianDensity
-            Returns the joint distribution of x,y.
+        :param p_x: The density which we average over.
+        :type p_x: densities.GaussianDensity
+        :return: The joint distribution p(x,y).
+        :rtype: densities.GaussianDensity
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
@@ -226,15 +217,14 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
     def affine_conditional_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> conditionals.ConditionalGaussianDensity:
-        """ Gets an approximation of the joint density via moment matching
+        """Get an approximation of the joint density via moment matching
 
-            p(x|y) ~= N(mu_{x|y},Sigma_{x|y}),
+        p(x|y) ~= N(mu_{x|y},Sigma_{x|y}),
 
-        :param p_x: GaussianDensity
-            Marginal Gaussian density over x.
-
-        :return: ConditionalDensity
-            Returns the conditional density of x given y.
+        :param p_x: The density which we average over.
+        :type p_x: densities.GaussianDensity
+        :return: The conditional density p(x|y).
+        :rtype: conditionals.ConditionalGaussianDensity
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = invert_matrix(Sigma_y)[0]
@@ -252,7 +242,7 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
     def affine_marginal_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Gets an approximation of the marginal density
+        """ Get an approximation of the marginal density
 
             p(y) ~= N(mu_y,Sigma_y),
 
@@ -264,11 +254,10 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
 
             Sigma_y = E[yy'] - mu_ymu_y'.
 
-        :param p_x: GaussianDensity
-            Marginal Gaussian density over x.
-
-        :return: GaussianDensity
-            Returns the joint distribution of x,y.
+        :param p_x: The density which we average over.
+        :type p_x: densities.GaussianDensity
+        :return: The joint distribution p(y).
+        :rtype: densities.GaussianDensity
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y,)
@@ -280,7 +269,7 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
         p_x: densities.GaussianDensity = None,
         **kwargs
     ) -> jnp.ndarray:
-        """Integrates over the log conditional with respect to the pdf p_yx. I.e.
+        """Integrate over the log conditional with respect to the pdf p_yx. I.e.
         
         int log(p(y|x))p(y,x)dydx.
 
@@ -341,10 +330,10 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
     def integrate_log_conditional_y(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> callable:
-        """Computes the expectation over the log conditional, but just over x. I.e. it returns
+        """Compute the expectation over the log conditional, but just over x. I.e. it returns
 
-           f(y) = int log(p(y|x))p(x)dx.
-        
+        f(y) = int log(p(y|x))p(x)dx.
+    
         :param p_x: Density over x.
         :type p_x: measures.GaussianDensity
         :raises NotImplementedError: Only implemented for R=1.
@@ -406,33 +395,32 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         W: jnp.ndarray,
         beta: jnp.ndarray,
     ):
-        """ A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
+        """A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
 
-            p(y|x) = N(mu(x), Sigma(x))
+        p(y|x) = N(mu(x), Sigma(x))
 
-            with the conditional mean function mu(x) = M x + b. 
-            The covariance matrix has the form
+        with the conditional mean function mu(x) = M x + b. 
+        The covariance matrix has the form
 
-            Sigma_y(x) = sigma_x^2 I + \sum_i U_i D_i(x) U_i',
+        Sigma_y(x) = sigma_x^2 I + \sum_i U_i D_i(x) U_i',
 
-            and D_i(x) = 2 * beta_i * cosh(h_i(x)) and h_i(x) = w_i'x + b_i
+        and D_i(x) = 2 * beta_i * cosh(h_i(x)) and h_i(x) = w_i'x + b_i
 
-            Note, that the affine transformations will be approximated via moment matching.
+        Note, that the affine transformations will be approximated via moment matching.
 
-            :param M: jnp.ndarray [1, Dy, Dx]
-                Matrix in the mean function.
-            :param b: jnp.ndarray [1, Dy]
-                Vector in the conditional mean function.
-            :param W: jnp.ndarray [Du, Dx + 1]
-                Parameters for linear mapping in the nonlinear functions
-            :param sigma_x: float
-                Diagonal noise parameter.
-            :param U: jnp.ndarray [Dy, Du]
-                Othonormal vectors for low rank noise part.
-            :param W: jnp.ndarray [Du, Dx + 1]
-                Noise weights for low rank components (w_i & b_i).
-            :param beta: jnp.ndarray [Du]
-                Scaling for low rank noise components.
+        :param M: Matrix in the mean function. Dimensions should be [1, Dy, Dx].
+        :type M: jnp.ndarray
+        :param b: Vector in the conditional mean function. Dimensions should be [1, Dy].
+        :type b: jnp.ndarray
+        :param sigma_x: Diagonal noise parameter.
+        :type sigma_x: jnp.ndarray
+        :param U: Othonormal vectors for low rank noise part. Dimensions should be [Dy, Du].
+        :type U: jnp.ndarray
+        :param W: Noise weights for low rank components (w_i & b_i). Dimensions should be [Du, Dx + 1].
+        :type W: jnp.ndarray
+        :param beta: Scaling for low rank noise components. Dimensions should be [Du].
+        :type beta: jnp.ndarray
+        :raises NotImplementedError: Only works with R==1.
         """
         self.R, self.Dy, self.Dx = M.shape
         if self.R != 1:
@@ -447,7 +435,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         self._setup_noise_diagonal_functions()
 
     def _setup_noise_diagonal_functions(self):
-        """ Creates the functions, that later need to be integrated over, i.e.
+        """ Create the functions, that later need to be integrated over, i.e.
 
         exp(h_i(z)) and exp(-h_i(z))
         """
@@ -457,17 +445,17 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         self.exp_h_minus = factors.LinearFactor(-nu, -ln_beta)
 
     def get_conditional_cov(self, x: jnp.ndarray) -> jnp.ndarray:
-        """ Evaluates the covariance at a given x, i.e.
+        """Evaluate the covariance at a given x, i.e.
 
         Sigma_y(x) = sigma_x^2 I + \sum_i U_i D_i(x) U_i',
 
         with D_i(x) = 2 * beta_i * cosh(h_i(x)) and h_i(x) = w_i'x + b_i.
 
-        :param x: jnp.ndarray [N, Dx]
-            Instances, the mu should be conditioned on.
 
-        :return: jnp.ndarray [N, Dy, Dy]
-            Conditional covariance.
+        :param x: Instances, the mu should be conditioned on. Dimensions should be [N, Dx].
+        :type x: jnp.ndarray
+        :return: Conditional covariance. Dimensions are [N, Dy, Dy]
+        :rtype: jnp.ndarray
         """
         D_x = self.beta[None, :, None] * (self.exp_h_plus(x) + self.exp_h_minus(x))
         Sigma_0 = self.sigma2_x * jnp.eye(self.Dy)
@@ -477,13 +465,12 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         return Sigma_y_x
 
     def condition_on_x(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
-        """ Generates the corresponding Gaussian Density conditioned on x.
+        """Get Gaussian Density conditioned on x.
 
-        :param x: jnp.ndarray [N, Dx]
-            Instances, the mu should be conditioned on.
-
-        :return: GaussianDensity
-            The density conditioned on x.
+        :param x: Instances, the mu and Sigma should be conditioned on. Dimensions should be [N, Dx]
+        :type x: jnp.ndarray
+        :return: The density conditioned on x.
+        :rtype: densities.GaussianDensity
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
@@ -500,15 +487,14 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         raise AttributeError("HCCovGaussianConditional doesn't have attributee set_y.")
 
     def integrate_Sigma_x(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
-        """ Returns the integral
+        """Integrate covariance with respect to p(x).
 
         int Sigma_y(x)p(x) dx.
 
-        :param p_x: GaussianDensity
-            The density the covatiance is integrated with.
-
-        :return: jnp.ndarray [Dy, Dy]
-            Integrated covariance matrix.
+        :param p_x: The density the covatiance is integrated with.
+        :type p_x: densities.GaussianDensity
+        :return: Integrated covariance matrix. Dimensions are [Dy, Dy]
+        :rtype: jnp.ndarray
         """
         # int 2 cosh(h(z)) dphi(z)
         D_int = (
@@ -520,20 +506,21 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
             "abc,dc->abd", self.U[None] * D_int[:, None], self.U
         )
 
-    def get_expected_moments(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
-        """ Computes the expected mean and covariance
+    def get_expected_moments(
+        self, p_x: densities.GaussianDensity
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Compute the expected mean and covariance
 
-            mu_y = E[y] = M E[x] + b
+        mu_y = E[y] = M E[x] + b
 
-            Sigma_y = E[yy'] - mu_y mu_y' = sigma_x^2 I + \sum_i U_i E[D_i(x)] U_i' + E[mu(x)mu(x)'] - mu_y mu_y'
+        Sigma_y = E[yy'] - mu_y mu_y' = sigma_x^2 I + \sum_i U_i E[D_i(x)] U_i' + E[mu(x)mu(x)'] - mu_y mu_y'
 
-        :param p_x: GaussianDensity
-            The density which we average over.
 
-        :return: (jnp.ndarray [p_R, Dy], jnp.ndarray [p_R, Dy, Dy])
-            Returns the expected mean and covariance.
+        :param p_x: The density which we average over.
+        :type p_x: densities.GaussianDensity
+        :return: Returns the expected mean and covariance. Dimensions should be [p_R, Dy] and [p_R, Dy, Dy].
+        :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
-
         mu_y = self.get_conditional_mu(p_x.mu)[0]
         Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
             "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
@@ -543,17 +530,13 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         return mu_y, Sigma_y
 
     def get_expected_cross_terms(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
-        """ Computes
+        """Compute E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M x + b)x' p(x) dx
 
-            E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M f(x) + b)x' p(x) dx
-
-        :param p_x: GaussianDensity
-            The density which we average over.
-
-        :return: jnp.ndarray [p_R, Dx, Dy]
-            Returns the cross expectations.
+        :param p_x: The density which we average over.
+        :type p_x: densities.GaussianDensity
+        :return: Cross expectations. Dimensions are [p_R, Dx, Dy]
+        :rtype: jnp.ndarray
         """
-
         Eyx = p_x.integrate(
             "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=None, b_vec=None
         )
@@ -562,7 +545,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
     def affine_joint_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Gets an approximation of the joint density
+        """Get an approximation of the joint density
 
             p(x,y) ~= N(mu_{xy},Sigma_{xy}),
 
@@ -575,11 +558,10 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
             Sigma_{xy} = (Sigma_x            E[xy'] - mu_xmu_y'
                           E[yx'] - mu_ymu_x' E[yy'] - mu_ymu_y').
 
-        :param p_x: GaussianDensity
-            Marginal Gaussian density over x.
-
-        :return: GaussianDensity
-            Returns the joint distribution of x,y.
+        :param p_x: The density which we average over.
+        :type p_x: densities.GaussianDensity
+        :return: Joint distribution of p(x,y).
+        :rtype: densities.GaussianDensity
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
@@ -602,15 +584,14 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
     def affine_conditional_transformation(
         self, p_x: densities.GaussianDensity
     ) -> conditionals.ConditionalGaussianDensity:
-        """ Gets an approximation of the joint density via moment matching
+        """Get an approximation of the joint density via moment matching
 
-            p(x|y) ~= N(mu_{x|y},Sigma_{x|y}),
+            p(x|y) ~= N(mu_{x|y},Sigma_{x|y}).
 
-        :param p_x: GaussianDensity
-            Marginal Gaussian density over x.
-
-        :return: ConditionalDensity
-            Returns the conditional density of x given y.
+        :param p_x: Marginal Gaussian density over x.
+        :type p_x: densities.GaussianDensity
+        :return: Conditional density of p(x|y).
+        :rtype: conditionals.ConditionalGaussianDensity
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = invert_matrix(Sigma_y)[0]
@@ -628,7 +609,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
     def affine_marginal_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Gets an approximation of the marginal density
+        """Get an approximation of the marginal density
 
             p(y) ~= N(mu_y,Sigma_y),
 
@@ -640,13 +621,11 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
 
             Sigma_y = E[yy'] - mu_ymu_y'.
 
-        :param p_x: GaussianDensity
-            Marginal Gaussian density over x.
-
-        :return: GaussianDensity
-            Returns the joint distribution of x,y.
+        :param p_x: Marginal Gaussian density over x.
+        :type p_x: densities.GaussianDensity
+        :return: The marginal density p(y).
+        :rtype: densities.GaussianDensity
         """
-
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
         return p_y
