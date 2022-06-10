@@ -20,26 +20,32 @@ from utils.linalg import invert_matrix
 
 class ConditionalGaussianDensity:
     def __init__(
-        self, M, b=None, Sigma=None, Lambda=None, ln_det_Sigma=None,
+        self,
+        M: jnp.ndarray,
+        b: jnp.ndarray = None,
+        Sigma: jnp.ndarray = None,
+        Lambda: jnp.ndarray = None,
+        ln_det_Sigma: jnp.ndarray = None,
     ):
-        """ A conditional Gaussian density
+        """A conditional Gaussian density
 
-            p(y|x) = N(mu(x), Sigma)
+        p(y|x) = N(mu(x), Sigma)
 
-            with the conditional mean function mu(x) = M x + b.
-
-        :param M: jnp.ndarray [R, Dy, Dx]
-            Matrix in the mean function.
-        :param b: jnp.ndarray [R, Dy]
-            Vector in the conditional mean function. If None all entries are 0. (Default=None)
-        :param Sigma: jnp.ndarray [R, Dy, Dy]
-            The covariance matrix of the conditional. (Default=None)
-        :param Lambda: jnp.ndarray [R, Dy, Dy] or None
-            Information (precision) matrix of the Gaussians. (Default=None)
-        :param ln_det_Sigma: jnp.ndarray [R] or None
-            Log determinant of the covariance matrix. (Default=None)
+        with the conditional mean function mu(x) = M x + b.
+        
+        :param M: Matrix in the mean function. Dimensions should be [R, Dy, Dx]
+        :type M: jnp.ndarray
+        :param b: Vector in the conditional mean function. If None all entries are 0. Dimensions should be [R, Dy], defaults to None
+        :type b: jnp.ndarray, optional
+        :param Sigma: The covariance matrix of the conditional. Dimensions should be [R, Dy, Dy], defaults to None
+        :type Sigma: jnp.ndarray, optional
+        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, Dy, Dy], 
+            defaults to None
+        :type Lambda: jnp.ndarray, optional
+        :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
+        :type ln_det_Sigma: jnp.ndarray, optional
+        :raises RuntimeError: Raised if neiterh Sigma nor Lambda are provided
         """
-
         self.R, self.Dy, self.Dx = M.shape
 
         self.M = M
@@ -68,16 +74,22 @@ class ConditionalGaussianDensity:
         return "Conditional Gaussian density p(y|x)"
 
     def __call__(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
+        """Get Gaussian Density conditioned on x.
+
+        :param x: Instances, the mu should be conditioned on. Dimensions should be [N, Dx].
+        :type x: jnp.ndarray
+        :return: The density conditioned on x.
+        :rtype: densities.GaussianDensity
+        """
         return self.condition_on_x(x)
 
-    def slice(self, indices: list) -> "ConditionalGaussianDensity":
-        """ Returns an object with only the specified entries.
+    def slice(self, indices: jnp.ndarray) -> "ConditionalGaussianDensity":
+        """Return the conditional with only the specified entries.
 
-        :param indices: list
-            The entries that should be contained in the returned object.
-
-        :return: ConditionalGaussianDensity
-            The resulting Gaussian diagonal density.
+        :param indices: The entries that should be contained in the returned object.
+        :type indices: jnp.ndarray
+        :return: The resulting conditional Gaussian diagonal density.
+        :rtype: ConditionalGaussianDensity
         """
         M_new = jnp.take(self.M, indices, axis=0)
         b_new = jnp.take(self.b, indices, axis=0)
@@ -90,29 +102,24 @@ class ConditionalGaussianDensity:
         return new_measure
 
     def get_conditional_mu(self, x: jnp.ndarray, **kwargs) -> jnp.ndarray:
-        """ Computest the conditional mu function
+        """Compute the conditional mu function mu(x) = M x + b.
 
-            mu(x) = M x + b.
-
-        :param x: jnp.ndarray [N, Dx]
-            Instances, the mu should be conditioned on.
-
-        :return: jnp.ndarray [R, N, Dy]
-            Conditional means.
+        :param x: Instances, the mu should be conditioned on. Dimensions should be [N, Dx].
+        :type x: jnp.ndarray
+        :return: Conditional means. Dimensions are [R, N, Dy].
+        :rtype: jnp.ndarray
         """
         mu_y = jnp.einsum("abc,dc->adb", self.M, x) + self.b[:, None]
         return mu_y
 
     def condition_on_x(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
-        """ Generates the corresponding Gaussian Density conditioned on x.
+        """Get Gaussian Density conditioned on x.
 
-        :param x: jnp.ndarray [N, Dx]
-            Instances, the mu should be conditioned on.
-
-        :return: GaussianDensity
-            The density conditioned on x.
+        :param x: Instances, the mu should be conditioned on. Dimensions should be [N, Dx].
+        :type x: jnp.ndarray
+        :return: The density conditioned on x.
+        :rtype: densities.GaussianDensity
         """
-
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((self.R * N, self.Dy))
         Sigma_new = jnp.tile(self.Sigma[:, None], (1, N, 1, 1)).reshape(
@@ -132,7 +139,7 @@ class ConditionalGaussianDensity:
         )
 
     def set_y(self, y: jnp.ndarray, **kwargs) -> factors.ConjugateFactor:
-        """ Sets a specific value for y in p(y|x) and returns the corresponding conjugate factor. 
+        """ Set a specific value for y in p(y|x) and returns the corresponding conjugate factor. 
 
         :param y: Data for y, where the rth entry is associated with the rth conditional density. 
         :type y: jnp.ndarray [R, Dy]
@@ -162,17 +169,17 @@ class ConditionalGaussianDensity:
     def affine_joint_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Returns the joint density 
+        """Return the joint density.
 
-            p(x,y) = p(y|x)p(x),
+        p(x,y) = p(y|x)p(x),
 
-            where p(y|x) is the object itself.
-
-        :param p_x: GaussianDensity
-            Marginal density over x.
-
-        :return: GaussianDensity
-            The joint density.
+        where p(y|x) is the object itself.
+        
+        :param p_x: Marginal density over x.
+        :type p_x: densities.GaussianDensity
+        :raises RuntimeError: 
+        :return: The joint density.
+        :rtype: densities.GaussianDensity
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -239,14 +246,13 @@ class ConditionalGaussianDensity:
     def affine_marginal_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """ Returns the marginal density p(y) given  p(y|x) and p(x), 
-            where p(y|x) is the object itself.
+        """Return the marginal density p(y) given  p(y|x) and p(x), where p(y|x) is the object itself.
 
-        :param p_x: GaussianDensity
-            Marginal density over x.
-
-        :return: GaussianDensity
-            The marginal density.
+        :param p_x: Marginal density over x.
+        :type p_x: densities.GaussianDensity
+        :raises RuntimeError: Only works if one of the densities involved have R==1.
+        :return: The marginal density.
+        :rtype: densities.GaussianDensity
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -268,14 +274,13 @@ class ConditionalGaussianDensity:
     def affine_conditional_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> "ConditionalGaussianDensity":
-        """ Returns the conditional density p(x|y), given p(y|x) and p(x),           
-            where p(y|x) is the object itself.
+        """ Return the conditional density p(x|y), given p(y|x) and p(x), where p(y|x) is the object itself.
 
-        :param p_x: GaussianDensity
-            Marginal density over x.
-
-        :return: GaussianDensity
-            The marginal density.
+        :param p_x: Marginal density over x.
+        :type p_x: densities.GaussianDensity
+        :raises RuntimeError: Only works if one of the densities involved have R==1.
+        :return: The conditional density p(y|x).
+        :rtype: ConditionalGaussianDensity
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
