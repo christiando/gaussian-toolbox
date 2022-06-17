@@ -815,7 +815,7 @@ class LRBFMStateModel(LinearStateModel):
             
             The kernel and linear activation function are given by
             
-            k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}. 
+            k(h) = exp(-h^2 / 2) and h_i(x) = (x_i + mu_i) / l_i. 
             
         :param Dz: Dimensionality of latent space.
         :type Dz: int
@@ -1021,9 +1021,8 @@ class LRBFMStateModel(LinearStateModel):
             self.state_density.mu = self.mu
             self.state_density.length_scale = self.length_scale
             self.state_density.update_phi()
-            return (
-                -self.compute_Q_function(smoothing_density, two_step_smoothing_density)
-                / T
+            return -self.compute_Q_function(
+                smoothing_density, two_step_smoothing_density
             )
 
         gv = objax.GradValues(loss, self.vars())
@@ -1036,8 +1035,7 @@ class LRBFMStateModel(LinearStateModel):
 
         train_op = objax.Jit(train_op)
 
-        for i in range(1000):
+        for i in range(100):
             v = train_op()
-            print(v)
 
     # TODO: Optimal initial state density
