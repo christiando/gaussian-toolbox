@@ -23,6 +23,7 @@ import numpy as np
 import objax
 from typing import Tuple
 from utils.jax_minimize_wrapper import minimize as minimize_jax
+from utils.jax_minimize_wrapper import ScipyMinimize
 
 # from src_jax
 from src_jax import densities, conditionals, approximate_conditionals, factors
@@ -458,6 +459,7 @@ class NNControlStateModel(LinearStateModel):
         :param u: Control variables. Dimensions should be [T, Du]
         :type u: jnp.ndarray
         """
+        # TODO: Check for convergence or use other optimizer
         gv = objax.GradValues(self.calc_neg_Q_function, self.vars())
         opt = objax.optimizer.Adam(self.vars())
 
@@ -582,7 +584,7 @@ class LSEMStateModel(LinearStateModel):
         # print('AbQ: Run Time %.1f' % (time.perf_counter() - time_start))
         # time_start = time.perf_counter()
         self.update_state_density()
-        self.update_W(smoothing_density, two_step_smoothing_density)
+        self.update_kernel_params(smoothing_density, two_step_smoothing_density)
         # print('W: Run Time %.1f' % (time.perf_counter() - time_start))
         # time_start = time.perf_counter()
         self.update_state_density()
@@ -676,109 +678,6 @@ class LSEMStateModel(LinearStateModel):
         # b = self.b
         return A, b, Qz
 
-    @staticmethod
-    def _Wfunc(
-        W: jnp.ndarray,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
-        A: jnp.ndarray,
-        b: jnp.ndarray,
-        Qz: jnp.ndarray,
-        Qz_inv: jnp.ndarray,
-        ln_det_Qz: jnp.ndarray,
-        Dk: int,
-        Dz: int,
-    ) -> Union[float, jnp.ndarray]:
-        # W = jnp.reshape(W, (Dk, Dz + 1))
-        # print(W.shape)
-        state_density = approximate_conditionals.LSEMGaussianConditional(
-            M=jnp.array([A]),
-            b=jnp.array([b]),
-            W=W,
-            Sigma=jnp.array([Qz]),
-            Lambda=jnp.array([Qz_inv]),
-            ln_det_Sigma=jnp.array([ln_det_Qz]),
-        )
-        # self.state_density.update_phi()
-        T = smoothing_density.R
-        A_lower = A[:, Dz:]
-        # E[z f(z)'] A'
-        # v_joint = jnp.block([jnp.zeros([Dk, Dz]),
-        #                      state_density.k_func.v])
-        # nu_joint = jnp.block([jnp.zeros([Dk, Dz]),
-        #                       state_density.k_func.nu])
-        zero_arr = jnp.zeros([Dk, 2 * Dz])
-        v_joint = zero_arr.at[:, Dz:].set(state_density.k_func.v)
-        nu_joint = zero_arr.at[:, Dz:].set(state_density.k_func.nu)
-        joint_k_func = factors.OneRankFactor(
-            v=v_joint, nu=nu_joint, ln_beta=state_density.k_func.ln_beta
-        )
-        Ekz = jnp.sum(
-            jnp.reshape(
-                two_step_smoothing_density.multiply(
-                    joint_k_func, update_full=True
-                ).integrate("x"),
-                (T, Dk, 2 * Dz),
-            ),
-            axis=0,
-        )
-        phi_k = smoothing_density.multiply(state_density.k_func, update_full=True)
-        Ek = jnp.sum(jnp.reshape(phi_k.integral_light(), (T, Dk)), axis=0)
-        Qz_k_lin_err = jnp.dot(
-            A_lower,
-            jnp.subtract(
-                jnp.subtract(Ekz[:, :Dz], jnp.dot(Ekz[:, Dz:], A[:, :Dz].T)),
-                jnp.outer(Ek, b),
-            ),
-        )
-        Ekk = jnp.sum(
-            jnp.reshape(
-                phi_k.multiply(state_density.k_func, update_full=True).integral_light(),
-                (T, Dk, Dk),
-            ),
-            axis=0,
-        )
-        Qz_kk = jnp.dot(jnp.dot(A_lower, Ekk), A_lower.T)
-        Qfunc_W = 0.5 * jnp.trace(
-            jnp.dot(Qz_inv, jnp.subtract(Qz_kk, jnp.add(Qz_k_lin_err, Qz_k_lin_err.T)))
-        )
-        return Qfunc_W
-
-    def update_W(
-        self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
-    ):
-        """Update the weights in the squared exponential of the state conditional mean by gradient descent.
-
-        :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
-        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
-        """
-        #  This compiling takes a lot of time, and is only worth it for several iterations
-        phi = smoothing_density.slice(jnp.arange(0, smoothing_density.R - 1))
-        func = lambda W: self._Wfunc(
-            W,
-            phi,
-            two_step_smoothing_density,
-            self.A,
-            self.b,
-            self.Qz,
-            self.Qz_inv,
-            self.ln_det_Qz,
-            self.Dk,
-            self.Dz,
-        )
-        result = minimize_jax(
-            func,
-            self.W,
-            method="L-BFGS-B",
-            bounds=jnp.array([(-1e1, 1e1)] * (self.Dk * (self.Dz + 1))),
-            options={"disp": False},
-        )
-        self.W = result.x
-
     def update_state_density(self):
         """ Update the state density.
         """
@@ -793,19 +692,46 @@ class LSEMStateModel(LinearStateModel):
             self.state_density.ln_det_Sigma[0],
         )
 
+    def update_kernel_params(
+        self,
+        smoothing_density: densities.GaussianDensity,
+        two_step_smoothing_density: densities.GaussianDensity,
+    ):
+        """Update the kernel weights.
+        
+        Using gradient descent on the (negative) Q-function.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
+        :type two_step_smoothing_density: densities.GaussianDensity
+        """
+
+        @objax.Function.with_vars(self.vars())
+        def loss():
+            self.state_density.w0 = self.W[:, 0]
+            self.state_density.W = self.W[:, 1:]
+            self.state_density.update_phi()
+            return -self.compute_Q_function(
+                smoothing_density, two_step_smoothing_density
+            )
+
+        minimizer = ScipyMinimize(
+            loss,
+            self.vars(),
+            method="L-BFGS-B",
+            bounds=jnp.array([(-1e1, 1e1)] * (self.Dk * (self.Dz + 1))),
+        )
+        minimizer.minimize()
+
     # TODO: Optimal initial state density
 
 
 class LRBFMStateModel(LinearStateModel):
     def __init__(
-        self,
-        Dz: int,
-        Dk: int,
-        noise_z: float = 1.0,
-        isotropic: bool = True,
-        lr: float = 1e-3,
+        self, Dz: int, Dk: int, noise_z: float = 1.0, kernel_type: bool = "isotropic",
     ):
-        """This implements a linear+squared exponential mean (LSEM) state model
+        """This implements a linear+RBF mean (LRBFM) state model
         
             z_t = A phi(z_{t-1}) + b + zeta_t     with      zeta_t ~ N(0,Qz).
             
@@ -823,6 +749,10 @@ class LRBFMStateModel(LinearStateModel):
         :type Dk: int
         :param noise_z: Initial isoptropic std. on the state transition., defaults to 1.0
         :type noise_z: float, optional
+        :param kernel_type: Parameter determining, which kernel is used. 'scalar' same length scale for all kernels and 
+            dimensions. 'isotropic' same length scale for dimensions, but different for each kernel. 'anisotropic' 
+            different length scale for all kernels and dimensions., defaults to 'isotropic
+        :type kernel_type: str
         """
         self.Dz, self.Dk = Dz, Dk
         self.Dphi = self.Dk + self.Dz
@@ -831,13 +761,17 @@ class LRBFMStateModel(LinearStateModel):
         self.A = self.A.at[:, : self.Dz].set(jnp.eye(self.Dz))
         self.b = jnp.zeros((self.Dz,))
         self.mu = objax.TrainVar(objax.random.normal((self.Dk, self.Dz)))
-        self.isotropic = isotropic
-        if self.isotropic:
-            self.log_length_scale = objax.TrainVar(objax.random.normal((self.Dk,),))
-        else:
+        self.kernel_type = kernel_type
+        if self.kernel_type == "scalar":
+            self.log_length_scale = objax.TrainVar(objax.random.normal((1, 1),))
+        elif self.kernel_type == "isotropic":
+            self.log_length_scale = objax.TrainVar(objax.random.normal((self.Dk, 1),))
+        elif self.kernel_type == "anisotropic":
             self.log_length_scale = objax.TrainVar(
                 objax.random.normal((self.Dk, self.Dz))
             )
+        else:
+            raise NotImplementedError("Kernel type not implemented.")
 
         self.state_density = approximate_conditionals.LRBFGaussianConditional(
             M=jnp.array([self.A]),
@@ -850,7 +784,6 @@ class LRBFMStateModel(LinearStateModel):
             self.state_density.Lambda[0],
             self.state_density.ln_det_Sigma[0],
         )
-        self.lr = lr
 
     def update_hyperparameters(
         self,
@@ -979,9 +912,11 @@ class LRBFMStateModel(LinearStateModel):
 
     @property
     def length_scale(self):
-        if self.isotropic:
-            return jnp.tile(jnp.exp(self.log_length_scale)[:, None], (1, self.Dz))
-        else:
+        if self.kernel_type == "scalar":
+            return jnp.tile(jnp.exp(self.log_length_scale), (self.Dk, self.Dz))
+        elif self.kernel_type == "isotropic":
+            return jnp.tile(jnp.exp(self.log_length_scale), (1, self.Dz))
+        elif self.kernel_type == "anisotropic":
             return jnp.exp(self.log_length_scale)
 
     def update_state_density(self):
@@ -1013,8 +948,6 @@ class LRBFMStateModel(LinearStateModel):
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
         :type two_step_smoothing_density: densities.GaussianDensity
         """
-        opt = objax.optimizer.SGD(self.vars())
-        T = two_step_smoothing_density.R
 
         @objax.Function.with_vars(self.vars())
         def loss():
@@ -1025,17 +958,7 @@ class LRBFMStateModel(LinearStateModel):
                 smoothing_density, two_step_smoothing_density
             )
 
-        gv = objax.GradValues(loss, self.vars())
-
-        @objax.Function.with_vars(self.vars() + opt.vars())
-        def train_op():
-            g, v = gv()  # returns gradients g and loss v
-            opt(self.lr, g)  # update weights
-            return v
-
-        train_op = objax.Jit(train_op)
-
-        for i in range(100):
-            v = train_op()
+        minimizer = ScipyMinimize(loss, self.vars(), method="L-BFGS-B")
+        minimizer.minimize()
 
     # TODO: Optimal initial state density
