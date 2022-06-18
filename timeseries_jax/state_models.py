@@ -785,6 +785,15 @@ class LRBFMStateModel(LinearStateModel):
             self.state_density.ln_det_Sigma[0],
         )
 
+    @property
+    def length_scale(self):
+        if self.kernel_type == "scalar":
+            return jnp.tile(jnp.exp(self.log_length_scale), (self.Dk, self.Dz))
+        elif self.kernel_type == "isotropic":
+            return jnp.tile(jnp.exp(self.log_length_scale), (1, self.Dz))
+        elif self.kernel_type == "anisotropic":
+            return jnp.exp(self.log_length_scale)
+
     def update_hyperparameters(
         self,
         smoothing_density: densities.GaussianDensity,
@@ -909,15 +918,6 @@ class LRBFMStateModel(LinearStateModel):
         # A = self.A
         # b = self.b
         return A, b, Qz
-
-    @property
-    def length_scale(self):
-        if self.kernel_type == "scalar":
-            return jnp.tile(jnp.exp(self.log_length_scale), (self.Dk, self.Dz))
-        elif self.kernel_type == "isotropic":
-            return jnp.tile(jnp.exp(self.log_length_scale), (1, self.Dz))
-        elif self.kernel_type == "anisotropic":
-            return jnp.exp(self.log_length_scale)
 
     def update_state_density(self):
         """ Update the state density.

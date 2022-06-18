@@ -32,6 +32,7 @@ import objax
 from functools import partial
 
 from src_jax import densities, conditionals, approximate_conditionals, factors
+from utils.jax_minimize_wrapper import ScipyMinimize
 
 # from pathos.multiprocessing import ProcessingPool as Pool
 
@@ -507,9 +508,214 @@ class LinearObservationModel(ObservationModel):
         return p_x
 
 
+class LRBFMObservationModel(LinearObservationModel):
+    def __init__(
+        self,
+        Dx: int,
+        Dz: int,
+        Dk: int,
+        noise_z: float = 1.0,
+        kernel_type: bool = "isotropic",
+    ):
+        """This implements a linear+RBF mean (LRBFM) observation model
+        
+            x_t = C phi(z_t) + d + xi_t     with      xi_t ~ N(0,Qx).
+            
+            The feature function is 
+            
+            phi(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
+            
+            The kernel and linear activation function are given by
+            
+            k(h) = exp(-h^2 / 2) and h_i(x) = (x_i + mu_i) / l_i. 
+
+
+        :param Dx: Dimensions of observations.
+        :type Dx: int
+        :param Dz: Dimensionality of latent space.
+        :type Dz: int
+        :param Dk: Number of kernels to use.
+        :type Dk: int
+        :param noise_z: Initial isoptropic std. on the state transition., defaults to 1.0
+        :type noise_z: float, optional
+        :param kernel_type: Parameter determining, which kernel is used. 'scalar' same length scale for all kernels and 
+            dimensions. 'isotropic' same length scale for dimensions, but different for each kernel. 'anisotropic' 
+            different length scale for all kernels and dimensions., defaults to 'isotropic
+        :type kernel_type: str
+        """
+        self.Dx, self.Dz, self.Dk = Dx, Dz, Dk
+        self.Dphi = self.Dk + self.Dz
+        self.Qx = noise_z ** 2 * jnp.eye(self.Dx)
+        self.C = jnp.array(np.random.randn(self.Dx, self.Dphi))
+        if self.Dx == self.Dz:
+            self.C = self.C.at[:, : self.Dz].set(jnp.eye(self.Dx))
+        else:
+            self.C = self.C.at[:, : self.Dz].set(
+                objax.random.normal((self.Dx, self.Dz))
+            )
+        self.d = jnp.zeros((self.Dx,))
+        self.mu = objax.TrainVar(objax.random.normal((self.Dk, self.Dz)))
+        self.kernel_type = kernel_type
+        if self.kernel_type == "scalar":
+            self.log_length_scale = objax.TrainVar(objax.random.normal((1, 1),))
+        elif self.kernel_type == "isotropic":
+            self.log_length_scale = objax.TrainVar(objax.random.normal((self.Dk, 1),))
+        elif self.kernel_type == "anisotropic":
+            self.log_length_scale = objax.TrainVar(
+                objax.random.normal((self.Dk, self.Dz))
+            )
+        else:
+            raise NotImplementedError("Kernel type not implemented.")
+
+        self.emission_density = approximate_conditionals.LRBFGaussianConditional(
+            M=jnp.array([self.C]),
+            b=jnp.array([self.d]),
+            mu=self.mu,
+            length_scale=self.length_scale,
+            Sigma=jnp.array([self.Qx]),
+        )
+        self.Qx_inv, self.ln_det_Qx = (
+            self.emission_density.Lambda[0],
+            self.emission_density.ln_det_Sigma[0],
+        )
+
+    @property
+    def length_scale(self):
+        if self.kernel_type == "scalar":
+            return jnp.tile(jnp.exp(self.log_length_scale), (self.Dk, self.Dz))
+        elif self.kernel_type == "isotropic":
+            return jnp.tile(jnp.exp(self.log_length_scale), (1, self.Dz))
+        elif self.kernel_type == "anisotropic":
+            return jnp.exp(self.log_length_scale)
+
+    def update_hyperparameters(
+        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+    ):
+        """Update the hyperparameters C,d,Qx,W.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param X: Observations.
+        :type X: jnp.ndarray
+        """
+        phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
+        self.update_Qx(phi, X)
+        self.update_Cd(phi, X)
+        self.update_emission_density()
+        self.update_kernel_params(phi, X)
+        self.update_emission_density()
+
+    def update_emission_density(self):
+        """Create new emission density with current parameters.
+        """
+        self.emission_density = approximate_conditionals.LRBFGaussianConditional(
+            M=jnp.array([self.C]),
+            b=jnp.array([self.d]),
+            mu=self.mu,
+            length_scale=self.length_scale,
+            Sigma=jnp.array([self.Qx]),
+        )
+        self.Qx_inv, self.ln_det_Qx = (
+            self.emission_density.Lambda[0],
+            self.emission_density.ln_det_Sigma[0],
+        )
+
+    def update_Qx(self, smoothing_density: densities.GaussianDensity, X: jnp.array):
+        """Update observation covariance matrix Qx.
+        
+        Qx* = E[(X-C phi(z) - d)(X-C phi(z) - d)']
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param X: Observations.
+        :type X: jnp.ndarray
+        """
+        T = X.shape[0]
+        mu_x, Sigma_x = self.emission_density.get_expected_moments(smoothing_density)
+        sum_mu_x2 = jnp.sum(
+            Sigma_x - self.emission_density.Sigma + mu_x[:, None] * mu_x[:, :, None],
+            axis=0,
+        )
+        sum_X_mu = jnp.sum(X[:, None] * mu_x[:, :, None], axis=0)
+        self.Qx = (
+            jnp.sum(X[:, None] * X[:, :, None], axis=0)
+            - sum_X_mu
+            - sum_X_mu.T
+            + sum_mu_x2
+        ) / T
+
+    def update_Cd(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+        """Update observation observation matrix C and vector d.
+        
+        C* = E[(X - d)phi(z)']E[phi(z)phi(z)']^{-1}
+        d* = E[(X - C phi(x))]
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param X: Observations.
+        :type X: jnp.ndarray
+        """
+        #### E[f(x)] ####
+        # E[x] [R, Dx]
+        T = X.shape[0]
+        Ex = smoothing_density.integrate("x")
+        # E[k(x)] [R, Dphi - Dx]
+        p_k = smoothing_density.multiply(self.emission_density.k_func, update_full=True)
+        Ekx = p_k.integrate().reshape((smoothing_density.R, self.Dphi - self.Dz))
+        # E[f(x)]
+        Ef = jnp.concatenate([Ex, Ekx], axis=1)
+        B = jnp.einsum("ab,ac->bc", X - self.d[None], Ef)
+
+        #### E[f(x)f(x)'] ####
+        # Eff = jnp.empty([p_x.R, self.Dphi, self.Dphi])
+        # Linear terms E[xx']
+        Exx = jnp.sum(smoothing_density.integrate("xx'"), axis=0)
+        # Eff[:,:self.Dx,:self.Dx] =
+        # Cross terms E[x k(x)']
+        Ekx = jnp.sum(
+            p_k.integrate("x").reshape((smoothing_density.R, self.Dk, self.Dz)), axis=0
+        )
+        # Eff[:,:self.Dx,self.Dx:] = jnp.swapaxes(Ekx, axis1=1, axis2=2)
+        # Eff[:,self.Dx:,:self.Dx] = Ekx
+        # kernel terms E[k(x)k(x)']
+        Ekk = jnp.sum(
+            p_k.multiply(self.emission_density.k_func, update_full=True)
+            .integrate()
+            .reshape((smoothing_density.R, self.Dk, self.Dk)),
+            axis=0,
+        )
+        # Eff[:,self.Dx:,self.Dx:] = Ekk
+        A = jnp.block([[Exx, Ekx.T], [Ekx, Ekk]])
+        self.C = jnp.linalg.solve(A / T, B.T / T).T
+        self.d = jnp.mean(X, axis=0) - jnp.dot(self.C, jnp.mean(Ef, axis=0))
+
+    def update_kernel_params(
+        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray
+    ):
+        """Update the kernel weights.
+        
+        Using gradient descent on the (negative) Q-function.
+
+        :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
+        :type smoothing_density: densities.GaussianDensity
+        :param X: Observations.
+        :type X: jnp.ndarray
+        """
+
+        @objax.Function.with_vars(self.vars())
+        def loss():
+            self.emission_density.mu = self.mu
+            self.emission_density.length_scale = self.length_scale
+            self.emission_density.update_phi()
+            return -self.compute_Q_function(smoothing_density, X)
+
+        minimizer = ScipyMinimize(loss, self.vars(), method="L-BFGS-B")
+        minimizer.minimize()
+
+
 class LSEMObservationModel(LinearObservationModel, objax.Module):
     def __init__(
-        self, Dx: int, Dz: int, Dk: int, noise_x: float = 1.0, lr: float = 1e-3,
+        self, Dx: int, Dz: int, Dk: int, noise_x: float = 1.0,
     ):
         """
         This implements a linear+squared exponential mean (LSEM) observation model
@@ -533,8 +739,6 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         :type Dk: int
         :param noise_x: Initial observation noise, defaults to 1.0
         :type noise_x: float, optional
-        :param lr: Learnig rate for learning W, defaults to 1e-3
-        :type lr: float, optional
         """
         self.Dx, self.Dz, self.Dk = Dx, Dz, Dk
         self.Dphi = self.Dk + self.Dz
@@ -558,7 +762,6 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
             self.emission_density.Lambda[0],
             self.emission_density.ln_det_Sigma[0],
         )
-        self.lr = lr
 
     def update_hyperparameters(
         self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
@@ -574,7 +777,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         self.update_Qx(phi, X)
         self.update_Cd(phi, X)
         self.update_emission_density()
-        self.update_W(phi, X)
+        self.update_kernel_params(phi, X)
         self.update_emission_density()
 
     def update_emission_density(self):
@@ -660,7 +863,9 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         self.C = jnp.linalg.solve(A / T, B.T / T).T
         self.d = jnp.mean(X, axis=0) - jnp.dot(self.C, jnp.mean(Ef, axis=0))
 
-    def update_W(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+    def update_kernel_params(
+        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray
+    ):
         """Update the kernel weights.
         
         Using gradient descent on the (negative) Q-function.
@@ -670,27 +875,16 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         :param X: Observations.
         :type X: jnp.ndarray
         """
-        opt = objax.optimizer.SGD(self.vars())
-        T = X.shape[0]
 
         @objax.Function.with_vars(self.vars())
         def loss():
-            self.emission_density.W = self.W
+            self.emission_density.w0 = self.W[:, 0]
+            self.emission_density.W = self.W[:, 1:]
             self.emission_density.update_phi()
-            return -self.compute_Q_function(smoothing_density, X) / T
+            return -self.compute_Q_function(smoothing_density, X)
 
-        gv = objax.GradValues(loss, self.vars())
-
-        @objax.Function.with_vars(self.vars() + opt.vars())
-        def train_op():
-            g, v = gv()  # returns gradients g and loss v
-            opt(self.lr, g)  # update weights
-            return v
-
-        train_op = objax.Jit(train_op)
-
-        for i in range(1000):
-            v = train_op()
+        minimizer = ScipyMinimize(loss, self.vars(), method="L-BFGS-B")
+        minimizer.minimize()
 
 
 class HCCovObservationModel(LinearObservationModel):
