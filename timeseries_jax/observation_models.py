@@ -676,6 +676,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         @objax.Function.with_vars(self.vars())
         def loss():
             self.emission_density.W = self.W
+            self.emission_density.update_phi()
             return -self.compute_Q_function(smoothing_density, X) / T
 
         gv = objax.GradValues(loss, self.vars())

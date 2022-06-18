@@ -4,61 +4,7 @@ from src_jax import densities, factors, measures, conditionals
 from utils.linalg import invert_matrix
 
 
-class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
-    def __init__(
-        self,
-        M: jnp.ndarray,
-        b: jnp.ndarray,
-        W: jnp.ndarray,
-        Sigma: jnp.ndarray = None,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
-    ):
-        """A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
-
-        p(y|x) = N(mu(x), Sigma)
-
-        with the conditional mean function mu(x) = M phi(x) + b. 
-        phi(x) is a feature vector of the form
-
-        phi(x) = (1,x_1,...,x_m,k(h_1(x)),...,k(h_n(x))),
-
-        with
-
-        k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
-
-        Note, that the affine transformations will be approximated via moment matching.
-
-
-        :param M: Matrix in the mean function. Dimensions should be [1, Dy, Dphi]
-        :type M: jnp.ndarray
-        :param b: Vector in the conditional mean function. Dimensions should be [1, Dy]
-        :type b: jnp.ndarray
-        :param W: Parameters for linear mapping in the nonlinear functions. Dimensions should be [Dk, Dx + 1]
-        :type W: jnp.ndarray
-        :param Sigma: The covariance matrix of the conditional. Dimensions should be [1, Dy, Dy], defaults to None
-        :type Sigma: jnp.ndarray, optional
-        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [1, Dy, Dy], defaults to None
-        :type Lambda: jnp.ndarray, optional
-        :param ln_det_Sigma:  Log determinant of the covariance matrix. Dimensions should be [1], defaults to None
-        :type ln_det_Sigma: jnp.ndarray, optional
-        """
-        super().__init__(M, b, Sigma, Lambda, ln_det_Sigma)
-        self.w0 = W[:, 0]
-        self.W = W[:, 1:]
-        self.Dx = self.W.shape[1]
-        self.Dk = self.W.shape[0]
-        self.Dphi = self.Dk + self.Dx
-        self.update_phi()
-
-    def update_phi(self):
-        """ Set up the non-linear kernel function in phi(x).
-        """
-        v = self.W
-        nu = self.W * self.w0[:, None]
-        ln_beta = -0.5 * self.w0 ** 2
-        self.k_func = factors.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
-
+class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensity):
     def evaluate_phi(self, x: jnp.ndarray) -> jnp.ndarray:
         """Evaluate the feature vector
 
@@ -262,6 +208,243 @@ class LSEMGaussianConditional(conditionals.ConditionalGaussianDensity):
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y,)
         return p_y
+
+
+class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
+    def __init__(
+        self,
+        M: jnp.ndarray,
+        b: jnp.ndarray,
+        mu: jnp.ndarray,
+        length_scale: jnp.ndarray,
+        Sigma: jnp.ndarray = None,
+        Lambda: jnp.ndarray = None,
+        ln_det_Sigma: jnp.ndarray = None,
+    ):
+        """A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
+
+        p(y|x) = N(mu(x), Sigma)
+
+        with the conditional mean function mu(x) = M phi(x) + b. 
+        phi(x) is a feature vector of the form
+
+        phi(x) = (1,x_1,...,x_m,k(h_1(x)),...,k(h_n(x))),
+
+        with
+
+        k(h) = exp(-h^2 / 2) and h_i(x) = (x_i - mu_{i}) / length_scale_i.
+
+        Note, that the affine transformations will be approximated via moment matching.
+
+
+        :param M: Matrix in the mean function. Dimensions should be [1, Dy, Dphi]
+        :type M: jnp.ndarray
+        :param b: Vector in the conditional mean function. Dimensions should be [1, Dy]
+        :type b: jnp.ndarray
+        :param mu: Parameters for linear mapping in the nonlinear functions. Dimensions should be [Dk, Dx]
+        :type mu: jnp.ndarray
+        :param length_scale: Length-scale of the kernels. Dimensions should be [Dk, Dx]
+        :type length_scale: jnp.ndarray
+        :param Sigma: The covariance matrix of the conditional. Dimensions should be [1, Dy, Dy], defaults to None
+        :type Sigma: jnp.ndarray, optional
+        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [1, Dy, Dy], defaults to None
+        :type Lambda: jnp.ndarray, optional
+        :param ln_det_Sigma:  Log determinant of the covariance matrix. Dimensions should be [1], defaults to None
+        :type ln_det_Sigma: jnp.ndarray, optional
+        """
+        super().__init__(M, b, Sigma, Lambda, ln_det_Sigma)
+        self.mu = mu
+        self.length_scale = length_scale
+        self.Dk, self.Dx = self.mu.shape
+        self.Dphi = self.Dk + self.Dx
+        self.update_phi()
+
+    def update_phi(self):
+        """ Set up the non-linear kernel function in phi(x).
+        """
+        Lambda = jnp.eye(self.Dx)[None] / self.length_scale[:, None] ** 2
+        nu = self.mu / self.length_scale ** 2
+        ln_beta = -0.5 * jnp.sum((self.mu / self.length_scale) ** 2, axis=1)
+        self.k_func = measures.GaussianDiagMeasure(
+            Lambda=Lambda, nu=nu, ln_beta=ln_beta
+        )
+
+    def integrate_log_conditional(
+        self,
+        p_yx: densities.GaussianDensity,
+        p_x: densities.GaussianDensity = None,
+        **kwargs
+    ) -> jnp.ndarray:
+        """Integrate over the log conditional with respect to the pdf p_yx. I.e.
+        
+        int log(p(y|x))p(y,x)dydx.
+
+        :param p_yx: Probability density function (first dimensions are y, last ones are x).
+        :type p_yx: measures.GaussianMeasure
+        :raises NotImplementedError: Only implemented for R=1.
+        :return: Returns the integral with respect to density p_yx.
+        :rtype: jnp.ndarray
+        """
+        if self.R != 1:
+            raise NotImplementedError("Only implemented for R=1.")
+
+        # E[(y - Mx - b)' Lambda (y - Mx - b)]
+        A = jnp.empty((self.R, self.Dy, self.Dy + self.Dx))
+        A = A.at[:, :, : self.Dy].set(jnp.eye(self.Dy, self.Dy)[None])
+        A = A.at[:, :, self.Dy :].set(-self.M[:, :, : self.Dx])
+        b = -self.b
+        A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
+        b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
+        quadratic_integral = p_yx.integrate(
+            "(Ax+a)'(Bx+b)", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+        )
+        # E[(y - Mx - b) Lambda Mk phi(x)]
+
+        Lambda_joint = jnp.zeros((self.Dk, self.Dy + self.Dx, self.Dy + self.Dx))
+        Lambda_joint = Lambda_joint.at[:, self.Dy :, self.Dy :].set(self.k_func.Lambda)
+        nu_joint = jnp.zeros([self.Dk, self.Dy + self.Dx])
+        nu_joint = nu_joint.at[:, self.Dy :].set(self.k_func.nu)
+        joint_k_func = factors.ConjugateFactor(
+            Lambda=Lambda_joint, nu=nu_joint, ln_beta=self.k_func.ln_beta
+        )
+        p_yx_k = p_yx.multiply(joint_k_func, update_full=True)
+        E_k_lin_term = jnp.reshape(
+            p_yx_k.integrate("(Ax+a)", A_mat=A_tilde, a_vec=b_tilde),
+            (p_yx.R, self.Dk, self.Dy),
+        )
+        Mk = self.M[:, :, self.Dx :]
+        lin_kernel_integral = jnp.einsum("abc,acb->a", Mk, E_k_lin_term)
+
+        # E[phi(x)' Mk'  Lambda Mk phi(x)]
+        if p_x is None:
+            p_x = p_yx.get_marginal(jnp.arange(self.Dy, self.Dy + self.Dx))
+        p_x_kk = p_x.multiply(self.k_func).multiply(self.k_func, update_full=True)
+        E_kk = jnp.reshape(p_x_kk.integral_light(), (p_x.R, self.Dk, self.Dk))
+        E_MkkM = jnp.einsum("abc,adc->adb", jnp.einsum("abc,acd-> abd", Mk, E_kk), Mk)
+        kernel_kernel_integral = jnp.trace(
+            jnp.einsum("abc,acd->abd", self.Lambda, E_MkkM), axis1=-2, axis2=-1
+        )
+        constant = self.ln_det_Sigma + self.Dy * jnp.log(2.0 * jnp.pi)
+        log_expectation = -0.5 * (
+            quadratic_integral
+            - 2 * lin_kernel_integral
+            + kernel_kernel_integral
+            + constant
+        )
+        return log_expectation
+
+    def integrate_log_conditional_y(
+        self, p_x: densities.GaussianDensity, **kwargs
+    ) -> callable:
+        """Compute the expectation over the log conditional, but just over x. I.e. it returns
+
+        f(y) = int log(p(y|x))p(x)dx.
+    
+        :param p_x: Density over x.
+        :type p_x: measures.GaussianDensity
+        :raises NotImplementedError: Only implemented for R=1.
+        :return: The integral as function of y.
+        :rtype: callable
+        """
+        if self.R != 1:
+            raise NotImplementedError("Only implemented for R=1.")
+
+        A = self.M[:, :, : self.Dx]
+        b = self.b
+        A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
+        b_tilde = jnp.einsum("abc,ac->ab", self.Lambda, b)
+
+        Mk = self.M[:, :, self.Dx :]
+        linear_integral = p_x.integrate("(Ax+a)", A_mat=A_tilde, a_vec=b_tilde)
+        p_x_k = p_x.multiply(self.k_func, update_full=True)
+        E_k = jnp.reshape(p_x_k.integrate(), (p_x.R, self.Dk))
+        E_Mk = jnp.einsum("abc,ac->ab", self.Lambda, jnp.einsum("abc,ac->ab", Mk, E_k))
+        linear_term = linear_integral + E_Mk
+        quadratic_integral = p_x.integrate(
+            "(Ax+a)'(Bx+b)", A_mat=A, a_vec=b, B_mat=A_tilde, b_vec=b_tilde
+        )
+        E_k_lin = jnp.reshape(
+            p_x_k.integrate("(Ax+a)", A_mat=A_tilde, a_vec=b_tilde),
+            (p_x.R, self.Dk, self.Dy),
+        )
+        E_Mk_lin = jnp.einsum("abc,acb->a", Mk, E_k_lin)
+        p_x_kk = p_x_k.multiply(self.k_func, update_full=True)
+        E_kk = jnp.reshape(p_x_kk.integral_light(), (p_x.R, self.Dk, self.Dk))
+        E_MkkM = jnp.einsum("abc,adc->adb", jnp.einsum("abc,acd-> abd", Mk, E_kk), Mk)
+        kernel_kernel_integral = jnp.trace(
+            jnp.einsum("abc,acd->abd", self.Lambda, E_MkkM), axis1=-2, axis2=-1
+        )
+        constant_term = -0.5 * (
+            quadratic_integral
+            + 2 * E_Mk_lin
+            + kernel_kernel_integral
+            + self.ln_det_Sigma
+            + self.Dy * jnp.log(2.0 * jnp.pi)
+        )
+
+        log_expectation_y = (
+            lambda y: -0.5
+            * jnp.einsum("ab,ab -> a", y, jnp.einsum("abc,ac->ab", self.Lambda, y))
+            + jnp.einsum("ab,ab->a", y, linear_term)
+            + constant_term
+        )
+        return log_expectation_y
+
+
+class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
+    def __init__(
+        self,
+        M: jnp.ndarray,
+        b: jnp.ndarray,
+        W: jnp.ndarray,
+        Sigma: jnp.ndarray = None,
+        Lambda: jnp.ndarray = None,
+        ln_det_Sigma: jnp.ndarray = None,
+    ):
+        """A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
+
+        p(y|x) = N(mu(x), Sigma)
+
+        with the conditional mean function mu(x) = M phi(x) + b. 
+        phi(x) is a feature vector of the form
+
+        phi(x) = (1,x_1,...,x_m,k(h_1(x)),...,k(h_n(x))),
+
+        with
+
+        k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
+
+        Note, that the affine transformations will be approximated via moment matching.
+
+
+        :param M: Matrix in the mean function. Dimensions should be [1, Dy, Dphi]
+        :type M: jnp.ndarray
+        :param b: Vector in the conditional mean function. Dimensions should be [1, Dy]
+        :type b: jnp.ndarray
+        :param W: Parameters for linear mapping in the nonlinear functions. Dimensions should be [Dk, Dx + 1]
+        :type W: jnp.ndarray
+        :param Sigma: The covariance matrix of the conditional. Dimensions should be [1, Dy, Dy], defaults to None
+        :type Sigma: jnp.ndarray, optional
+        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [1, Dy, Dy], defaults to None
+        :type Lambda: jnp.ndarray, optional
+        :param ln_det_Sigma:  Log determinant of the covariance matrix. Dimensions should be [1], defaults to None
+        :type ln_det_Sigma: jnp.ndarray, optional
+        """
+        super().__init__(M, b, Sigma, Lambda, ln_det_Sigma)
+        self.w0 = W[:, 0]
+        self.W = W[:, 1:]
+        self.Dx = self.W.shape[1]
+        self.Dk = self.W.shape[0]
+        self.Dphi = self.Dk + self.Dx
+        self.update_phi()
+
+    def update_phi(self):
+        """ Set up the non-linear kernel function in phi(x).
+        """
+        v = self.W
+        nu = self.W * self.w0[:, None]
+        ln_beta = -0.5 * self.w0 ** 2
+        self.k_func = factors.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
 
     def integrate_log_conditional(
         self,
