@@ -10,15 +10,24 @@ from jax.tree_util import tree_flatten, tree_unflatten
 from jax.flatten_util import ravel_pytree
 from itertools import count
 
+from objax import Jit, Grad
+from objax.module import Module, ModuleList
+from objax.typing import JaxArray
+from objax.util import class_name
+from objax.variable import TrainRef, StateVar, TrainVar, VarCollection
 
-def minimize(fun, x0, 
-             method=None,
-             args=(), 
-             bounds=None, 
-             constraints=(), 
-             tol=None,
-             callback=None, 
-             options=None):
+
+def minimize(
+    fun,
+    x0,
+    method=None,
+    args=(),
+    bounds=None,
+    constraints=(),
+    tol=None,
+    callback=None,
+    options=None,
+):
     """
     A simple wrapper for scipy.optimize.minimize using JAX.
     
@@ -131,36 +140,167 @@ def minimize(fun, x0,
     """
     # Use tree flatten and unflatten to convert params x0 from PyTrees to flat arrays
     x0_flat, unravel = ravel_pytree(x0)
-    
-    # Wrap the objective function to consume flat _original_ 
+
+    # Wrap the objective function to consume flat _original_
     # numpy arrays and produce scalar outputs.
     def fun_wrapper(x_flat, *args):
         x = unravel(x_flat)
         return float(fun(x, *args))
+
     # Wrap the gradient in a similar manner
     jac = jit(grad(fun))
+
     def jac_wrapper(x_flat, *args):
         x = unravel(x_flat)
         g_flat, _ = ravel_pytree(jac(x, *args))
         return onp.array(g_flat, dtype=onp.float64)
+
     # Wrap the callback to consume a pytree
     def callback_wrapper(x_flat, *args):
         if callback is not None:
             x = unravel(x_flat)
             return callback(x, *args)
-    
+
     # Minimize with scipy
-    results = scipy.optimize.minimize(fun_wrapper, 
-                                      x0_flat, 
-                                      args=args,
-                                      method=method,
-                                      jac=jac_wrapper, 
-                                      callback=callback_wrapper, 
-                                      bounds=bounds, 
-                                      constraints=constraints, 
-                                      tol=tol,
-                                      options=options)
-    
+    results = scipy.optimize.minimize(
+        fun_wrapper,
+        x0_flat,
+        args=args,
+        method=method,
+        jac=jac_wrapper,
+        callback=callback_wrapper,
+        bounds=bounds,
+        constraints=constraints,
+        tol=tol,
+        options=options,
+    )
+
     # pack the output back into a PyTree
     results["x"] = unravel(results["x"])
     return results
+
+
+from typing import List, Optional
+
+from jax import numpy as jn
+import numpy as onp
+
+from objax import functional
+from objax.module import Module, ModuleList
+from objax.typing import JaxArray
+from objax.util import class_name
+from objax.variable import TrainRef, StateVar, TrainVar, VarCollection
+import scipy
+
+
+class ScipyMinimize(Module):
+    """Adam optimizer."""
+
+    def __init__(
+        self,
+        fun: callable,
+        vc: VarCollection,
+        method=None,
+        args=(),
+        bounds=None,
+        constraints=(),
+        tol=None,
+        callback=None,
+        options=None,
+    ):
+        """Constructor for Adam optimizer class.
+
+            Args:
+                vc: collection of variables to optimize.
+                beta1: value of Adam's beta1 hyperparameter. Defaults to 0.9.
+                beta2: value of Adam's beta2 hyperparameter. Defaults to 0.999.
+                eps: value of Adam's epsilon hyperparameter. Defaults to 1e-8.
+            """
+        self.fun = Jit(fun)
+        self.jac = Jit(Grad(fun, vc))
+        self.step = StateVar(jn.array(0, jn.uint32), reduce=lambda x: x[0])
+        self.train_vars = ModuleList(TrainRef(x) for x in vc.subset(TrainVar))
+        self.method = method
+        self.args = args
+        self.bounds = bounds
+        self.constraints = constraints
+        self.tol = tol
+        self.callback = callback
+        self.options = options
+
+    def unravel_vars(self, x):
+        total_elements = 0
+        var_list = []
+        for tv in self.train_vars:
+            dims = tv.shape
+            num_elements = jn.prod(jn.array(dims, dtype=int))
+            var_list.append(
+                x[total_elements : total_elements + num_elements].reshape(dims)
+            )
+            total_elements += num_elements
+        return var_list
+
+    def ravel_vars(self, train_vars=None):
+        if train_vars is None:
+            train_vars = self.train_vars
+        x = jn.array([])
+        for tv in train_vars:
+            x = jn.concatenate([x, tv.flatten()])
+        return x
+
+    def minimize(self, args: tuple = ()):
+        def fun_wrapper(x_flat, *args):
+            vc = self.unravel_vars(x_flat)
+            self(vc)
+            return float(self.fun(*args))
+
+        def jac_wrapper(x_flat, *args):
+            vc = self.unravel_vars(x_flat)
+            self(vc)
+            g_flat = self.ravel_vars(self.jac(*args))
+            if self.method == "L-BFGS-B":
+                return onp.array(g_flat, dtype=onp.float64)
+            else:
+                return onp.array(g_flat)
+
+        def callback_wrapper(x_flat, *args):
+            if self.callback is not None:
+                vc = self.unravel(x_flat)
+                self(vc)
+                return self.callback(*args)
+
+        x0_flat = self.ravel_vars()
+        results = scipy.optimize.minimize(
+            fun_wrapper,
+            x0_flat,
+            args=args,
+            method=self.method,
+            jac=jac_wrapper,
+            callback=callback_wrapper,
+            bounds=self.bounds,
+            constraints=self.constraints,
+            tol=self.tol,
+            options=self.options,
+        )
+        results["x"] = self.unravel_vars(results["x"])
+        self(results["x"])
+        return results
+
+    def __call__(self, new_params: List[JaxArray]):
+        """Updates variables and other state based on Adam algorithm.
+
+            Args:
+                lr: the learning rate.
+                grads: the gradients to apply.
+                beta1: optional, override the default beta1.
+                beta2: optional, override the default beta2.
+            """
+        assert len(new_params) == len(
+            self.train_vars
+        ), "Expecting as many gradients as trainable variables"
+        for new_p, p in zip(new_params, self.train_vars):
+            p.value = jn.array(new_p)
+
+    def __repr__(self):
+        return f"{class_name(self)})"
+
