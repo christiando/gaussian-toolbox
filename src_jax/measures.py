@@ -7,6 +7,7 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
+__all__ = ["GaussianMeasure", "GaussianDiagMeasure"]
 
 from jax import numpy as jnp
 from src_jax import factors

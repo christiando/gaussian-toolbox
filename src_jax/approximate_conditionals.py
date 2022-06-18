@@ -1,3 +1,10 @@
+__author__ = "Christian Donner"
+__all__ = [
+    "LRBFGaussianConditional",
+    "LSEMGaussianConditional",
+    "HCCovGaussianConditional",
+]
+
 from jax import numpy as jnp
 from typing import Tuple
 from src_jax import densities, factors, measures, conditionals

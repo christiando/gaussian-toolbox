@@ -8,6 +8,7 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
+__all__ = ["ConditionalGaussianDensity", "NNControlGaussianConditional"]
 
 # import jnp
 # from densities import GaussianDensity

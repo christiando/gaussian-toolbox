@@ -8,10 +8,9 @@
 ##################################################################################################
 __author__ = "Christian Donner"
 
+__all__ = ["ConjugateFactor", "OneRankFactor", "LinearFactor", "ConstantFactor"]
 from jax import numpy as jnp
-from jax import scipy as jsc
 from utils import linalg
-from typing import Tuple
 
 
 class ConjugateFactor:

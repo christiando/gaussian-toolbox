@@ -7,6 +7,7 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
+__all__ = ["GaussianDensity", "GaussianDiagDensity"]
 
 from jax import numpy as jnp
 from jax import lax, random
