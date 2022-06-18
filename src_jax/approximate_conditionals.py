@@ -221,7 +221,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
     ):
-        """A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
+        """A conditional Gaussian density, with a linear RBF mean (LRBFM) function,
 
         p(y|x) = N(mu(x), Sigma)
 
