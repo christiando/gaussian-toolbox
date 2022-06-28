@@ -26,7 +26,7 @@ where $`f`$ is can be up to fourth order of $`\mathbf{x}`$. Furthermore, some fu
 
 ### The code structure
 
-The main code is in `/src_jax/` folder. 
+The main code is in `gaussian_algebra` folder. 
 
 + `factors.py` contains the main utilities for functions that are conjugate to Gaussian measures, i.e. its product with a Gaussian measure is again a Gaussian measure. The main class is `ConjugateFactor`, which is the most general functional form. Check the documentation for subclasses.
 + `measures.py` contains the functionality of `GaussianMeasure`, i.e. the integration functionality. They can be multiplied with `ConjugateFactor` and the result are again `GaussianMeasure`. In addition `GaussianMixtureMeasure` is provided that is a class for a linear combination of Gaussian measures. Check the documentation for subclasses.
@@ -47,3 +47,7 @@ A certain number of models of probalistic time-series models is provided. One cl
 ```
 
 with $\zeta_t \sim N(0,\Sigma_z(t))$ and $\xi_t \sim N(0,\Sigma_x(t))$. The first equation is the so-called state equation, defining the _state model_, and the second equation  is the observation (aka emission) equation, defining the _observation model_. This library provides various state- and observation models, that can be combined. An __expectation-maximization (EM) algorithm__ is used for inference. For details see [here](timeseries_jax/README_timeseries.md).
+
+# Installation
+
+Clone the repository into a directory and go into the folder. Type `pip install .` for installation or `pip install -e .` for developement installation.
