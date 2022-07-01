@@ -32,11 +32,11 @@ class TestGaussianDensity:
     def test_init(self, R, D):
         d = self.create_instance(R, D)
         assert d.Sigma.shape == (d.R, d.D, d.D)
-        assert jnp.alltrue(d.ln_det_Lambda == -d.ln_det_Sigma)
+        assert jnp.allclose(d.ln_det_Lambda, -d.ln_det_Sigma)
         assert d.nu.shape == (d.R, d.D)
         assert d.ln_beta.shape == (d.R,)
         assert jnp.alltrue(d.is_normalized())
-        assert jnp.alltrue(d.integrate() == 1)
+        assert jnp.allclose(d.integrate(), 1)
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
     def test_sample(self, R, D):
@@ -62,13 +62,13 @@ class TestGaussianDensity:
     def test_slice(self, R, D, idx):
         d = self.create_instance(R, D)
         d_new = d.slice(idx)
-        assert jnp.alltrue(d_new.Lambda == d.Lambda[idx])
-        assert jnp.alltrue(d_new.nu == d.nu[idx])
-        assert jnp.alltrue(d_new.Sigma == d.Sigma[idx])
-        assert jnp.alltrue(d_new.mu == d.mu[idx])
-        assert jnp.alltrue(d_new.ln_beta == d.ln_beta[idx])
-        assert jnp.alltrue(d_new.ln_det_Sigma == d.ln_det_Sigma[idx])
-        assert jnp.alltrue(d_new.ln_det_Lambda == d.ln_det_Lambda[idx])
+        assert jnp.allclose(d_new.Lambda, d.Lambda[idx])
+        assert jnp.allclose(d_new.nu, d.nu[idx])
+        assert jnp.allclose(d_new.Sigma, d.Sigma[idx])
+        assert jnp.allclose(d_new.mu, d.mu[idx])
+        assert jnp.allclose(d_new.ln_beta, d.ln_beta[idx])
+        assert jnp.allclose(d_new.ln_det_Sigma, d.ln_det_Sigma[idx])
+        assert jnp.allclose(d_new.ln_det_Lambda, d.ln_det_Lambda[idx])
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
     def test_update(self, R, D):
@@ -76,13 +76,13 @@ class TestGaussianDensity:
         d_update = self.create_instance(1, D)
         idx = jnp.array([0,])
         d.update(idx, d_update)
-        assert jnp.alltrue(d_update.Lambda == d.Lambda[idx])
-        assert jnp.alltrue(d_update.nu == d.nu[idx])
-        assert jnp.alltrue(d_update.Sigma == d.Sigma[idx])
-        assert jnp.alltrue(d_update.mu == d.mu[idx])
-        assert jnp.alltrue(d_update.ln_beta == d.ln_beta[idx])
-        assert jnp.alltrue(d_update.ln_det_Sigma == d.ln_det_Sigma[idx])
-        assert jnp.alltrue(d_update.ln_det_Lambda == d.ln_det_Lambda[idx])
+        assert jnp.allclose(d_update.Lambda, d.Lambda[idx])
+        assert jnp.allclose(d_update.nu, d.nu[idx])
+        assert jnp.allclose(d_update.Sigma, d.Sigma[idx])
+        assert jnp.allclose(d_update.mu, d.mu[idx])
+        assert jnp.allclose(d_update.ln_beta, d.ln_beta[idx])
+        assert jnp.allclose(d_update.ln_det_Sigma, d.ln_det_Sigma[idx])
+        assert jnp.allclose(d_update.ln_det_Lambda, d.ln_det_Lambda[idx])
 
     @pytest.mark.parametrize(
         "R, D, dim_x",
@@ -96,9 +96,9 @@ class TestGaussianDensity:
     def test_get_marginal(self, R, D, dim_x):
         d = self.create_instance(R, D)
         md = d.get_marginal(dim_x)
-        assert jnp.alltrue(md.mu == d.mu[:, dim_x])
+        assert jnp.allclose(md.mu, d.mu[:, dim_x])
         idx = jnp.ix_(jnp.arange(R), dim_x, dim_x)
-        assert jnp.alltrue(md.Sigma == d.Sigma[idx])
+        assert jnp.allclose(md.Sigma, d.Sigma[idx])
         assert jnp.alltrue(md.is_normalized())
         assert jnp.alltrue(md.integrate() == 1)
 

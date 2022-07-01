@@ -65,10 +65,7 @@ class ConditionalGaussianDensity:
             self.ln_det_Lambda = -self.ln_det_Sigma
         else:
             self.Lambda = Lambda
-            if Sigma is None or ln_det_Sigma is None:
-                self.Sigma, self.ln_det_Lambda = invert_matrix(self.Sigma)
-            else:
-                self.Sigma, self.ln_det_Lambda = Lambda, ln_det_Sigma
+            self.Sigma, self.ln_det_Lambda = invert_matrix(self.Lambda)
             self.ln_det_Sigma = -self.ln_det_Lambda
 
     def __str__(self) -> str:
@@ -147,10 +144,19 @@ class ConditionalGaussianDensity:
         :return: The conjugate factor where the first dimension is R.
         :rtype: factors.ConjugateFactor
         """
+        try:
+            assert self.R == 1 or y.shape[0] == self.R
+        except AssertionError:
+            raise RuntimeError(
+                "Either R should be one or the leading dimension should be equal to R"
+            )
+
         y_minus_b = y - self.b
         Lambda_new = jnp.einsum(
             "abc,acd->abd", jnp.einsum("abd, abc -> adc", self.M, self.Lambda), self.M,
         )
+        if self.R == 1:
+            Lambda_new = jnp.tile(Lambda_new, (y.shape[0], 1, 1))
         nu_new = jnp.einsum(
             "abc, ab -> ac",
             jnp.einsum("abc, acd -> abd", self.Lambda, self.M),
@@ -465,6 +471,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         if self.R != 1:
             raise NotImplementedError("So far only R=1 is supported.")
         self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
+        self.ln_det_Lambda = -self.ln_det_Sigma
         self.Dy, self.Dx, self.Du = self.Sigma.shape[1], Dx, Du
         self.hidden_units = hidden_units
         self.non_linearity = non_linearity
