@@ -14,6 +14,12 @@ Welcome to Gaussian Toolbox's documentation!
 
 .. toctree::
    :maxdepth: 1
+   :caption: Introduction:
+
+   notebooks/gaussian_objects
+
+.. toctree::
+   :maxdepth: 1
    :caption: API
 
    gaussian_toolbox.gaussian_algebra
