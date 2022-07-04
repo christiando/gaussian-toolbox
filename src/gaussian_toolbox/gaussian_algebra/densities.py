@@ -7,7 +7,6 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
-__all__ = ["GaussianDensity", "GaussianDiagDensity"]
 
 from jax import numpy as jnp
 from jax import lax, random
@@ -20,6 +19,18 @@ from ..utils.linalg import invert_matrix, invert_diagonal
 
 
 class GaussianDensity(measures.GaussianMeasure):
+    """A normalized Gaussian density, with specified mean and covariance matrix.
+
+    :param Sigma: Covariance matrices of the Gaussian densities. Dimensions should be [R, D, D].
+    :type Sigma: jnp.ndarray
+    :param mu: Mean of the Gaussians. Dimensions should be
+    :type mu: jnp.ndarray
+    :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, D, D], defaults to None
+    :type Lambda: jnp.ndarray, optional
+    :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
+    :type ln_det_Sigma: jnp.ndarray, optional
+    """
+
     def __init__(
         self,
         Sigma: jnp.ndarray,
@@ -27,17 +38,6 @@ class GaussianDensity(measures.GaussianMeasure):
         Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
     ):
-        """A normalized Gaussian density, with specified mean and covariance matrix.
-
-        :param Sigma: Covariance matrices of the Gaussian densities. Dimensions should be [R, D, D].
-        :type Sigma: jnp.ndarray
-        :param mu: Mean of the Gaussians. Dimensions should be
-        :type mu: jnp.ndarray
-        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, D, D], defaults to None
-        :type Lambda: jnp.ndarray, optional
-        :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
-        :type ln_det_Sigma: jnp.ndarray, optional
-        """
         if Lambda is None:
             Lambda, ln_det_Sigma = invert_matrix(Sigma)
         elif ln_det_Sigma is None:
@@ -119,9 +119,11 @@ class GaussianDensity(measures.GaussianMeasure):
         return marginal_density
 
     def entropy(self) -> jnp.ndarray:
-        """Computes the entropy of the density.
+        r"""Computes the entropy of the density.
         
-        H[p] = -\int p(x)ln p(x) dx
+        .. math::
+        
+            H_X = -\int p(X)\log p(X) {\rm d}X
 
         :return: Entropy of the density 
         :rtype: jnp.ndarray [R]
@@ -130,9 +132,11 @@ class GaussianDensity(measures.GaussianMeasure):
         return entropy
 
     def kl_divergence(self, p1: "GaussianDensity") -> jnp.ndarray:
-        """ Compute the Kulback Leibler divergence between two multivariate Gaussians.
+        r""" Compute the Kulback Leibler divergence between two multivariate Gaussians.
         
-        D_KL(p|p1) = \int p(x)\log p(x)/p1(x) dx
+        .. math
+        
+            D_KL(p|p1) = \int p(X)\log \frac{p(X)}{p_1(X)} {\rm d}X
 
         :param p1: The other Gaussian Density.
         :type p1: GaussianDensity
@@ -158,11 +162,11 @@ class GaussianDensity(measures.GaussianMeasure):
         return kl_div
 
     def condition_on(self, dim_y: jnp.ndarray) -> "ConditionalGaussianDensity":
-        """Return density conditioned on indicated dimensions, i.e. p(x|y).
+        """Return density conditioned on indicated dimensions, i.e. :math:`p(X|Y)`.
 
         :param dim_y: The dimensions of the variables, that should be conditioned on.
         :type dim_y: jnp.ndarray
-        :return: The corresponding conditional Gaussian density p(x|y).
+        :return: The corresponding conditional Gaussian density :math:`p(X|Y)`.
         :rtype: ConditionalGaussianDensity
         """
         from . import conditionals
@@ -181,13 +185,13 @@ class GaussianDensity(measures.GaussianMeasure):
     def condition_on_explicit(
         self, dim_y: jnp.ndarray, dim_x: jnp.ndarray
     ) -> "ConditionalGaussianDensity":
-        """Returns density conditioned on indicated dimensions, i.e. p(x|y).
+        """Returns density conditioned on indicated dimensions, i.e. :math:`p(X|Y)`.
 
         :param dim_y: The dimensions of the variables, that should be conditioned on.
         :type dim_y: jnp.ndarray
         :param dim_x: The dimensions of the variables, that should be still be free.
         :type dim_x: jnp.ndarray
-        :return: The corresponding conditional Gaussian density p(x|y).
+        :return: The corresponding conditional Gaussian density :math:`p(X|Y)`.
         :rtype: ConditionalGaussianDensity
         """
         from . import conditionals
@@ -200,7 +204,12 @@ class GaussianDensity(measures.GaussianMeasure):
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
         )
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
+        """Write Gaussian into dict.
+
+        :return: Dictionary with relevant parameters.
+        :rtype: dict
+        """
         density_dict = {
             "Sigma": self.Sigma,
             "mu": self.mu,
@@ -211,6 +220,20 @@ class GaussianDensity(measures.GaussianMeasure):
 
 
 class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
+    """A normalized Gaussian density, with specified mean and covariance matrix. 
+    
+    :math`\Sigma` should be diagonal (and hence :math:`Lambda?).
+
+    :param Sigma: Covariance matrices of the Gaussian densities. Must be diagonal. Dimensions should be [R, D, D].
+    :type Sigma: jnp.ndarray
+    :param mu: Mean of the Gaussians. Dimensions should be [R, D]
+    :type mu: jnp.ndarray
+    :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, D, D], defaults to None
+    :type Lambda: jnp.ndarray, optional
+    :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
+    :type ln_det_Sigma: jnp.ndarray, optional
+    """
+
     def __init__(
         self,
         Sigma: jnp.ndarray,
@@ -218,19 +241,6 @@ class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
         Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
     ):
-        """A normalized Gaussian density, with specified mean and covariance matrix. 
-        
-        Sigma should be diagonal (and hence Lambda).
-
-        :param Sigma: Covariance matrices of the Gaussian densities. Dimensions should be [R, D, D].
-        :type Sigma: jnp.ndarray
-        :param mu: Mean of the Gaussians. Dimensions should be
-        :type mu: jnp.ndarray
-        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, D, D], defaults to None
-        :type Lambda: jnp.ndarray, optional
-        :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
-        :type ln_det_Sigma: jnp.ndarray, optional
-        """
         Lambda, ln_det_Sigma = invert_diagonal(Sigma)
         super().__init__(
             Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma,

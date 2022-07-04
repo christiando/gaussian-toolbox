@@ -8,13 +8,13 @@ Welcome to Gaussian Toolbox's documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Getting Started
 
+   readme_link
 
+.. toctree::
+   :maxdepth: 1
+   :caption: API
 
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+   gaussian_toolbox.gaussian_algebra
+   gaussian_toolbox.timeseries

@@ -7,7 +7,6 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
-__all__ = ["GaussianMeasure", "GaussianDiagMeasure"]
 
 from jax import numpy as jnp
 from . import factors
@@ -17,6 +16,32 @@ from ..utils.linalg import invert_matrix, invert_diagonal
 
 
 class GaussianMeasure(factors.ConjugateFactor):
+    r"""A measure with a Gaussian form.
+
+    .. math::
+    
+        u(X) = \beta * \exp(- 0.5 * X^\top\Lambda X + X^\top\nu),
+
+    D is the dimension, and R the number of Gaussians. 
+
+    :param Lambda: Information (precision) matrix of the Gaussian distributions. Needs to be postive definite. 
+        Dimensions should be [R, D, D].
+    :type Lambda: jnp.ndarray
+    :param nu: Information vector of a Gaussian distribution. If None all zeros. Dimensions should be [R, D], 
+        defaults to None
+    :type nu: jnp.ndarray, optional
+    :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
+        defaults to None
+    :type ln_beta: jnp.ndarray, optional
+    :param Sigma: Covariance matrix of the Gaussian distributions. Needs to be positive definite. 
+        Dimensions should be [R, D, D], defaults to None
+    :type Sigma: jnp.ndarray, optional
+    :param ln_det_Lambda: Log determinant of Lambda. Dimensions should be [R], defaults to None
+    :type ln_det_Lambda: jnp.ndarray, optional
+    :param ln_det_Sigma: Log determinant of Sigma. Dimensions should be [R], defaults to None
+    :type ln_det_Sigma: jnp.ndarray, optional
+    """
+
     def __init__(
         self,
         Lambda: jnp.ndarray,
@@ -26,30 +51,6 @@ class GaussianMeasure(factors.ConjugateFactor):
         ln_det_Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
     ):
-        """A measure with a Gaussian form.
-
-        u(x) = beta * exp(- 0.5 * x'Lambda x + x'nu),
-
-        D is the dimension, and R the number of Gaussians. 
-
-        :param Lambda: Information (precision) matrix of the Gaussian distributions. Needs to be postive definite. 
-            Dimensions should be [R, D, D].
-        :type Lambda: jnp.ndarray
-        :param nu: Information vector of a Gaussian distribution. If None all zeros. Dimensions should be [R, D], 
-            defaults to None
-        :type nu: jnp.ndarray, optional
-        :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
-            defaults to None
-        :type ln_beta: jnp.ndarray, optional
-        :param Sigma: Covariance matrix of the Gaussian distributions. Needs to be positive definite. 
-            Dimensions should be [R, D, D], defaults to None
-        :type Sigma: jnp.ndarray, optional
-        :param ln_det_Lambda: Log determinant of Lambda. Dimensions should be [R], defaults to None
-        :type ln_det_Lambda: jnp.ndarray, optional
-        :param ln_det_Sigma: Log determinant of Sigma. Dimensions should be [R], defaults to None
-        :type ln_det_Sigma: jnp.ndarray, optional
-        """
-
         super().__init__(Lambda, nu, ln_beta)
         self.Sigma = Sigma
         self.ln_det_Lambda = ln_det_Lambda
@@ -94,7 +95,7 @@ class GaussianMeasure(factors.ConjugateFactor):
         return new_measure
 
     def _prepare_integration(self):
-        """Compute the log normalization and mu. (Requires inversion of precision matrix.)
+        """Compute the log normalization and :math:`\mu`. (Requires inversion of precision matrix.)
         """
         if self.lnZ is None:
             self.compute_lnZ()
@@ -120,9 +121,9 @@ class GaussianMeasure(factors.ConjugateFactor):
         self.ln_det_Sigma = -self.ln_det_Lambda
 
     def __mul__(self, factor: factors.ConjugateFactor,) -> "GaussianMeasure":
-        """Compute the product between the measure u and a conjugate factor f.
+        r"""Compute the product between the measure :math:`u(X)` and a conjugate factor :math:`f(X)`.
 
-        Returns f(x) * u(x).
+        Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
         :type factor: factors.ConjugateFactor
@@ -134,9 +135,9 @@ class GaussianMeasure(factors.ConjugateFactor):
     def multiply(
         self, factor: factors.ConjugateFactor, update_full: bool = False
     ) -> "GaussianMeasure":
-        """Compute the product between the measure u and a conjugate factor f.
+        """Compute the product between the measure :math:`u(X)` and a conjugate factor :math:`f(X)`.
 
-        Returns f(x) * u(x).
+        Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
         :type factor: factors.ConjugateFactor
@@ -149,9 +150,9 @@ class GaussianMeasure(factors.ConjugateFactor):
     def hadamard(
         self, factor: factors.ConjugateFactor, update_full: bool = False
     ) -> "GaussianMeasure":
-        """Compute the hadamard (componentwise) product between the measure u and a conjugate factor f.
+        """Compute the hadamard (componentwise) product between the measure :math:`u(X)` and a conjugate factor :math:`f(X)`.
 
-        Returns f(x) * u(x).
+        Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
         :type factor: factors.ConjugateFactor
@@ -166,7 +167,9 @@ class GaussianMeasure(factors.ConjugateFactor):
     def product(self) -> "GaussianMeasure":
         """Compute the product over all factors.
         
-            v(x) = \prod_i u_i(x)
+        .. math::
+        
+            v(X) = \prod_i u_i(X)
 
         :return: Factor of all factors.
         :rtype: GaussianMeasure
@@ -180,9 +183,9 @@ class GaussianMeasure(factors.ConjugateFactor):
         return new_measure
 
     def integrate(self, expr: str = "1", **kwargs) -> jnp.ndarray:
-        """ Integrate the indicated expression with respect to the Gaussian measure.
+        r""" Integrate the indicated expression with respect to the Gaussian measure.
         
-        E.g. expr="(Ax+a)" means that \int (Ax + a)phi(x)dx is computed, and A and a can be provided.
+        E.g. expr="(Ax+a)" means that :math:`\int (AX + a)u(X){\rm d}X` is computed, and :math:`A` and a can be provided.
 
         :param expr: Indicates the expression that should be integrated. Check measure's integration dict, 
             defaults to "1"
@@ -193,9 +196,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         return self.integration_dict[expr](**kwargs)
 
     def log_integral_light(self) -> jnp.ndarray:
-        """Compute the log integral of the exponential term.
+        r"""Compute the log integral of the exponential term.
 
-        log \int u(x) dx.
+        .. math::
+        
+            \log \int u(X) {\rm d}X.
 
         :return: Log integral. Dimensions are [R].
         :rtype: jnp.ndarray
@@ -205,9 +210,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         return self.lnZ + self.ln_beta
 
     def log_integral(self) -> jnp.ndarray:
-        """Compute the log integral of the exponential term.
+        r"""Compute the log integral of the exponential term.
 
-        log \int u(x) dx.
+        .. math::
+        
+            \log \int u(X) {\rm d}X.
 
         :return: Log integral. Dimensions are [R].
         :rtype: jnp.ndarray
@@ -216,9 +223,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         return self.lnZ + self.ln_beta
 
     def integral_light(self) -> jnp.ndarray:
-        """ Compute the log integral of the exponential term.
+        r""" Compute the log integral of the exponential term.
+        
+        .. math::
 
-        \int u(x) dx.
+            \int u(X) dX.
 
         :return:  Integral. Dimensions are [R].jnp.ndarray [R]
         :rtype: jnp.ndarray
@@ -226,9 +235,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         return jnp.exp(self.log_integral_light())
 
     def integral(self) -> jnp.ndarray:
-        """ Compute the log integral of the exponential term.
+        r""" Compute the log integral of the exponential term.
 
-        \int u(x) dx.
+        .. math::
+        
+            \int u(X) {\rm d}X.
 
         :return:  Integral. Dimensions are [R].jnp.ndarray [R]
         :rtype: jnp.ndarray
@@ -236,9 +247,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         return jnp.exp(self.log_integral())
 
     def normalize(self):
-        """ Normalize the term such that
+        r""" Normalize the term such that
+        
+        .. math::
 
-        int u(x) dx = 1.
+            \int u(X) {\rm d}X = 1.
         """
         self.compute_lnZ()
         self.ln_beta = -self.lnZ
@@ -303,9 +316,11 @@ class GaussianMeasure(factors.ConjugateFactor):
     # Linear integals
 
     def _expectation_x(self) -> jnp.ndarray:
-        """ Compute the expectation.
+        r""" Compute the expectation.
+        
+        .. math::
 
-            int x du(x) / int du(x)
+            int X {\rm d}u(X) / \int {\rm d}u(X)
 
         :return: The solved intergal. Dimension is [R, D].
         :rtype: jnp.ndarray
@@ -313,9 +328,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         return self.mu
 
     def integrate_x(self) -> jnp.ndarray:
-        """ Compute the integral.
+        r""" Compute the integral.
+        
+        .. math::
 
-            int x du(x)
+            \int X {\rm d}u(X)
 
         :return: The solved intergal. Dimension is [R, D].
         :rtype: jnp.ndarray
@@ -326,11 +343,13 @@ class GaussianMeasure(factors.ConjugateFactor):
     def _expectation_general_linear(
         self, A_mat: jnp.ndarray, a_vec: jnp.ndarray
     ) -> jnp.ndarray:
-        """Compute the linear expectation.
+        r"""Compute the linear expectation.
+        
+        .. math::
 
-        int (Ax+a) dphi(x),
+            \int (AX+a) {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D]
         :type A_mat: jnp.ndarray
@@ -344,11 +363,13 @@ class GaussianMeasure(factors.ConjugateFactor):
     def integrate_general_linear(
         self, A_mat: jnp.ndarray = None, a_vec: jnp.ndarray = None
     ) -> jnp.ndarray:
-        """Compute the linear expectation.
+        r"""Compute the linear expectation.
 
-        int (Ax+a) dphi(x),
+        .. math::
+        
+            \int (AX+a) {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. If None, it is assumed identity. Dimensions should be  [K,D] or [R,K,D], 
             defaults to None
@@ -367,9 +388,11 @@ class GaussianMeasure(factors.ConjugateFactor):
     # Quadratic integrals
 
     def _expectation_xxT(self) -> jnp.ndarray:
-        """Compute the expectation.
+        r"""Compute the expectation.
+        
+        .. math::
 
-        int xx' du(x) / int du(x)
+            \int XX^\top {\rm d}u(X) / \int {\rm d}u(X)
 
         :return: The solved intergal. Dimensions are [R, D, D]
         :rtype: jnp.ndarray
@@ -377,9 +400,12 @@ class GaussianMeasure(factors.ConjugateFactor):
         return self.Sigma + jnp.einsum("ab,ac->acb", self.mu, self.mu)
 
     def integrate_xxT(self) -> jnp.ndarray:
-        """Computes the integral.
+        r"""Compute the integral
         
-        int xx' du(x)
+        .. math::
+        
+            \int XX^\top {\rm d}u(X)
+            
         :return:  The solved intergal. Dimensions are [R, D, D]
         :rtype: jnp.ndarray
         """
@@ -393,11 +419,13 @@ class GaussianMeasure(factors.ConjugateFactor):
         B_mat: jnp.ndarray,
         b_vec: jnp.ndarray,
     ) -> jnp.ndarray:
-        """Computes the quartic expectation.
+        r"""Computes the quartic expectation.
 
-        int (Ax+a)'(Bx+b) dphi(x),
+        .. math::
+        
+            \int (AX+a)^\top(BX+b) {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -428,11 +456,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         B_mat: jnp.ndarray = None,
         b_vec: jnp.ndarray = None,
     ) -> jnp.ndarray:
-        """ Compute the quadratic expectation.
+        r""" Compute the quadratic expectation.
 
-        int (Ax+a)'(Bx+b) dphi(x),
+        int (AX+a)'(BX+b) {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -459,11 +487,13 @@ class GaussianMeasure(factors.ConjugateFactor):
         B_mat: jnp.ndarray,
         b_vec: jnp.ndarray,
     ) -> jnp.ndarray:
-        """Compute the quadratic expectation.
+        r"""Compute the quadratic expectation.
 
-        int (Ax+a)(Bx+b)' dphi(x),
+        .. math::
+        
+            \int (AX+a)(BX+b)^\top {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -491,11 +521,13 @@ class GaussianMeasure(factors.ConjugateFactor):
         B_mat: jnp.ndarray = None,
         b_vec: jnp.ndarray = None,
     ) -> jnp.ndarray:
-        """ Compute the quadratic expectation.
+        r""" Compute the quadratic expectation.
+        
+        .. math::
 
-        int (Ax+a)(Bx+b)' dphi(x),
+            \int (AX+a)(BX+b)' {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -520,11 +552,13 @@ class GaussianMeasure(factors.ConjugateFactor):
     # Cubic integrals
 
     def _expectation_xbxx(self, b_vec: jnp.ndarray) -> jnp.ndarray:
-        """ Compute the cubic expectation.
+        r""" Compute the cubic expectation.
 
-        int xbxx' dphi(x),
+        .. math::
+        
+            \int XbXX^\top {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
 
         :param b_vec: Real avlued vector. Dimensions should be [1, D] or [R, D].
@@ -545,11 +579,13 @@ class GaussianMeasure(factors.ConjugateFactor):
     def _expectation_cubic_outer(
         self, A_mat: jnp.ndarray, a_vec: jnp.ndarray
     ) -> jnp.ndarray:
-        """ Compute the cubic expectation.
+        r""" Compute the cubic expectation.
 
-        int x(A'x + a)x' dphi(x),
+        .. math::
+        
+            \int X(A^\top X + a)X^\top {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. If None, it is assumed identity. Dimensions should be [1,1,D] or [R,1,D].
         :type A_mat: jnp.ndarray
@@ -566,9 +602,11 @@ class GaussianMeasure(factors.ConjugateFactor):
     def integrate_cubic_outer(
         self, A_mat: jnp.ndarray = None, a_vec: jnp.ndarray = None
     ) -> jnp.ndarray:
-        """Compute the cubic integration.
+        r"""Compute the cubic integration.
 
-        int x(A'x + a)x' du(x).
+        .. math::
+        
+            \int X(A^\top X + a)X^\top {\rm d}u(X).
 
         :param A_mat: Real valued matrix. If None, it is assumed identity. Dimensions should be [1,D] or [R,1,D].
         :type A_mat: jnp.ndarray
@@ -591,9 +629,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         )
 
     def integrate_xbxx(self, b_vec: jnp.ndarray) -> jnp.ndarray:
-        """Compute the cubic integral.
+        r"""Compute the cubic integral.
 
-        int xb'xx' du(x)
+        .. math::
+        
+            \int Xb^\top XX^\top {\rm d}u(X)
 
         :param b_vec: Real valued vector. Dimensions should be  [D,] or [1, D,].
         :type b_vec: jnp.ndarray
@@ -616,11 +656,13 @@ class GaussianMeasure(factors.ConjugateFactor):
         C_mat: jnp.ndarray,
         c_vec: jnp.ndarray,
     ) -> jnp.ndarray:
-        """Compute the quartic expectation.
+        r"""Compute the quartic expectation.
 
-        int (Ax+a)(Bx+b)'(Cx+c) dphi(x),
+        .. math::
+        
+            \int (AX+a)(BX+b)^\top(CX+c) {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -662,9 +704,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         C_mat: jnp.ndarray = None,
         c_vec: jnp.ndarray = None,
     ) -> jnp.ndarray:
-        """ Compute the quadratic integration.
+        r"""Compute the quadratic integration.
 
-        int (Ax+a)(Bx+b)'(Cx+c)  du(x).
+        .. math::
+        
+            \int (AX+a)(BX+b)^\top(CX+c)  {\rm d}u(X).
 
         :param A_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -698,11 +742,13 @@ class GaussianMeasure(factors.ConjugateFactor):
         C_mat: jnp.ndarray,
         c_vec: jnp.ndarray,
     ) -> jnp.ndarray:
-        """Compute the cubic expectation.
+        r"""Compute the cubic expectation.
 
-        int (Ax+a)'(Bx+b)(Cx+c)' dphi(x),
+        .. math::
+        
+            \int (AX+a)^\top(BX+b)(CX+c)^\top {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(x) = u(X) / \int {\rm d}u(X)`.
         
         # REMARK: Does the same thing as inner transposed.
 
@@ -751,9 +797,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         C_mat: jnp.ndarray = None,
         c_vec: jnp.ndarray = None,
     ) -> jnp.ndarray:
-        """ Compute the quadratic integration
+        r""" Compute the quadratic integration
+        
+        .. math::
 
-           int (Ax+a)'(Bx+b)(Cx+c)' du(x),
+           \int (AX+a)^\top(Bx+b)(Cx+c)^\top {\rm d}u(X),
 
         :param A_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -791,11 +839,13 @@ class GaussianMeasure(factors.ConjugateFactor):
         D_mat: jnp.ndarray,
         d_vec: jnp.ndarray,
     ) -> jnp.ndarray:
-        """Computes the quartic expectation.
+        r"""Compute the quartic expectation
+        
+        .. math::
 
-        int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' dphi(x),
+            \int (AX+a)(BX+b)^\top(CX+c)(DX+d)^\top {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -861,9 +911,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         D_mat: jnp.ndarray = None,
         d_vec: jnp.ndarray = None,
     ) -> jnp.ndarray:
-        """ Computes the quartic integral.
+        r""" Compute the quartic integral.
+        
+        .. math::
 
-            int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
+            \int (AX+a)(BX+b)^\top(CX+c)(DX+d)^\top {\rm d}u(X).
 
         :param A_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -904,11 +956,13 @@ class GaussianMeasure(factors.ConjugateFactor):
         D_mat: jnp.ndarray,
         d_vec: jnp.ndarray,
     ) -> jnp.ndarray:
-        """Compute the quartic expectation.
+        r"""Compute the quartic expectation.
 
-        int (Ax+a)'(Bx+b)(Cx+c)'(Dx+d) dphi(x),
+        .. math::
+        
+            \int (AX+a)'(BX+b)(CX+c)'(DX+d) {\rm d}\phi(X),
 
-        with phi(x) = u(x) / int du(x).
+        with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
         :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -976,9 +1030,11 @@ class GaussianMeasure(factors.ConjugateFactor):
         D_mat: jnp.ndarray = None,
         d_vec: jnp.ndarray = None,
     ) -> jnp.ndarray:
-        """ Compute the quartic integral.
+        r""" Compute the quartic integral.
+        
+        .. math::
 
-        int (Ax+a)(Bx+b)'(Cx+c)(Dx+d)' du(x).
+            \int (AX+a)(BX+b)'(CX+c)(DX+d)' {\rm d}u(X).
 
         :param A_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
         :type A_mat: jnp.ndarray
@@ -1021,6 +1077,32 @@ class GaussianMeasure(factors.ConjugateFactor):
 
 
 class GaussianDiagMeasure(GaussianMeasure):
+    r"""A measure with a Gaussian form.
+
+    .. math::
+    
+        u(X) = \beta * \exp(- 0.5 * X^\top\Lambda X + X^\top\nu),
+\
+    D is the dimension, and R the number of Gaussians. 
+
+    :param Lambda: Information (precision) matrix of the Gaussian distributions. Needs to be postive definite and diagonal.
+        Dimensions should be [R, D, D].
+    :type Lambda: jnp.ndarray
+    :param nu: Information vector of a Gaussian distribution. If None all zeros. Dimensions should be [R, D], 
+        defaults to None
+    :type nu: jnp.ndarray, optional
+    :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
+        defaults to None
+    :type ln_beta: jnp.ndarray, optional
+    :param Sigma: Covariance matrix of the Gaussian distributions. Needs to be positive definite. 
+        Dimensions should be [R, D, D], defaults to None
+    :type Sigma: jnp.ndarray, optional
+    :param ln_det_Lambda: Log determinant of Lambda. Dimensions should be [R], defaults to None
+    :type ln_det_Lambda: jnp.ndarray, optional
+    :param ln_det_Sigma: Log determinant of Sigma. Dimensions should be [R], defaults to None
+    :type ln_det_Sigma: jnp.ndarray, optional
+    """
+
     def invert_lambda(self):
         self.Sigma, self.ln_det_Lambda = invert_diagonal(self.Lambda)
         self.ln_det_Sigma = -self.ln_det_Lambda
@@ -1046,7 +1128,9 @@ class GaussianDiagMeasure(GaussianMeasure):
     def product(self) -> "GaussianDiagMeasure":
         """Computes the product over all factors.
         
-            v(x) = \prod_i u_i(x)
+        .. math::
+        
+            v(X) = \prod_i u_i(X)
 
         :return: Factor of all factors.
         :rtype: GaussianDiagMeasure

@@ -8,37 +8,38 @@
 ##################################################################################################
 __author__ = "Christian Donner"
 
-__all__ = ["ConjugateFactor", "OneRankFactor", "LinearFactor", "ConstantFactor"]
 from jax import numpy as jnp
 from ..utils import linalg
 
 
 class ConjugateFactor:
+    r"""Object representing a factor which is conjugate to a Gaussian measure.
+    
+    A general term, which can be multiplied with a Gaussian and the result is still a Gaussian, 
+    i.e. has the functional form
+    
+    .. math::
+    
+        f(X) = \beta * exp(- 0.5 * X^\top\Lambda X + X^\top\nu),
+
+    D is the dimension, and R the number of Gaussians.
+
+    Note: At least :math:`\Lambda` or :math:`nu` should be specified!
+
+    :param Lambda: Information (precision) matrix of the Gaussian distributions. Must be postive semidefinite. 
+        Dimensions should be [R, D, D].
+    :type Lambda: jnp.ndarray
+    :param nu: Information vector of a Gaussian distribution. If None all zeros. Dimensions should be [R, D], 
+        defaults to None
+    :type nu: jnp.ndarray, optional
+    :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
+        defaults to None
+    :type ln_beta: jnp.ndarray, optional
+    """
+
     def __init__(
         self, Lambda: jnp.ndarray, nu: jnp.ndarray = None, ln_beta: jnp.ndarray = None
     ):
-        """Object representing a factor which is conjugate to a Gaussian measure.
-        
-        A general term, which can be multiplied with a Gaussian and the result is still a Gaussian, 
-        i.e. has the functional form
-        
-        f(x) = beta * exp(- 0.5 * x'Lambda x + x'nu),
-
-        D is the dimension, and R the number of Gaussians.
-
-        Note: At least Lambda or nu should be specified!
-
-        :param Lambda: Information (precision) matrix of the Gaussian distributions. Must be postive semidefinite. 
-            Dimensions should be [R, D, D].
-        :type Lambda: jnp.ndarray
-        :param nu: Information vector of a Gaussian distribution. If None all zeros. Dimensions should be [R, D], 
-            defaults to None
-        :type nu: jnp.ndarray, optional
-        :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
-            defaults to None
-        :type ln_beta: jnp.ndarray, optional
-        """
-
         self.R, self.D = Lambda.shape[0], Lambda.shape[1]
         self.Lambda = Lambda
 
@@ -55,12 +56,12 @@ class ConjugateFactor:
         return "Conjugate factor u(x)"
 
     def __call__(self, x: jnp.ndarray, element_wise: bool = False):
-        """ Evaluate the exponential term at x.
+        """ Evaluate the exponential term at :math:`X=x`.
         
         :param x: jnp.ndarray [N, D]
             Points where the factor should be evaluated.
         :param element_wise: bool
-            Evaluates x for only the corresponding density. Requires the N equals R. (Default=None)
+            Evaluates :math:`x` for only the corresponding density. Requires the N equals R. (Default=None)
             
         :return: jnp.ndarray [R, N], [N]
             Exponential term.
@@ -68,11 +69,11 @@ class ConjugateFactor:
         return self.evaluate(x, element_wise)
 
     def evaluate_ln(self, x: jnp.ndarray, element_wise: bool = False) -> jnp.ndarray:
-        """Evaluate the log-exponential term at x.
+        """Evaluate the log-exponential term at :math:`X=x`.
 
         :param x: Points where the factor should be evaluated. Dimensions should be [N, D].
         :type x: jnp.ndarray
-        :param element_wise: Evaluates x for only the corresponding density. Requires the N equals R., defaults to False
+        :param element_wise: Evaluates :math:`x` for only the corresponding density. Requires the N equals R., defaults to False
         :type element_wise: bool, optional
         :raises ValueError: Raised if N != R, and elemntwise is True.
         :return: Log exponential term. Dimensions are [R, N], or [N]
@@ -96,11 +97,11 @@ class ConjugateFactor:
             return -0.5 * x_Lambda_x + x_nu + self.ln_beta[:, None]
 
     def evaluate(self, x: jnp.ndarray, element_wise: bool = False) -> jnp.ndarray:
-        """Evaluate the exponential term at x.
+        """Evaluate the exponential term at :math:`X=x`.
 
         :param x: Points where the factor should be evaluated. Dimensions should be [N,D]
         :type x: jnp.ndarray
-        :param element_wise: Evaluates x for only the corresponding density. Requires the N equals R, defaults to False
+        :param element_wise: Evaluates :math:`x` for only the corresponding density. Requires the N equals R, defaults to False
         :type element_wise: bool, optional
         :return: Exponential term. Dimensions are [R, N], or [N].
         :rtype: jnp.ndarray
@@ -123,7 +124,9 @@ class ConjugateFactor:
     def product(self) -> "ConjugateFactor":
         """Compute the product over all factors.
         
-        g(x) = \prod_i f_i(x)
+        .. math::
+        
+            g(X) = \prod_i f_i(X)
 
         :return: Product of all factors.
         :rtype: ConjugateFactor
@@ -136,9 +139,9 @@ class ConjugateFactor:
     def _multiply_with_measure(
         self, measure: "GaussianMeasure", update_full: bool = False
     ) -> dict:
-        """Compute the product between the current factor and a Gaussian measure u.
+        """Compute the product between the current factor and a Gaussian measure :math:`u(X)`.
         
-        Returns f(x) * u(x).
+        Returns :math:`f(X) * u(X)`.
 
         :param measure: The gaussian measure the factor is multiplied with.
         :type measure: GaussianMeasure
@@ -174,9 +177,9 @@ class ConjugateFactor:
     def _hadamard_with_measure(
         self, measure: "GaussianMeasure", update_full: bool = False
     ) -> dict:
-        """Compute the hadamard (componentwise) product between the current factor and a Gaussian measure u.A
+        """Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
         
-        Returns f(x) * u(x)
+        Returns :math:`f(X) * u(X)`
 
         :param measure: The gaussian measure the factor is multiplied with.
         :type measure: GaussianMeasure
@@ -248,6 +251,30 @@ class LowRankFactor(ConjugateFactor):
 
 
 class OneRankFactor(LowRankFactor):
+    r"""A low rank term, which can be multiplied with a Gaussian and the result is still a Gaussian.
+
+    It has the functional form
+    
+    .. math::
+    
+        f(X) = \beta * exp(- 0.5 * X^\top\Lambda X + X^\top\nu),
+    
+    but :math:`\Lambda is of rank 1 and has the form :math:`\Lambda=g * vv^\top`.
+
+    D is the dimension, and R the number of Gaussians.
+
+    :param v: Rank one vector for the constructing :math:`\Lambda`. Dimensions should be [R, D].
+    :type v: jnp.ndarray, optional
+    :param g: Factor for :math:`\Lambda`. If None, it is assumed to be 1. Dimensions should be [R], 
+        defaults to None
+    :type g: jnp.ndarray, optional
+    :param nu: Information vector of a Gaussian distribution. Dimensions should be [R, D], defaults to None
+    :type nu: jnp.ndarray, optional
+    :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
+        defaults to None
+    :type ln_beta: jnp.ndarray, optional
+    """
+
     def __init__(
         self,
         v: jnp.ndarray,
@@ -255,27 +282,6 @@ class OneRankFactor(LowRankFactor):
         nu: jnp.ndarray = None,
         ln_beta: jnp.ndarray = None,
     ):
-        """A low rank term, which can be multiplied with a Gaussian and the result is still a Gaussian.
-    
-        It has the functional form
-        
-        f(x) = beta * exp(- 0.5 * x'Lambda x + x'nu),
-        
-        but Lambda is of rank 1 and has the form Lambda=g * vv'.
-
-        D is the dimension, and R the number of Gaussians.
-
-        :param v: Rank one vector for the constructing the Lambda matrix. Dimensions should be [R, D].
-        :type v: jnp.ndarray, optional
-        :param g: Factor for the Lambda matrix. If None, it is assumed to be 1. Dimensions should be [R], 
-            defaults to None
-        :type g: jnp.ndarray, optional
-        :param nu: Information vector of a Gaussian distribution. Dimensions should be [R, D], defaults to None
-        :type nu: jnp.ndarray, optional
-        :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
-            defaults to None
-        :type ln_beta: jnp.ndarray, optional
-        """
         self.R, self.D = v.shape
         self.v = v
         if g is None:
@@ -301,7 +307,7 @@ class OneRankFactor(LowRankFactor):
         return OneRankFactor(v_new, g_new, nu_new, ln_beta_new)
 
     def _get_Lambda(self) -> jnp.ndarray:
-        """Compute the rank one matrix Lambda=g* vv'
+        r"""Compute the rank one matrix :math:`Lambda=g* vv^\top`
 
         :return: The low rank matrix. Dimensions are [R, D, D].
         :rtype: jnp.ndarray
@@ -311,9 +317,9 @@ class OneRankFactor(LowRankFactor):
     def _multiply_with_measure(
         self, measure: "GaussianMeasure", update_full: bool = True
     ) -> dict:
-        """Compute the product between the current factor and a Gaussian measure u.
+        r"""Compute the product between the current factor and a Gaussian measure :math:`u(X)`.
         
-        Returns f(x) * u(x). In contrast to full rank updates, the updated covariances and 
+        Returns :math:`f(X) * u(X)`. In contrast to full rank updates, the updated covariances and 
         log determinants can be computed efficiently, using Woodbury matrix inversion and matrix deteriminant lemma.
 
         :param measure: The gaussian measure the factor is multiplied with.
@@ -367,9 +373,9 @@ class OneRankFactor(LowRankFactor):
     def _hadamard_with_measure(
         self, measure: "GaussianMeasure", update_full=True
     ) -> dict:
-        """Compute the hadamard (componentwise) product between the current factor and a Gaussian measure u.
+        """Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
         
-        Returns f(x) * u(x). In contrast to full rank updates, the updated covariances and 
+        Returns :math:`f(x) * u(x)`. In contrast to full rank updates, the updated covariances and 
         log determinants can be computed efficiently, using Woodbury matrix inversion and matrix deteriminant lemma.
 
         :param measure: The gaussian measure the factor is multiplied with.
@@ -412,15 +418,17 @@ class OneRankFactor(LowRankFactor):
 
 class LinearFactor(ConjugateFactor):
     def __init__(self, nu: jnp.ndarray, ln_beta: jnp.ndarray = None):
-        """A term, which can be multiplied with a Gaussian and the result is still a Gaussian.
+        r"""A term, which can be multiplied with a Gaussian and the result is still a Gaussian.
         
         It has the functional form
         
-        f(x) = beta * exp(x'nu),
+        .. math::
+        
+            f(X) = \beta * exp(X^\top \nu),
 
         D is the dimension, and R the number of Gaussians.
 
-        Note: At least Lambda or nu should be specified!
+        Note: :math:`\nu` should be specified!
 
         :param nu: Information vector. Dimensions should be [R, D].
         :type nu: jnp.ndarray
@@ -452,9 +460,9 @@ class LinearFactor(ConjugateFactor):
     def _multiply_with_measure(
         self, measure: "GaussianMeasure", update_full=True
     ) -> dict:
-        """Compute the product between the current factor and a Gaussian measure u.
+        """Compute the product between the current factor and a Gaussian measure :math:`u(X)`.
         
-        Returns f(x) * u(x). For the linear term, we do not need to update the covariances.
+        Returns :math:`f(X) * u(X)`. For the linear term, we do not need to update the covariances.
 
         :param measure: The gaussian measure the factor is multiplied with.
         :type measure: GaussianMeasure
@@ -498,9 +506,9 @@ class LinearFactor(ConjugateFactor):
     def _hadamard_with_measure(
         self, measure: "GaussianMeasure", update_full=True
     ) -> dict:
-        """ Compute the hadamard (componentwise) product between the current factor and a Gaussian measure u
+        """ Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
         
-        Returns f(x) * u(x). For the linear term, we do not need to update the covariances.
+        Returns :math:`f(X) * u(X)`. For the linear term, we do not need to update the covariances.
 
         :param measure: The gaussian measure the factor is multiplied with.
         :type measure: GaussianMeasure
@@ -533,18 +541,19 @@ class LinearFactor(ConjugateFactor):
 
 
 class ConstantFactor(ConjugateFactor):
+    """A term, which can be multiplied with a Gaussian and the result is still a Gaussian.
+    
+    It has the functional form :math:`f(X) = \beta`.
+
+    D is the dimension, and R the number of Gaussians.
+
+    :param ln_beta: The log constant factor of the factor. Dimensions should be [R]
+    :type ln_beta: jnp.ndarray
+    :param D: The dimension of the Gaussian.
+    :type D: int
+    """
+
     def __init__(self, ln_beta: jnp.ndarray, D: int):
-        """A term, which can be multiplied with a Gaussian and the result is still a Gaussian.
-        
-        It has the functional form f(x) = beta.
-
-        D is the dimension, and R the number of Gaussians.
-
-        :param ln_beta: The log constant factor of the factor. Dimensions should be [R]
-        :type ln_beta: jnp.ndarray
-        :param D: The dimension of the Gaussian.
-        :type D: int
-        """
         self.R, self.D = ln_beta.shape[0], D
         Lambda = jnp.zeros((self.R, self.D, self.D))
         nu = jnp.zeros((self.R, self.D))
@@ -565,9 +574,9 @@ class ConstantFactor(ConjugateFactor):
     def _multiply_with_measure(
         self, measure: "GaussianMeasure", update_full=True
     ) -> dict:
-        """Compute the product between the current factor and a Gaussian measure u.
+        """Compute the product between the current factor and a Gaussian measure :math:`u(X)`.
         
-        Returns f(x) * u(x). For the linear term, we do not need to update the covariances.
+        Returns :math:`f(X) * u(X)`. For the linear term, we do not need to update the covariances.
 
         :param measure: The gaussian measure the factor is multiplied with.
         :type measure: GaussianMeasure
@@ -611,9 +620,9 @@ class ConstantFactor(ConjugateFactor):
     def _hadamard_with_measure(
         self, measure: "GaussianMeasure", update_full=True
     ) -> dict:
-        """ Coumputes the hadamard (componentwise) product between the current factor and a Gaussian measure u
+        """ Coumputes the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`
         
-        Returns f(x) * u(x). For the linear term, we do not need to update the covariances.
+        Returns :math:`f(X) * u(X)`. For the linear term, we do not need to update the covariances.
 
         :param measure: The gaussian measure the factor is multiplied with.
         :type measure: GaussianMeasure

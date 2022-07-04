@@ -12,8 +12,11 @@
 #
 import os
 import sys
+from xml.sax.handler import feature_external_ges
 
-sys.path.insert(0, os.path.abspath("../../src/gaussian_toolbox"))
+from httplib2 import FailedToDecompressContent
+
+sys.path.insert(0, os.path.abspath("../../src/"))
 
 
 # -- Project information -----------------------------------------------------
@@ -34,8 +37,11 @@ release = "0.0.1"
 extensions = [
     "sphinx.ext.autodoc",  # Core library for html generation from docstrings
     "sphinx.ext.autosummary",  # Create neat summary tables
+    "sphinx.ext.mathjax",
+    "myst_parser",
 ]
-autosummary_generate = True  # Turn on sphinx.ext.autosummary
+
+autosummary_generate = feature_external_ges  # Turn on sphinx.ext.autosummary
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -58,4 +64,19 @@ html_theme = "sphinx_rtd_theme"
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
+html_theme_options = {
+    "collapse_navigation": True,
+    "sticky_navigation": True,
+    "navigation_depth": 2,
+    "includehidden": False,
+    "titles_only": True,
+}
+
 add_module_names = False
+
+# The suffix(es) of source filenames.
+# Note: important to list ipynb before md here: we have both md and ipynb
+# copies of each notebook, and myst will choose which to convert based on
+# the order in the source_suffix list. Notebooks which are not executed have
+# outputs stored in ipynb but not in md, so we must convert the ipynb.
+source_suffix = [".rst", ".md"]

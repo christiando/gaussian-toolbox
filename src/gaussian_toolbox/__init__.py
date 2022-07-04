@@ -1,3 +1,3 @@
-from . import gaussian_algebra
-from . import timeseries
-from . import utils
+from gaussian_toolbox import gaussian_algebra, timeseries, utils
+
+__all__ = ["gaussian_algebra", "timeseries", "utils"]

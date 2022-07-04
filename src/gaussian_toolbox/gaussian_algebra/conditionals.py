@@ -20,6 +20,28 @@ from ..utils.linalg import invert_matrix
 
 
 class ConditionalGaussianDensity:
+    """A conditional Gaussian density
+    
+    .. math::
+
+        p(Y|X) = {\cal N}(\mu(X), \Sigma),
+
+    with the conditional mean function :math:`\mu(X) = M X + b`.
+    
+    :param M: Matrix in the mean function. Dimensions should be [R, Dy, Dx]
+    :type M: jnp.ndarray
+    :param b: Vector in the conditional mean function. If None all entries are 0. Dimensions should be [R, Dy], defaults to None
+    :type b: jnp.ndarray, optional
+    :param Sigma: The covariance matrix of the conditional. Dimensions should be [R, Dy, Dy], defaults to None
+    :type Sigma: jnp.ndarray, optional
+    :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, Dy, Dy], 
+        defaults to None
+    :type Lambda: jnp.ndarray, optional
+    :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
+    :type ln_det_Sigma: jnp.ndarray, optional
+    :raises RuntimeError: Raised if neiterh Sigma nor Lambda are provided
+    """
+
     def __init__(
         self,
         M: jnp.ndarray,
@@ -28,25 +50,6 @@ class ConditionalGaussianDensity:
         Lambda: jnp.ndarray = None,
         ln_det_Sigma: jnp.ndarray = None,
     ):
-        """A conditional Gaussian density
-
-        p(y|x) = N(mu(x), Sigma)
-
-        with the conditional mean function mu(x) = M x + b.
-        
-        :param M: Matrix in the mean function. Dimensions should be [R, Dy, Dx]
-        :type M: jnp.ndarray
-        :param b: Vector in the conditional mean function. If None all entries are 0. Dimensions should be [R, Dy], defaults to None
-        :type b: jnp.ndarray, optional
-        :param Sigma: The covariance matrix of the conditional. Dimensions should be [R, Dy, Dy], defaults to None
-        :type Sigma: jnp.ndarray, optional
-        :param Lambda: Information (precision) matrix of the Gaussians. Dimensions should be [R, Dy, Dy], 
-            defaults to None
-        :type Lambda: jnp.ndarray, optional
-        :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
-        :type ln_det_Sigma: jnp.ndarray, optional
-        :raises RuntimeError: Raised if neiterh Sigma nor Lambda are provided
-        """
         self.R, self.Dy, self.Dx = M.shape
 
         self.M = M
@@ -72,9 +75,13 @@ class ConditionalGaussianDensity:
         return "Conditional Gaussian density p(y|x)"
 
     def __call__(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
-        """Get Gaussian Density conditioned on x.
+        """Get Gaussian Density conditioned on :amt:`x`, i.e.
+        
+        .. math::
+        
+            p(Y\\vert X=x) =  {\cal N}(\mu(X=x), \Sigma)
 
-        :param x: Instances, the mu should be conditioned on. Dimensions should be [N, Dx].
+        :param x: Instances, the :math:`\mu` should be conditioned on. Dimensions should be [N, Dx].
         :type x: jnp.ndarray
         :return: The density conditioned on x.
         :rtype: densities.GaussianDensity
@@ -100,7 +107,7 @@ class ConditionalGaussianDensity:
         return new_measure
 
     def get_conditional_mu(self, x: jnp.ndarray, **kwargs) -> jnp.ndarray:
-        """Compute the conditional mu function mu(x) = M x + b.
+        """Compute the conditional :math:`\mu` function :math:`\mu(X=x) = M x + b`.
 
         :param x: Instances, the mu should be conditioned on. Dimensions should be [N, Dx].
         :type x: jnp.ndarray
@@ -111,11 +118,11 @@ class ConditionalGaussianDensity:
         return mu_y
 
     def condition_on_x(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
-        """Get Gaussian Density conditioned on x.
+        """Get Gaussian Density conditioned on :math:`x`.
 
         :param x: Instances, the mu should be conditioned on. Dimensions should be [N, Dx].
         :type x: jnp.ndarray
-        :return: The density conditioned on x.
+        :return: The density conditioned on :math:`x`.
         :rtype: densities.GaussianDensity
         """
         N = x.shape[0]
@@ -137,9 +144,9 @@ class ConditionalGaussianDensity:
         )
 
     def set_y(self, y: jnp.ndarray, **kwargs) -> factors.ConjugateFactor:
-        """ Set a specific value for y in p(y|x) and returns the corresponding conjugate factor. 
+        """ Set a specific value for :math:`y` in :math:`p(Y=y|X)` and returns the corresponding conjugate factor. 
 
-        :param y: Data for y, where the rth entry is associated with the rth conditional density. 
+        :param y: Data for :math:`y`, where the rth entry is associated with the rth conditional density. 
         :type y: jnp.ndarray [R, Dy]
         :return: The conjugate factor where the first dimension is R.
         :rtype: factors.ConjugateFactor
@@ -177,14 +184,16 @@ class ConditionalGaussianDensity:
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
         """Return the joint density.
-
-        p(x,y) = p(y|x)p(x),
-
-        where p(y|x) is the object itself.
         
-        :param p_x: Marginal density over x.
+        .. math::
+
+            p(X,Y) = p(Y|X)p(X),
+
+        where :math:`p(Y|X)` is the object itself.
+        
+        :param p_x: Marginal density over :math:`X`.
         :type p_x: densities.GaussianDensity
-        :raises RuntimeError: 
+        :raises RuntimeError: Only works if one of the densities involved have R==1.
         :return: The joint density.
         :rtype: densities.GaussianDensity
         """
@@ -253,9 +262,10 @@ class ConditionalGaussianDensity:
     def affine_marginal_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> densities.GaussianDensity:
-        """Return the marginal density p(y) given  p(y|x) and p(x), where p(y|x) is the object itself.
+        """Return the marginal density :math:`p(X)` given :math:`p(Y|X)` and :math:`p(X)`, where :math:`p(Y|X)` 
+        is the object itself.
 
-        :param p_x: Marginal density over x.
+        :param p_x: Marginal density over :math:`X`.
         :type p_x: densities.GaussianDensity
         :raises RuntimeError: Only works if one of the densities involved have R==1.
         :return: The marginal density.
@@ -281,12 +291,13 @@ class ConditionalGaussianDensity:
     def affine_conditional_transformation(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> "ConditionalGaussianDensity":
-        """ Return the conditional density p(x|y), given p(y|x) and p(x), where p(y|x) is the object itself.
+        """ Return the conditional density :math:`p(X|Y)`, given :math:`p(Y|X)` and :math:`p(X)`, where :math:`p(Y|X)` 
+        is the object itself.
 
-        :param p_x: Marginal density over x.
+        :param p_x: Marginal density over :math:`X`.
         :type p_x: densities.GaussianDensity
         :raises RuntimeError: Only works if one of the densities involved have R==1.
-        :return: The conditional density p(y|x).
+        :return: The conditional density :math:`p(Y|X)`.
         :rtype: ConditionalGaussianDensity
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
@@ -329,14 +340,16 @@ class ConditionalGaussianDensity:
     def integrate_log_conditional(
         self, p_yx: densities.GaussianDensity, **kwargs
     ) -> jnp.ndarray:
-        """Integrates over the log conditional with respect to the pdf p_yx. I.e.
+        """Integrates over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
         
-        int log(p(y|x))p(y,x)dydx.
+        .. math::
+        
+            \int \log(p(Y|X))p(Y,X){\\rm d}Y{\\rm d}X.
 
-        :param p_yx: Probability density function (first dimensions are y, last ones are x).
+        :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
         :type p_yx: measures.GaussianMeasure
         :raises NotImplementedError: Only implemented for R=1.
-        :return: Returns the integral with respect to density p_yx.
+        :return: Returns the integral with respect to density :math:`p(Y,X)`.
         :rtype: jnp.ndarray
         """
         if self.R != 1:
@@ -358,14 +371,16 @@ class ConditionalGaussianDensity:
     def integrate_log_conditional_y(
         self, p_x: densities.GaussianDensity, **kwargs
     ) -> callable:
-        """Computes the expectation over the log conditional, but just over x. I.e. it returns
+        """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
-           f(y) = int log(p(y|x))p(x)dx.
+        .. math::
         
-        :param p_x: Density over x.
+           f(Y) = \int \log(p(Y|X))p(X){\\rm d}x.
+        
+        :param p_x: Density over :math:`X`.
         :type p_x: measures.GaussianMeasure
         :raises NotImplementedError: Only implemented for R=1.
-        :return: The integral as function of y.
+        :return: The integral as function of :math:`Y`.
         :rtype: callable
         """
         if self.R != 1:
@@ -395,7 +410,9 @@ class ConditionalGaussianDensity:
     ) -> jnp.ndarray:
         """Computes the conditional entropy
         
-         H(y|x) = H(y,x) - H(x) = -\int p(x,y)\ln p(y|x) dx dy
+        .. math::
+        
+            H_{Y|X} = H_{Y,X} - H_X = -\int p(X,Y)\ln p(Y|X) {\\rm d}X {\\rm d}Y
 
         :param p_x: Marginal over condtional variable
         :type p_x: densities.GaussianDensity
@@ -411,7 +428,9 @@ class ConditionalGaussianDensity:
     ) -> jnp.ndarray:
         """Computes the mutual information
         
-         I(y,x) = H(y,x) - H(x) - H(y) 
+        .. math::
+        
+            I_{Y,X} = H_{Y,X} - H_X - H_Y
 
         :param p_x: Marginal over condtional variable
         :type p_x: densities.GaussianDensity
@@ -424,7 +443,7 @@ class ConditionalGaussianDensity:
         return mutual_info
 
     def update_Sigma(self, Sigma_new: jnp.ndarray):
-        """Updates the covariance matrix.
+        """Updates the covariance matrix :math:`\Sigma`.
 
         :param Sigma_new: The new covariance matrix.
         :type Sigma_new: jnp.ndarray [R, Dy, Dy]
@@ -438,6 +457,29 @@ class ConditionalGaussianDensity:
 
 
 class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
+    """A conditional Gaussian density, where the transition model is determined through a (known) control variable u.
+    
+        .. math::
+        
+            p(Y|X, u) = N(\mu(X|u), \Sigma)
+
+        with the conditional mean function ::math:`\mu(X|u) = M(u) X + b(u)`,
+        
+        where :math:`M(u)` and :math:`b(u)` come from the same neural network.
+
+    :param Sigma: Covariance matrix [1, Dy, Dy]
+    :type Sigma: jnp.ndarray
+    :param Dx: Dimension of the conditional variable.
+    :type Dx: int
+    :param Du: Dimension of the control variable
+    :type Du: int
+    :param hidden_units: Determines how many hidden layers and how many units in each layer, defaults to [16,]
+    :type hidden_units: list, optional
+    :param non_linearity: Non linearity after each layer, defaults to objax.functional.tanh
+    :type non_linearity: callable, optional
+    :raises NotImplementedError: Raised when the leading dimension of Sigma is not 1.
+    """
+
     def __init__(
         self,
         Sigma: jnp.ndarray,
@@ -446,26 +488,6 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         hidden_units: list = [16,],
         non_linearity: callable = objax.functional.tanh,
     ):
-        """A conditional Gaussian density, where the transition model is determined through a (known) control variable u.
-        
-            p(y|x, u) = N(mu(x|u), Sigma)
-
-            with the conditional mean function mu(x) = M(u) x + b(u),
-            
-            where M(u) and b(u) come from the same neural network.
-
-        :param Sigma: Covariance matrix [1, Dy, Dy]
-        :type Sigma: jnp.ndarray
-        :param Dx: Dimension of the conditional variable.
-        :type Dx: int
-        :param Du: Dimension of the control variable
-        :type Du: int
-        :param hidden_units: Determines how many hidden layers and how many units in each layer, defaults to [16,]
-        :type hidden_units: list, optional
-        :param non_linearity: Non linearity after each layer, defaults to objax.functional.tanh
-        :type non_linearity: callable, optional
-        :raises NotImplementedError: Raised when the leading dimension of Sigma is not 1.
-        """
         self.Sigma = Sigma
         self.R = Sigma.shape[0]
         if self.R != 1:
@@ -478,7 +500,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         self.network = self._build_network()
 
     def _build_network(self) -> objax.Module:
-        """Constructs the network
+        """Construct the network.
 
         :return: The network.
         :rtype: objax.Module
@@ -493,11 +515,11 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         return network
 
     def get_M_b(self, u: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        """Construct M(u) and b(u) from the output.
+        """Construct :math:`M(u)` and :math:`b(u)` from the output.
 
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
-        :return: Returns M(u) [R, Dy, Dx] and b(u) [R, Dy]
+        :return: Returns :math:`M(u)` [R, Dy, Dx] and :math:`b(u)` [R, Dy]
         :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
         output = self.network(u)
@@ -506,9 +528,11 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         return M, b
 
     def set_control_variable(self, u: jnp.ndarray) -> ConditionalGaussianDensity:
-        """Creates the conditional for a given control variable u,
+        """Create the conditional for a given control variable u,
         
-            p(Y|X, U=u).
+        .. math::
+        
+            p(Y|X, u).
 
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
@@ -527,9 +551,11 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         )
 
     def get_conditional_mu(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> jnp.ndarray:
-        """ Computes the conditional mean given an x and an u,
+        """ Compute the conditional mean given an :math:`x` and an :math:`u`,
         
-        mu(x|u) = M(u)x + b(u)
+        .. math::
+        
+            \mu(X=x|u) = M(u)x + b(u)
 
         :param x: Conditional variable [N, Dx]
         :type x: jnp.ndarray
@@ -544,9 +570,11 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
     def condition_on_x(
         self, x: jnp.ndarray, u: jnp.array, **kwargs
     ) -> densities.GaussianDensity:
-        """Returns the Gaussian density
+        """Return the Gaussian density
         
-        p(Y|X=x, U=u)
+        .. math::
+        
+            p(Y|X=x, u)
 
         :param x: Conditional variable [N, Dx]
         :type x: jnp.ndarray
@@ -559,9 +587,11 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         return cond_gauss.condition_on_x(x)
 
     def set_y(self, y: jnp.ndarray, u: jnp.array, **kwargs) -> factors.ConjugateFactor:
-        """Sets an instance of Y and U and returns
+        """Set an instance of Y and U and returns
         
-        p(Y=y|X, U=u)
+        .. math:
+        
+            p(Y=y|X, u)
 
         :param y: Random variable [R, Dy]
         :type y: jnp.ndarray
@@ -576,14 +606,15 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
     def affine_joint_transformation(
         self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
     ) -> densities.GaussianDensity:
-        """Does the affine joint transformation with a given control variable
+        """Perform the affine joint transformation with a given control variable
         
+        .. math::
         
-            p(X,Y|U=u) = p(Y|X,U=u)p(X),
+            p(X,Y|u) = p(Y|X,u)p(X),
 
-            where p(Y|X,U=u) is the object itself.
+        where :math:`p(Y|X,u)` is the object itself.
 
-        :param p_x: Marginal over X
+        :param p_x: Marginal over :math:`X`
         :type p_x: densities.GaussianDensity
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
@@ -596,14 +627,14 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
     def affine_marginal_transformation(
         self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
     ) -> densities.GaussianDensity:
-        """Returns the marginal density p(Y) given  p(Y|X,U=u) and p(X), 
-        where p(Y|X,U=u) is the object itself.
+        """Return the marginal density :math:`p(Y)` given  :math:`p(Y|X,u)` and :math:`p(X)`, 
+        where p(Y|X,u) is the object itself.
 
-        :param p_x: Marginal over X
+        :param p_x: Marginal over :math:`X`
         :type p_x: densities.GaussianDensity
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
-        :return: Marginal density p(Y|U=u)
+        :return: Marginal density :math:`p(Y|u)`.
         :rtype: densities.GaussianDensity
         """
         cond_gauss = self.set_control_variable(u)
@@ -612,14 +643,14 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
     def affine_conditional_transformation(
         self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
     ) -> "ConditionalGaussianDensity":
-        """ Returns the conditional density p(X|Y, U=u), given p(Y|X,U=u) and p(X),           
-            where p(Y|X,U=u) is the object itself.
+        """Return the conditional density :math:`p(X|Y, u)`, given :math:`p(Y|X,u)` and :math:`p(X)`,           
+        where :math:`p(Y|X,u)` is the object itself.
 
-        :param p_x: Marginal over X
+        :param p_x: Marginal over :math:`X`
         :type p_x: densities.GaussianDensity
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
-        :return: Conditional density p(X|Y, U=u)
+        :return: Conditional density :math:`p(X|Y, u)`.
         :rtype: ConditionalGaussianDensity
         """
         cond_gauss = self.set_control_variable(u)
@@ -628,9 +659,11 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
     def conditional_entropy(
         self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
     ) -> jnp.ndarray:
-        """Computes the conditional entropy
+        """Compute the conditional entropy
         
-         H(y|x) = H(y,x) - H(x) = -\int p(x,y)\ln p(y|x) dx dy
+        .. math:
+        
+            H_{y|x,u} = H_{y,x|u} - H_x = -\int p(X,Y\\vert u)\ln p(Y|X,u) {\\rm d}x {\\rm d}y
 
         :param p_x: Marginal over condtional variable
         :type p_x: densities.GaussianDensity
@@ -646,16 +679,18 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
     def integrate_log_conditional(
         self, phi_yx: measures.GaussianMeasure, u: jnp.ndarray, **kwargs
     ) -> jnp.ndarray:
-        """Integrates over the log conditional with respect to the pdf p_yx. I.e.
+        """Integrate over the log conditional with respect to the pdf :math:`p(Y,X)`, i.e.
         
-        int log(p(y|x))p(y,x)dydx.
+        .. math::
+        
+            \int \log(p(Y|X,u))p(Y,X){\\rm d}Y{\\rm d}X.
 
-        :param p_yx: Probability density function (first dimensions are y, last ones are x).
+        :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
         :type p_yx: measures.GaussianMeasure
         :param u: Control variables [1, Du]
         :type u: jnp.ndarray
         :raises NotImplementedError: Only one network input allowed.
-        :return: Returns the integral with respect to density p_yx.
+        :return: Returns the integral with respect to density :math:`p(Y,X)`.
         :rtype: jnp.ndarray
         """
         if u.shape[0] != 1:
@@ -666,16 +701,18 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
     def integrate_log_conditional_y(
         self, phi_x: measures.GaussianMeasure, u: jnp.ndarray, **kwargs
     ) -> callable:
-        """Computes the expectation over the log conditional, but just over x. I.e. it returns
-
-           f(y) = int log(p(y|x))p(x)dx.
+        """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
         
-        :param p_x: Density over x.
+        .. math::
+
+           f(Y) = \int \log(p(Y|X,u))p(X)dX.
+        
+        :param p_x: Density over :math:`X`.
         :type p_x: measures.GaussianMeasure
         :param u: Control variables [1, Du]
         :type u: jnp.ndarray
         :raises NotImplementedError: Only one network input allowed.
-        :return: The integral as function of y.
+        :return: The integral as function of :math:`Y`.
         :rtype: callable
         """
         if u.shape[0] != 1:
