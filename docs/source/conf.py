@@ -39,6 +39,7 @@ extensions = [
     "sphinx.ext.autosummary",  # Create neat summary tables
     "sphinx.ext.mathjax",
     "myst_parser",
+    "nbsphinx",
 ]
 
 autosummary_generate = feature_external_ges  # Turn on sphinx.ext.autosummary
@@ -79,4 +80,4 @@ add_module_names = False
 # copies of each notebook, and myst will choose which to convert based on
 # the order in the source_suffix list. Notebooks which are not executed have
 # outputs stored in ipynb but not in md, so we must convert the ipynb.
-source_suffix = [".rst", ".md"]
+source_suffix = [".rst", ".md", ".pynb"]
