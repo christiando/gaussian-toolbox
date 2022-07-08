@@ -44,11 +44,11 @@ __Caution__: This is code under development. Integrals were checked by sampling,
 A certain number of models of probalistic time-series models is provided. One class are __state-space models (SSMs)__, that have the form
 
 $$
-\mathbf{z}_{t} = f(\mathbf{z}_{t-1}) + \zeta_t,
+z_{t} = f(z_{t-1}) + \zeta_t,
 $$
 
 $$
-\mathbf{x}_{t} = g(\mathbf{z}_{t}) + \xi_t, 
+x_{t} = g(z_{t}) + \xi_t, 
 $$
 
 with $\zeta_t \sim {\cal N}(0,\Sigma_z(t))$ and $\xi_t \sim {\cal N}(0,\Sigma_x(t))$. The first equation is the so-called state equation, defining the _state model_, and the second equation  is the observation (aka emission) equation, defining the _observation model_. This library provides various state- and observation models, that can be combined. An __expectation-maximization (EM) algorithm__ is used for inference. For details see [here](timeseries_jax/README_timeseries.md).
