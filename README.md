@@ -51,7 +51,7 @@ $$
 x_{t} = g(z_{t}) + \xi_t, 
 $$
 
-with $`\zeta_t \sim {\cal N}(0,\Sigma_z(t))`$ and $`\xi_t \sim {\cal N}(0,\Sigma_x(t))`$. The first equation is the so-called state equation, defining the _state model_, and the second equation  is the observation (aka emission) equation, defining the _observation model_. This library provides various state- and observation models, that can be combined. An __expectation-maximization (EM) algorithm__ is used for inference. For details see [here](timeseries_jax/README_timeseries.md).
+with $\!\zeta_t \sim {\cal N}(0,\Sigma_z(t))\!$ and $\!\xi_t \sim {\cal N}(0,\Sigma_x(t))\!$. The first equation is the so-called state equation, defining the _state model_, and the second equation  is the observation (aka emission) equation, defining the _observation model_. This library provides various state- and observation models, that can be combined. An __expectation-maximization (EM) algorithm__ is used for inference. For details see [here](timeseries_jax/README_timeseries.md).
 
 # Installation
 
