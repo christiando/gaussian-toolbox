@@ -14,17 +14,17 @@ $$
 
 is a Gaussian density, this library allows to quickly compute the resulting functional form
 
-```{math}
+$$
 u(X) = \beta\exp\left(-\frac{1}{2}X^\top\Lambda X + \nu^\top X\right)p(X).
-```
+$$
 
 For the resulting measure certain integrals can then be computed quickly
 
-```{math}
+$$
 \int f(X) {\rm d}u(X),
-```
+$$
 
-where {math}`f` is can be up to fourth order of {math}`\mathbf{x}`. Furthermore, some functionality for mixture measures and density is provided.
+where $f$ is can be up to fourth order of $\mathbf{x}$. Furthermore, some functionality for mixture measures and density is provided.
 
 ### The code structure
 
@@ -43,12 +43,12 @@ __Caution__: This is code under development. Integrals were checked by sampling,
 
 A certain number of models of probalistic time-series models is provided. One class are __state-space models (SSMs)__, that have the form
 
-```{math}
+$$
 \mathbf{z}_t = f(\mathbf{z}_{t-1}) + \zeta_t, \\
 \mathbf{x}_t = g(\mathbf{z}_{t}) + \xi_t, 
-```
+$$
 
-with {math}`\zeta_t \sim {\cal N}(0,\Sigma_z(t))` and {math}`\xi_t \sim {\cal N}(0,\Sigma_x(t))`. The first equation is the so-called state equation, defining the _state model_, and the second equation  is the observation (aka emission) equation, defining the _observation model_. This library provides various state- and observation models, that can be combined. An __expectation-maximization (EM) algorithm__ is used for inference. For details see [here](timeseries_jax/README_timeseries.md).
+with $\zeta_t \sim {\cal N}(0,\Sigma_z(t))$ and $\xi_t \sim {\cal N}(0,\Sigma_x(t))$. The first equation is the so-called state equation, defining the _state model_, and the second equation  is the observation (aka emission) equation, defining the _observation model_. This library provides various state- and observation models, that can be combined. An __expectation-maximization (EM) algorithm__ is used for inference. For details see [here](timeseries_jax/README_timeseries.md).
 
 # Installation
 
