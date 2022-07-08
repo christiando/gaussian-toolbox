@@ -46,6 +46,7 @@ A certain number of models of probalistic time-series models is provided. One cl
 $$
 \mathbf{z}_{t} = f(\mathbf{z}_{t-1}) + \zeta_t,
 $$
+
 $$
 \mathbf{x}_{t} = g(\mathbf{z}_{t}) + \xi_t, 
 $$
