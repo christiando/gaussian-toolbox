@@ -8,9 +8,9 @@ At the heart of this library the is to quickly manipulate Gaussians and solve in
 
 This library primarily provides the functionality to quickly manipulate, integrate and sample from Gaussians. If 
 
-```{math}
+$$
 p(X) = N(\mu, \Sigma),
-```
+$$
 
 is a Gaussian density, this library allows to quickly compute the resulting functional form
 
