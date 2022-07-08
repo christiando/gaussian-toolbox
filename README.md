@@ -1,5 +1,7 @@
 # Gaussian Toolbox
 
+[![tests](https://github.com//christiando/gaussian-toolbox/actions/workflows/python-app.yml/badge.svg)](https://github.com//christiando/gaussian-toolbox/actions/workflows/python-app.yml)
+
 At the heart of this library the is to quickly manipulate Gaussians and solve integrals with respect to Gaussian measures. These operations are used in a wide range of probabilistic models, such as Gaussian process models, state space models, latent variable models, etc. The plan is to slowly incorporate these models one after the other in this library.
 
 ## The backbone: Gaussian manipulations
