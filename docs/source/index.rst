@@ -18,6 +18,7 @@ Welcome to Gaussian Toolbox's documentation!
 
    notebooks/gaussian_objects
    notebooks/affine_transforms
+   notebooks/linear_regression
 
 .. toctree::
    :maxdepth: 1
