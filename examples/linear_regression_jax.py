@@ -57,7 +57,7 @@ class LinearRegression:
         """
         Sigma = jnp.array([self.sigma_prior ** 2.0 * jnp.eye(self.D)])
         mu = self.mu_prior * jnp.ones((1, self.D))
-        self.prior = pdf.GaussianDiagDensity(Sigma=Sigma, mu=mu)
+        self.prior = pdf.GaussianDiagPDF(Sigma=Sigma, mu=mu)
 
     def get_likelihood(self, X: jnp.ndarray, y: jnp.ndarray) -> factors.ConjugateFactor:
         """Computes the likelihood

@@ -219,7 +219,7 @@ class GaussianPDF(measures.GaussianMeasure):
         return density_dict
 
 
-class GaussianDiagDensity(GaussianPDF, measures.GaussianDiagMeasure):
+class GaussianDiagPDF(GaussianPDF, measures.GaussianDiagMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix. 
     
     :math`\Sigma` should be diagonal (and hence :math:`Lambda?).
@@ -246,30 +246,28 @@ class GaussianDiagDensity(GaussianPDF, measures.GaussianDiagMeasure):
             Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma,
         )
 
-    def slice(self, indices: jnp.ndarray) -> "GaussianDiagDensity":
+    def slice(self, indices: jnp.ndarray) -> "GaussianDiagPDF":
         """Return an object with only the specified entries.
 
         :param indices: The entries that should be contained in the returned object.
         :type indices: jnp.ndarray
         :return: The resulting Gaussian diagonal density.
-        :rtype: GaussianDiagDensity
+        :rtype: GaussianDiagPDF
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         mu_new = jnp.take(self.mu, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
-        new_measure = GaussianDiagDensity(
-            Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new,
-        )
+        new_measure = GaussianDiagPDF(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new,)
         return new_measure
 
-    def update(self, indices: jnp.ndarray, density: "GaussianDiagDensity"):
+    def update(self, indices: jnp.ndarray, density: "GaussianDiagPDF"):
         """Update densities at indicated entries.
 
         :param indices: The entries that should be updated.
         :type indices: jnp.ndarray
         :param density: New densities.
-        :type density: GaussianDiagDensity
+        :type density: GaussianDiagPDF
         """
         self.Lambda = self.Lambda.at[indices].set(density.Lambda)
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
@@ -280,15 +278,15 @@ class GaussianDiagDensity(GaussianPDF, measures.GaussianDiagMeasure):
         self.nu = self.nu.at[indices].set(density.nu)
         self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)
 
-    def get_marginal(self, dim_idx: jnp.ndarray) -> "GaussianDiagDensity":
+    def get_marginal(self, dim_idx: jnp.ndarray) -> "GaussianDiagPDF":
         """Get the marginal of the indicated dimensions.
 
         :param dim_idx: The dimensions of the variables, ther marginal is required for.
         :type dim_idx: jnp.ndarray
         :return: The resulting marginal Gaussian density.
-        :rtype: GaussianDiagDensity
+        :rtype: GaussianDiagPDF
         """
         Sigma_new = self.Sigma[:, dim_idx][:, :, dim_idx]
         mu_new = self.mu[:, dim_idx]
-        marginal_density = GaussianDiagDensity(Sigma_new, mu_new)
+        marginal_density = GaussianDiagPDF(Sigma_new, mu_new)
         return marginal_density

@@ -156,11 +156,11 @@ class TestGaussianPDF:
         assert np.alltrue(d.kl_divergence(d2) >= 0)
 
 
-class TestGaussianDiagDensity(TestGaussianPDF):
+class TestGaussianDiagPDF(TestGaussianPDF):
     def setup_class(self):
-        self.test_class = pdf.GaussianDiagDensity
+        self.test_class = pdf.GaussianDiagPDF
 
     def create_instance(self, R, D):
         Sigma = jnp.tile((objax.random.uniform((D, D)) * jnp.eye(D))[None], [R, 1, 1])
         mu = objax.random.normal((R, D))
-        return pdf.GaussianDiagDensity(Sigma, mu)
+        return pdf.GaussianDiagPDF(Sigma, mu)
