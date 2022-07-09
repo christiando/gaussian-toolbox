@@ -18,7 +18,7 @@ from . import measures
 from ..utils.linalg import invert_matrix, invert_diagonal
 
 
-class GaussianDensity(measures.GaussianMeasure):
+class GaussianPDF(measures.GaussianMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix.
 
     :param Sigma: Covariance matrices of the Gaussian densities. Dimensions should be [R, D, D].
@@ -67,13 +67,13 @@ class GaussianDensity(measures.GaussianMeasure):
         x_samples = self.mu[None] + jnp.einsum("abc,dac->dab", L, rand_nums)
         return x_samples
 
-    def slice(self, indices: jnp.ndarray) -> "GaussianDensity":
+    def slice(self, indices: jnp.ndarray) -> "GaussianPDF":
         """Return an object with only the specified entries.
 
         :param indices: The entries that should be contained in the returned object.
         :type indices: jnp.ndarray
         :return: The resulting Gaussian density.
-        :rtype: GaussianDensity
+        :rtype: GaussianPDF
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
@@ -83,16 +83,16 @@ class GaussianDensity(measures.GaussianMeasure):
         # Sigma_new = lax.dynamic_index_in_dim(self.Sigma, indices, axis=0)
         # mu_new = lax.dynamic_index_in_dim(self.mu, indices, axis=0)
         # ln_det_Sigma_new = lax.dynamic_index_in_dim(self.ln_det_Sigma, indices, axis=0)
-        new_measure = GaussianDensity(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
+        new_measure = GaussianPDF(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
         return new_measure
 
-    def update(self, indices: jnp.ndarray, density: "GaussianDensity"):
+    def update(self, indices: jnp.ndarray, density: "GaussianPDF"):
         """Update densities at indicated entries.
 
         :param indices: The entries that should be updated.
         :type indices: jnp.ndarray
         :param density: New densities.
-        :type density: GaussianDensity
+        :type density: GaussianPDF
         """
         self.Lambda = self.Lambda.at[indices].set(density.Lambda)
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
@@ -103,19 +103,19 @@ class GaussianDensity(measures.GaussianMeasure):
         self.nu = self.nu.at[indices].set(density.nu)
         self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)
 
-    def get_marginal(self, dim_x: jnp.ndarray) -> "GaussianDensity":
+    def get_marginal(self, dim_x: jnp.ndarray) -> "GaussianPDF":
         """Get the marginal of the indicated dimensions.
 
         :param dim_x: The dimensions of the variables, the marginal is required for.
         :type dim_x: jnp.ndarray
         :return: The resulting marginal Gaussian density.
-        :rtype: GaussianDensity
+        :rtype: GaussianPDF
         """
         idx = jnp.ix_(jnp.arange(self.Sigma.shape[0]), dim_x, dim_x)
         Sigma_new = self.Sigma[idx]
         idx = jnp.ix_(jnp.arange(self.mu.shape[0]), dim_x)
         mu_new = self.mu[idx]
-        marginal_density = GaussianDensity(Sigma_new, mu_new)
+        marginal_density = GaussianPDF(Sigma_new, mu_new)
         return marginal_density
 
     def entropy(self) -> jnp.ndarray:
@@ -131,7 +131,7 @@ class GaussianDensity(measures.GaussianMeasure):
         entropy = 0.5 * (self.D * (1.0 + jnp.log(2 * jnp.pi)) + self.ln_det_Sigma)
         return entropy
 
-    def kl_divergence(self, p1: "GaussianDensity") -> jnp.ndarray:
+    def kl_divergence(self, p1: "GaussianPDF") -> jnp.ndarray:
         r""" Compute the Kulback Leibler divergence between two multivariate Gaussians.
         
         .. math
@@ -139,11 +139,11 @@ class GaussianDensity(measures.GaussianMeasure):
             D_KL(p|p1) = \int p(X)\log \frac{p(X)}{p_1(X)} {\rm d}X
 
         :param p1: The other Gaussian Density.
-        :type p1: GaussianDensity
+        :type p1: GaussianPDF
         :return: Kulback Leibler divergence. Dimensions should be [R].
         :rtype: jnp.ndarray
         """
-        assert self.R == p1.R
+        assert self.R == p1.R or p1.R == 1 or self.R == 1
         assert self.D == p1.D
         dmu = p1.mu - self.mu
         dmu_Sigma_dmu = jnp.einsum(
@@ -161,13 +161,13 @@ class GaussianDensity(measures.GaussianMeasure):
         )
         return kl_div
 
-    def condition_on(self, dim_y: jnp.ndarray) -> "ConditionalGaussianDensity":
+    def condition_on(self, dim_y: jnp.ndarray) -> "ConditionalGaussianPDF":
         """Return density conditioned on indicated dimensions, i.e. :math:`p(X|Y)`.
 
         :param dim_y: The dimensions of the variables, that should be conditioned on.
         :type dim_y: jnp.ndarray
         :return: The corresponding conditional Gaussian density :math:`p(X|Y)`.
-        :rtype: ConditionalGaussianDensity
+        :rtype: ConditionalGaussianPDF
         """
         from . import conditionals
 
@@ -178,13 +178,13 @@ class GaussianDensity(measures.GaussianMeasure):
         Sigma_x, ln_det_Lambda_x = invert_matrix(Lambda_x)
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
-        return conditionals.ConditionalGaussianDensity(
+        return conditionals.ConditionalGaussianPDF(
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
         )
 
     def condition_on_explicit(
         self, dim_y: jnp.ndarray, dim_x: jnp.ndarray
-    ) -> "ConditionalGaussianDensity":
+    ) -> "ConditionalGaussianPDF":
         """Returns density conditioned on indicated dimensions, i.e. :math:`p(X|Y)`.
 
         :param dim_y: The dimensions of the variables, that should be conditioned on.
@@ -192,7 +192,7 @@ class GaussianDensity(measures.GaussianMeasure):
         :param dim_x: The dimensions of the variables, that should be still be free.
         :type dim_x: jnp.ndarray
         :return: The corresponding conditional Gaussian density :math:`p(X|Y)`.
-        :rtype: ConditionalGaussianDensity
+        :rtype: ConditionalGaussianPDF
         """
         from . import conditionals
 
@@ -200,7 +200,7 @@ class GaussianDensity(measures.GaussianMeasure):
         Sigma_x, ln_det_Lambda_x = invert_matrix(Lambda_x)
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
-        return conditionals.ConditionalGaussianDensity(
+        return conditionals.ConditionalGaussianPDF(
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
         )
 
@@ -219,7 +219,7 @@ class GaussianDensity(measures.GaussianMeasure):
         return density_dict
 
 
-class GaussianDiagDensity(GaussianDensity, measures.GaussianDiagMeasure):
+class GaussianDiagDensity(GaussianPDF, measures.GaussianDiagMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix. 
     
     :math`\Sigma` should be diagonal (and hence :math:`Lambda?).

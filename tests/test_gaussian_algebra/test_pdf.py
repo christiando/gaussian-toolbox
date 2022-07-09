@@ -1,4 +1,4 @@
-from gaussian_toolbox.gaussian_algebra import densities
+from gaussian_toolbox.gaussian_algebra import pdf
 from gaussian_toolbox.utils import linalg
 import pytest
 from jax import numpy as jnp
@@ -8,9 +8,9 @@ import objax
 from scipy.stats import multivariate_normal
 
 
-class TestGaussianDensity:
+class TestGaussianPDF:
     def setup_class(self):
-        self.test_class = densities.GaussianDensity
+        self.test_class = pdf.GaussianPDF
 
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
@@ -26,7 +26,7 @@ class TestGaussianDensity:
     def create_instance(self, R, D):
         Sigma = self.get_pd_matrix(R, D)
         mu = objax.random.normal((R, D))
-        return densities.GaussianDensity(Sigma, mu)
+        return pdf.GaussianPDF(Sigma, mu)
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
     def test_init(self, R, D):
@@ -156,11 +156,11 @@ class TestGaussianDensity:
         assert np.alltrue(d.kl_divergence(d2) >= 0)
 
 
-class TestGaussianDiagDensity(TestGaussianDensity):
+class TestGaussianDiagDensity(TestGaussianPDF):
     def setup_class(self):
-        self.test_class = densities.GaussianDiagDensity
+        self.test_class = pdf.GaussianDiagDensity
 
     def create_instance(self, R, D):
         Sigma = jnp.tile((objax.random.uniform((D, D)) * jnp.eye(D))[None], [R, 1, 1])
         mu = objax.random.normal((R, D))
-        return densities.GaussianDiagDensity(Sigma, mu)
+        return pdf.GaussianDiagDensity(Sigma, mu)

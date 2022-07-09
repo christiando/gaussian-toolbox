@@ -29,7 +29,7 @@ import objax
 from functools import partial
 
 from ..gaussian_algebra import (
-    densities,
+    pdf,
     conditionals,
     approximate_conditionals,
     factors,
@@ -97,29 +97,29 @@ class ObservationModel(objax.Module):
         self.emission_density = None
 
     def filtering(
-        self, prediction_density: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
-    ) -> densities.GaussianDensity:
+        self, prediction_density: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
+    ) -> pdf.GaussianPDF:
         """Calculate filter density.
         
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
 
         :param prediction_density: Prediction density p(z_t|x_{1:t-1}).
-        :type prediction_density: densities.GaussianDensity
+        :type prediction_density: pdf.GaussianPDF
         :param x_t: Observation vector. Dimensions should be [1, Dx].
         :type x_t: jnp.ndarray
         :raises NotImplementedError: Must be implemented.
         :return: Filter density p(z_t|x_{1:t}).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         raise NotImplementedError("Filtering for observation model not implemented.")
 
     def update_hyperparameters(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+        self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ):
         """Update hyperparameters.
 
         :param smoothing_density: The smoothing density over the latent space.
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :raises NotImplementedError: Must be implemented.
@@ -129,12 +129,12 @@ class ObservationModel(objax.Module):
         )
 
     def evalutate_llk(
-        self, p_z: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+        self, p_z: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ) -> jnp.ndarray:
         """Compute the log likelihood of data given distribution over latent variables.
 
         :param p_z: Density over latent variables.
-        :type p_z: densities.GaussianDensity
+        :type p_z: pdf.GaussianPDF
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :raises NotImplementedError: Must be implemented.
@@ -166,7 +166,7 @@ class LinearObservationModel(ObservationModel):
             self.C = jnp.array(np.random.randn(Dx, Dz))
         self.d = jnp.zeros(Dx)
         self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
-        self.emission_density = conditionals.ConditionalGaussianDensity(
+        self.emission_density = conditionals.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
@@ -200,7 +200,7 @@ class LinearObservationModel(ObservationModel):
         z_hat = jnp.dot(jnp.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - jnp.dot(z_hat, self.C.T) - self.d
         self.Qx = jnp.dot(delta_X.T, delta_X)
-        self.emission_density = conditionals.ConditionalGaussianDensity(
+        self.emission_density = conditionals.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
@@ -209,18 +209,18 @@ class LinearObservationModel(ObservationModel):
         )
 
     def filtering(
-        self, prediction_density: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
-    ) -> densities.GaussianDensity:
+        self, prediction_density: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
+    ) -> pdf.GaussianPDF:
         """_"Calculate filter density.
         
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
 
         :param prediction_density: Prediction density p(z_t|x_{1:t-1}).
-        :type prediction_density: densities.GaussianDensity
+        :type prediction_density: pdf.GaussianPDF
         :param x_t: Observation vector. Dimensions should be [1, Dx].
         :type x_t: jnp.ndarray
         :return: Filter density p(z_t|x_{1:t}).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         # p(z_t| x_t, x_{1:t-1})
         p_z_given_x = self.emission_density.affine_conditional_transformation(
@@ -231,18 +231,18 @@ class LinearObservationModel(ObservationModel):
         return cur_filter_density
 
     def gappy_filtering(
-        self, prediction_density: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
-    ) -> densities.GaussianDensity:
+        self, prediction_density: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
+    ) -> pdf.GaussianPDF:
         """Calculate the filtering density for incomplete data. Not observed values should be nans. 
         
         Remark: Slow!
 
         :param prediction_density: Prediction density p(z_t|x_{1:t-1}).
-        :type prediction_density: densities.GaussianDensity
+        :type prediction_density: pdf.GaussianPDF
         :param x_t: Observation vector. Dimensions should be [1, Dx]. Not observed values should be nans. 
         :type x_t: jnp.ndarray
         :return: Filter density p(z_t|x_{1:t}).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         # In case all data are unobserved
         if jnp.alltrue(jnp.isnan(x_t[0])):
@@ -271,21 +271,21 @@ class LinearObservationModel(ObservationModel):
 
     def gappy_filtering_static(
         self,
-        prediction_density: densities.GaussianDensity,
+        prediction_density: pdf.GaussianPDF,
         x_t: jnp.ndarray,
         observed_dims: jnp.ndarray = None,
         **kwargs
-    ) -> densities.GaussianDensity:
+    ) -> pdf.GaussianPDF:
         """Calculate the filtering density for incomplete data, i.e. some fixed dimension are not observed.
 
         :param prediction_density: Prediction density p(z_t|x_{1:t-1}).
-        :type prediction_density: densities.GaussianDensity
+        :type prediction_density: pdf.GaussianPDF
         :param x_t: Observation vector. Dimensions should be [1, Dx]. Not observed values should be nans. 
         :type x_t: jnp.ndarray
         :param observed_dims: Dimensions that are observed. If non empty set., defaults to None
         :type observed_dims: jnp.ndarray, optional
         :return: Filter density p(z_t|x_{1:t}).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         # In case all data are unobserved
         if observed_dims == None:
@@ -316,12 +316,12 @@ class LinearObservationModel(ObservationModel):
             return cur_filter_density
 
     def gappy_data_density(
-        self, p_z: densities.GaussianDensity, x_t: jnp.ndarray, **kwargs
+        self, p_z: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Calculate data density for incomplete data. Not observed values should be nans.
         
         :param p_z: Density over latent dimensions.
-        :type p_z: densities.GaussianDensity
+        :type p_z: pdf.GaussianPDF
         :param x_t: Observation, where unobserved dimensions are filled with NANs. Dimensions should be [1, Dx].
         :type x_t: jnp.ndarray
         :return: Mean and variance of unobserved entries.
@@ -345,7 +345,7 @@ class LinearObservationModel(ObservationModel):
 
     def gappy_data_density_static(
         self,
-        p_z: densities.GaussianDensity,
+        p_z: pdf.GaussianPDF,
         x_t: jnp.ndarray,
         observed_dims: jnp.ndarray = None,
         nonobserved_dims: jnp.ndarray = None,
@@ -356,7 +356,7 @@ class LinearObservationModel(ObservationModel):
          p(x_t) = \int p(x_t|z_t)p(z_t) dz_t
 
         :param p_z: Density over latent dimensions.
-        :type p_z: densities.GaussianDensity
+        :type p_z: pdf.GaussianPDF
         :param x_t: Observation, where unobserved dimensions are filled with NANs. Dimensions should be [1, Dx].
         :type x_t: jnp.ndarray
         :param observed_dims: Dimensions that are observed. If non empty set., defaults to None
@@ -381,19 +381,19 @@ class LinearObservationModel(ObservationModel):
             return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))[0]
 
     def compute_Q_function(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+        self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ) -> float:
         return jnp.sum(
             self.emission_density.integrate_log_conditional_y(smoothing_density)(X)
         )
 
     def update_hyperparameters(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+        self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ):
         """Update hyperparameters.
 
         :param smoothing_density: The smoothing density over the latent space.
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :raises NotImplementedError: Must be implemented.
@@ -403,11 +403,11 @@ class LinearObservationModel(ObservationModel):
         self.update_Qx(smoothing_density, X)
         self.update_emission_density()
 
-    def update_Qx(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+    def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """ Update observation covariance matrix.
 
         :param smoothing_density: The smoothing density over the latent space.
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :raises NotImplementedError: Must be implemented.
@@ -430,11 +430,11 @@ class LinearObservationModel(ObservationModel):
         #                                         b_vec=a_t[t-1])[0]
         self.Qx = 0.5 * (Exx + Exx.T) / T
 
-    def update_C(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+    def update_C(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update observation matrix.
 
         :param smoothing_density: The smoothing density over the latent space.
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :raises NotImplementedError: Must be implemented.
@@ -444,11 +444,11 @@ class LinearObservationModel(ObservationModel):
         zx = jnp.sum(Ez[:, :, None] * (X[:, None] - self.d[None, None]), axis=0)
         self.C = jnp.linalg.solve(Ezz, zx).T
 
-    def update_d(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+    def update_d(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update observation offset.
 
         :param smoothing_density: The smoothing density over the latent space.
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :raises NotImplementedError: Must be implemented.
@@ -458,7 +458,7 @@ class LinearObservationModel(ObservationModel):
     def update_emission_density(self):
         """ Updates the emission density.
         """
-        self.emission_density = conditionals.ConditionalGaussianDensity(
+        self.emission_density = conditionals.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
@@ -466,13 +466,11 @@ class LinearObservationModel(ObservationModel):
             self.emission_density.ln_det_Sigma[0],
         )
 
-    def evaluate_llk(
-        self, p_z: densities.GaussianDensity, X: jnp.ndarray, **kwargs
-    ) -> float:
+    def evaluate_llk(self, p_z: pdf.GaussianPDF, X: jnp.ndarray, **kwargs) -> float:
         """Computes the log likelihood of data given distribution over latent variables.
 
         :param p_z: Density over latent variables.
-        :type p_z: densities.GaussianDensity
+        :type p_z: pdf.GaussianPDF
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :return: Log likelihood
@@ -489,7 +487,7 @@ class LinearObservationModel(ObservationModel):
         observed_dims: jnp.ndarray,
         unobserved_dims: jnp.ndarray,
         **kwargs
-    ) -> densities.GaussianDensity:
+    ) -> pdf.GaussianPDF:
         """ Returns the density p(x_unobserved|X_observed=x, Z=z).
 
         :param z_sample: Values of latent variable
@@ -501,7 +499,7 @@ class LinearObservationModel(ObservationModel):
         :param unobserved_dims: Unobserved dimensions.
         :type unobserved_dims: jnp.ndarray
         :return: The density over unobserved dimensions.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         p_x = self.emission_density.condition_on_x(z_sample)
         if observed_dims != None:
@@ -591,12 +589,12 @@ class LRBFMObservationModel(LinearObservationModel):
             return jnp.exp(self.log_length_scale)
 
     def update_hyperparameters(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+        self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ):
         """Update the hyperparameters C,d,Qx,W.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations.
         :type X: jnp.ndarray
         """
@@ -622,13 +620,13 @@ class LRBFMObservationModel(LinearObservationModel):
             self.emission_density.ln_det_Sigma[0],
         )
 
-    def update_Qx(self, smoothing_density: densities.GaussianDensity, X: jnp.array):
+    def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.array):
         """Update observation covariance matrix Qx.
         
         Qx* = E[(X-C phi(z) - d)(X-C phi(z) - d)']
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations.
         :type X: jnp.ndarray
         """
@@ -646,14 +644,14 @@ class LRBFMObservationModel(LinearObservationModel):
             + sum_mu_x2
         ) / T
 
-    def update_Cd(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+    def update_Cd(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update observation observation matrix C and vector d.
         
         C* = E[(X - d)phi(z)']E[phi(z)phi(z)']^{-1}
         d* = E[(X - C phi(x))]
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations.
         :type X: jnp.ndarray
         """
@@ -691,15 +689,13 @@ class LRBFMObservationModel(LinearObservationModel):
         self.C = jnp.linalg.solve(A / T, B.T / T).T
         self.d = jnp.mean(X, axis=0) - jnp.dot(self.C, jnp.mean(Ef, axis=0))
 
-    def update_kernel_params(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray
-    ):
+    def update_kernel_params(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update the kernel weights.
         
         Using gradient descent on the (negative) Q-function.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations.
         :type X: jnp.ndarray
         """
@@ -766,12 +762,12 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         )
 
     def update_hyperparameters(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+        self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ):
         """Update the hyperparameters C,d,Qx,W.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations.
         :type X: jnp.ndarray
         """
@@ -796,13 +792,13 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
             self.emission_density.ln_det_Sigma[0],
         )
 
-    def update_Qx(self, smoothing_density: densities.GaussianDensity, X: jnp.array):
+    def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.array):
         """Update observation covariance matrix Qx.
         
         Qx* = E[(X-C phi(z) - d)(X-C phi(z) - d)']
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations.
         :type X: jnp.ndarray
         """
@@ -820,14 +816,14 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
             + sum_mu_x2
         ) / T
 
-    def update_Cd(self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray):
+    def update_Cd(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update observation observation matrix C and vector d.
         
         C* = E[(X - d)phi(z)']E[phi(z)phi(z)']^{-1}
         d* = E[(X - C phi(x))]
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations.
         :type X: jnp.ndarray
         """
@@ -865,15 +861,13 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         self.C = jnp.linalg.solve(A / T, B.T / T).T
         self.d = jnp.mean(X, axis=0) - jnp.dot(self.C, jnp.mean(Ef, axis=0))
 
-    def update_kernel_params(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray
-    ):
+    def update_kernel_params(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update the kernel weights.
         
         Using gradient descent on the (negative) Q-function.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations.
         :type X: jnp.ndarray
         """
@@ -1007,7 +1001,7 @@ class HCCovObservationModel(LinearObservationModel):
         )
 
     def compute_Q_function(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray,
+        self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray,
     ):
         T = X.shape[0]
         phi_dict = smoothing_density.slice(jnp.arange(1, smoothing_density.R)).to_dict()
@@ -1033,12 +1027,12 @@ class HCCovObservationModel(LinearObservationModel):
         )
 
     def update_hyperparameters(
-        self, smoothing_density: densities.GaussianDensity, X: jnp.ndarray, **kwargs
+        self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ):
         """Update hyperparameters.
 
         :param smoothing_density: The smoothing density over the latent space.
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :raises NotImplementedError: Must be implemented.
@@ -1249,7 +1243,7 @@ class HCCovObservationModel(LinearObservationModel):
         Dz: int,
         Du: int,
     ):
-        phi = densities.GaussianDensity(**phi_dict)
+        phi = pdf.GaussianPDF(**phi_dict)
         C, d, sigma_x, beta, W = HCCovObservationModel.vector_to_params(
             params, Dx, Dz, Du
         )
@@ -1286,7 +1280,7 @@ class HCCovObservationModel(LinearObservationModel):
         W,
     ):
         T = X.shape[0]
-        phi = densities.GaussianDensity(**phi_dict)
+        phi = pdf.GaussianPDF(**phi_dict)
         vec = X - d
         E_epsilon2 = jnp.sum(
             phi.integrate("(Ax+a)'(Bx+b)", A_mat=-C, a_vec=vec, B_mat=-C, b_vec=vec),
@@ -1316,7 +1310,7 @@ class HCCovObservationModel(LinearObservationModel):
         conv_crit: float = 1e-3,
     ):
         T = X.shape[0]
-        phi = densities.GaussianDensity(**phi_dict)
+        phi = pdf.GaussianPDF(**phi_dict)
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (T, 1))
         b_i = W_i[:1]
@@ -1414,7 +1408,7 @@ class HCCovObservationModel(LinearObservationModel):
         vmap, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None), out_axes=(0, 0)
     )
     def get_lb_i(
-        phi: densities.GaussianDensity,
+        phi: pdf.GaussianPDF,
         X: jnp.ndarray,
         W_i,
         u_i,
@@ -1425,7 +1419,7 @@ class HCCovObservationModel(LinearObservationModel):
         d,
         sigma_x,
     ):
-        # phi = densities.GaussianDensity(**phi_dict)
+        # phi = pdf.GaussianPDF(**phi_dict)
         # beta = self.beta[iu:iu + 1]
         # Lower bound for E[ln (sigma_x^2 + f(h))]
         T = X.shape[0]
@@ -1535,15 +1529,7 @@ class HCCovObservationModel(LinearObservationModel):
         vmap, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None), out_axes=(0, 0)
     )
     def get_R(
-        phi: densities.GaussianDensity,
-        X: jnp.ndarray,
-        W_i,
-        beta,
-        u_i,
-        omega_star,
-        C,
-        d,
-        sigma_x,
+        phi: pdf.GaussianPDF, X: jnp.ndarray, W_i, beta, u_i, omega_star, C, d, sigma_x,
     ):
 
         # Lower bound for E[ln (sigma_x^2 + f(h))]
@@ -1711,13 +1697,13 @@ class BernoulliObservationModel(ObservationModel):
         return phi
 
     def compute_expected_feature_vector(
-        self, density: densities.GaussianDensity, ux: jnp.ndarray = None
+        self, density: pdf.GaussianPDF, ux: jnp.ndarray = None
     ) -> jnp.ndarray:
         """ Computes the expected feature vector
         
             E[phi_i(z)] = (1,E[z],u_i)
             
-        :param density: GaussianDensity
+        :param density: GaussianPDF
             Density over z.
         :param uz: jnp.ndarray [T, Dphi_u] or [T, Dphi_u, Dx]
             Control variables. (Default=None)
@@ -1734,7 +1720,7 @@ class BernoulliObservationModel(ObservationModel):
         return Ephi
 
     def compute_expected_feature_outer_product(
-        self, density: densities.GaussianDensity, ux: jnp.ndarray = None
+        self, density: pdf.GaussianPDF, ux: jnp.ndarray = None
     ) -> jnp.ndarray:
         """ Computes the expected feature vector
         
@@ -1742,7 +1728,7 @@ class BernoulliObservationModel(ObservationModel):
                                      E[z], E[zz'],  E[z]u_i',
                                      u_i,  E[z]u_i, u_iu_i')
             
-        :param density: GaussianDensity
+        :param density: GaussianPDF
             Density over z.
         :param ux: jnp.ndarray [T, Dx, Dphi_u] or [T, Dphi_u]
             Control variables. (Default=None)
@@ -1776,7 +1762,7 @@ class BernoulliObservationModel(ObservationModel):
 
     def get_omega_star(
         self,
-        density: densities.GaussianDensity,
+        density: pdf.GaussianPDF,
         x_t: jnp.ndarray,
         ux_t: jnp.ndarray = None,
         conv_crit: float = 1e-4,
@@ -1816,20 +1802,20 @@ class BernoulliObservationModel(ObservationModel):
 
     def filtering(
         self,
-        prediction_density: densities.GaussianDensity,
+        prediction_density: pdf.GaussianPDF,
         x_t: jnp.ndarray,
         ux_t: jnp.ndarray = None,
         **kwargs
-    ) -> densities.GaussianDensity:
+    ) -> pdf.GaussianPDF:
         """ Here the variational approximation of filtering density is calculated.
         
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
         
-        :param prediction_density: GaussianDensity
+        :param prediction_density: GaussianPDF
             Prediction density p(z_t|x_{1:t-1}).
         :param x_t: jnp.ndarray [1, Dx]
             Observation.
-        :return: GaussianDensity
+        :return: GaussianPDF
             Filter density p(z_t|x_{1:t}).
         """
         omega_star = self.get_omega_star(prediction_density, x_t, ux_t)
@@ -1852,7 +1838,7 @@ class BernoulliObservationModel(ObservationModel):
 
     def get_omega_dagger(
         self,
-        density: densities.GaussianDensity,
+        density: pdf.GaussianPDF,
         ux_t: jnp.ndarray = None,
         conv_crit: float = 1e-4,
     ) -> jnp.ndarray:
@@ -1873,14 +1859,14 @@ class BernoulliObservationModel(ObservationModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
         X: jnp.ndarray,
         u_x: jnp.ndarray = None,
         **kwargs
     ):
         """ This procedure updates the hyperparameters of the observation model.
         
-        :param smoothing_density: GaussianDensity
+        :param smoothing_density: GaussianPDF
             The smoothing density over the latent space.
         :param X: jnp.ndarray [T, Dx]
             The observations.
@@ -1907,10 +1893,7 @@ class BernoulliObservationModel(ObservationModel):
         self.Theta = jnp.linalg.solve(A_theta, b_theta)
 
     def get_lb_sigma(
-        self,
-        density: densities.GaussianDensity,
-        x_t: jnp.ndarray,
-        ux_t: jnp.ndarray = None,
+        self, density: pdf.GaussianPDF, x_t: jnp.ndarray, ux_t: jnp.ndarray = None,
     ) -> jnp.ndarray:
         """ Computes the lower bounds for the data probability.
         """
@@ -1944,15 +1927,11 @@ class BernoulliObservationModel(ObservationModel):
         return prob_lb
 
     def evaluate_llk(
-        self,
-        p_z: densities.GaussianDensity,
-        X: jnp.ndarray,
-        u_x: jnp.ndarray = None,
-        **kwargs
+        self, p_z: pdf.GaussianPDF, X: jnp.ndarray, u_x: jnp.ndarray = None, **kwargs
     ) -> float:
         """ Computes the lower bound of log likelihood of data given distribution over latent variables.
         
-        :param p_z: GaussianDensity
+        :param p_z: GaussianPDF
             Density over latent variables.
         :param X: jnp.ndarray [T, Dx]
             Observations.

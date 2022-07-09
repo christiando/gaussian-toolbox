@@ -1,6 +1,6 @@
 class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
     def __init__(
-        self, components: Iterable["GaussianDensity"], weights: jnp.ndarray = None
+        self, components: Iterable["GaussianPDF"], weights: jnp.ndarray = None
     ):
         """ Class of mixture of Gaussian measures
         

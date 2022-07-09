@@ -1,4 +1,4 @@
-from gaussian_toolbox.gaussian_algebra import densities, conditionals, measures
+from gaussian_toolbox.gaussian_algebra import pdf, conditionals, measures
 from gaussian_toolbox.utils import linalg
 import pytest
 from jax import numpy as jnp
@@ -10,14 +10,14 @@ import numpy as np
 import objax
 
 
-class TestConditionalGaussianDensity:
+class TestConditionalGaussianPDF:
     @classmethod
     def create_instance(self, R, D, dim_y):
         dim_xy = jnp.arange(D, dtype=jnp.int32)
         dim_x = jnp.setxor1d(dim_xy, dim_y)
         Sigma = self.get_pd_matrix(R, D)
         mu = objax.random.normal((R, D))
-        pxy = densities.GaussianDensity(Sigma, mu)
+        pxy = pdf.GaussianPDF(Sigma, mu)
         px_given_y = pxy.condition_on(dim_y).slice(jnp.array([0]))
         # py = pxy.get_marginal(dim_y)
         return px_given_y, pxy, dim_x
@@ -41,14 +41,14 @@ class TestConditionalGaussianDensity:
         M = objax.random.normal((R, Dy, Dx))
         b = objax.random.normal((R, Dy))
         Lambda, ln_det_Sigma = linalg.invert_matrix(Sigma)
-        cond = conditionals.ConditionalGaussianDensity(M, b, Sigma)
+        cond = conditionals.ConditionalGaussianPDF(M, b, Sigma)
         assert jnp.allclose(cond.Lambda, Lambda)
         assert jnp.allclose(cond.ln_det_Sigma, ln_det_Sigma)
         assert jnp.allclose(-cond.ln_det_Lambda, ln_det_Sigma)
         assert jnp.allclose(cond.b, b)
         assert jnp.allclose(cond.M, M)
         Lambda, ln_det_Sigma = linalg.invert_matrix(Sigma)
-        cond = conditionals.ConditionalGaussianDensity(M, Lambda=Lambda)
+        cond = conditionals.ConditionalGaussianPDF(M, Lambda=Lambda)
         assert jnp.allclose(cond.Sigma, Sigma)
         assert jnp.allclose(cond.Lambda, Lambda)
         assert jnp.allclose(cond.ln_det_Sigma, ln_det_Sigma)
@@ -275,7 +275,7 @@ class TestNNControlGaussianConditional:
         u = objax.random.normal((R, Du))
         Sigma_x = self.get_pd_matrix(R, Dx)
         mu = objax.random.normal((R, Dx))
-        px = densities.GaussianDensity(Sigma_x, mu)
+        px = pdf.GaussianPDF(Sigma_x, mu)
         cond2 = cond_u.affine_conditional_transformation(px, u=u)
         py = cond_u.affine_marginal_transformation(px, u=u)
         mi1 = cond_u.mutual_information(px, u=u)
@@ -329,7 +329,7 @@ class TestNNControlGaussianConditional:
         u = objax.random.normal((R, Du))
         Sigma_x = self.get_pd_matrix(R, Dx)
         mu = objax.random.normal((R, Dx))
-        px = densities.GaussianDensity(Sigma_x, mu)
+        px = pdf.GaussianPDF(Sigma_x, mu)
         pxy = cond_u.affine_joint_transformation(px, u)
         D = Dx + Dy
         dim_y = jnp.arange(Dy)

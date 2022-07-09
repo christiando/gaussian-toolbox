@@ -8,18 +8,18 @@
 ##################################################################################################
 
 __author__ = "Christian Donner"
-__all__ = ["ConditionalGaussianDensity", "NNControlGaussianConditional"]
+__all__ = ["ConditionalGaussianPDF", "NNControlGaussianConditional"]
 
 # import jnp
-# from densities import GaussianDensity
+# from pdf import GaussianPDF
 from jax import numpy as jnp
 from typing import Tuple
-from . import densities, factors, measures
+from . import pdf, factors, measures
 import objax
 from ..utils.linalg import invert_matrix
 
 
-class ConditionalGaussianDensity:
+class ConditionalGaussianPDF:
     """A conditional Gaussian density
     
     .. math::
@@ -74,7 +74,7 @@ class ConditionalGaussianDensity:
     def __str__(self) -> str:
         return "Conditional Gaussian density p(y|x)"
 
-    def __call__(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
+    def __call__(self, x: jnp.ndarray, **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :amt:`x`, i.e.
         
         .. math::
@@ -84,24 +84,24 @@ class ConditionalGaussianDensity:
         :param x: Instances, the :math:`\mu` should be conditioned on. Dimensions should be [N, Dx].
         :type x: jnp.ndarray
         :return: The density conditioned on x.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         return self.condition_on_x(x)
 
-    def slice(self, indices: jnp.ndarray) -> "ConditionalGaussianDensity":
+    def slice(self, indices: jnp.ndarray) -> "ConditionalGaussianPDF":
         """Return the conditional with only the specified entries.
 
         :param indices: The entries that should be contained in the returned object.
         :type indices: jnp.ndarray
         :return: The resulting conditional Gaussian diagonal density.
-        :rtype: ConditionalGaussianDensity
+        :rtype: ConditionalGaussianPDF
         """
         M_new = jnp.take(self.M, indices, axis=0)
         b_new = jnp.take(self.b, indices, axis=0)
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
-        new_measure = ConditionalGaussianDensity(
+        new_measure = ConditionalGaussianPDF(
             M_new, b_new, Sigma_new, Lambda_new, ln_det_Sigma_new
         )
         return new_measure
@@ -117,13 +117,13 @@ class ConditionalGaussianDensity:
         mu_y = jnp.einsum("abc,dc->adb", self.M, x) + self.b[:, None]
         return mu_y
 
-    def condition_on_x(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
+    def condition_on_x(self, x: jnp.ndarray, **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`x`.
 
         :param x: Instances, the mu should be conditioned on. Dimensions should be [N, Dx].
         :type x: jnp.ndarray
         :return: The density conditioned on :math:`x`.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((self.R * N, self.Dy))
@@ -136,7 +136,7 @@ class ConditionalGaussianDensity:
         ln_det_Sigma_new = jnp.tile(self.ln_det_Sigma[:, None], (1, N)).reshape(
             self.R * N
         )
-        return densities.GaussianDensity(
+        return pdf.GaussianPDF(
             Sigma=Sigma_new,
             mu=mu_new,
             Lambda=Lambda_new,
@@ -181,8 +181,8 @@ class ConditionalGaussianDensity:
         return factor_new
 
     def affine_joint_transformation(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         """Return the joint density.
         
         .. math::
@@ -192,10 +192,10 @@ class ConditionalGaussianDensity:
         where :math:`p(Y|X)` is the object itself.
         
         :param p_x: Marginal density over :math:`X`.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :raises RuntimeError: Only works if one of the densities involved have R==1.
         :return: The joint density.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -257,19 +257,19 @@ class ConditionalGaussianDensity:
                 jnp.tile(self.ln_det_Lambda[:, None], (1, p_x.R)).reshape((R,))
                 + delta_ln_det
             )
-        return densities.GaussianDensity(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
+        return pdf.GaussianPDF(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
 
     def affine_marginal_transformation(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         """Return the marginal density :math:`p(X)` given :math:`p(Y|X)` and :math:`p(X)`, where :math:`p(Y|X)` 
         is the object itself.
 
         :param p_x: Marginal density over :math:`X`.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :raises RuntimeError: Only works if one of the densities involved have R==1.
         :return: The marginal density.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -286,19 +286,19 @@ class ConditionalGaussianDensity:
         MSigma_x = jnp.einsum("abc,dce->adbe", self.M, p_x.Sigma)  # [R1,R,Dy,D]
         MSigmaM = jnp.einsum("abcd,aed->abce", MSigma_x, self.M)
         Sigma_y = (self.Sigma[:, None] + MSigmaM).reshape((R, self.Dy, self.Dy))
-        return densities.GaussianDensity(Sigma_y, mu_y)
+        return pdf.GaussianPDF(Sigma_y, mu_y)
 
     def affine_conditional_transformation(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> "ConditionalGaussianDensity":
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> "ConditionalGaussianPDF":
         """ Return the conditional density :math:`p(X|Y)`, given :math:`p(Y|X)` and :math:`p(X)`, where :math:`p(Y|X)` 
         is the object itself.
 
         :param p_x: Marginal density over :math:`X`.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :raises RuntimeError: Only works if one of the densities involved have R==1.
         :return: The conditional density :math:`p(Y|X)`.
-        :rtype: ConditionalGaussianDensity
+        :rtype: ConditionalGaussianPDF
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -333,13 +333,9 @@ class ConditionalGaussianDensity:
         )
         b_x = b_x.reshape((R, p_x.D))
         M_x = M_x.reshape((R, p_x.D, self.Dy))
-        return ConditionalGaussianDensity(
-            M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x,
-        )
+        return ConditionalGaussianPDF(M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x,)
 
-    def integrate_log_conditional(
-        self, p_yx: densities.GaussianDensity, **kwargs
-    ) -> jnp.ndarray:
+    def integrate_log_conditional(self, p_yx: pdf.GaussianPDF, **kwargs) -> jnp.ndarray:
         """Integrates over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
         
         .. math::
@@ -368,9 +364,7 @@ class ConditionalGaussianDensity:
         )
         return log_expectation
 
-    def integrate_log_conditional_y(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> callable:
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, **kwargs) -> callable:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -405,9 +399,7 @@ class ConditionalGaussianDensity:
         )
         return log_expectation_y
 
-    def conditional_entropy(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> jnp.ndarray:
+    def conditional_entropy(self, p_x: pdf.GaussianPDF, **kwargs) -> jnp.ndarray:
         """Computes the conditional entropy
         
         .. math::
@@ -415,7 +407,7 @@ class ConditionalGaussianDensity:
             H_{Y|X} = H_{Y,X} - H_X = -\int p(X,Y)\ln p(Y|X) {\\rm d}X {\\rm d}Y
 
         :param p_x: Marginal over condtional variable
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Conditional entropy 
         :rtype: jnp.ndarray [R]
         """
@@ -423,9 +415,7 @@ class ConditionalGaussianDensity:
         cond_entropy = p_xy.entropy() - p_x.entropy()
         return cond_entropy
 
-    def mutual_information(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> jnp.ndarray:
+    def mutual_information(self, p_x: pdf.GaussianPDF, **kwargs) -> jnp.ndarray:
         """Computes the mutual information
         
         .. math::
@@ -433,7 +423,7 @@ class ConditionalGaussianDensity:
             I_{Y,X} = H_{Y,X} - H_X - H_Y
 
         :param p_x: Marginal over condtional variable
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Mututal information
         :rtype: jnp.ndarray [R]
         """
@@ -456,7 +446,7 @@ class ConditionalGaussianDensity:
         self.ln_det_Lambda = -self.ln_det_Sigma
 
 
-class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
+class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
     """A conditional Gaussian density, where the transition model is determined through a (known) control variable u.
     
         .. math::
@@ -527,7 +517,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         b = output[:, self.Dy * self.Dx :]
         return M, b
 
-    def set_control_variable(self, u: jnp.ndarray) -> ConditionalGaussianDensity:
+    def set_control_variable(self, u: jnp.ndarray) -> ConditionalGaussianPDF:
         """Create the conditional for a given control variable u,
         
         .. math::
@@ -537,12 +527,12 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
         :return: The conditional
-        :rtype: ConditionalGaussianDensity
+        :rtype: ConditionalGaussianPDF
         """
         R = u.shape[0]
         M, b = self.get_M_b(u)
         tile_dims = (R, 1, 1)
-        return ConditionalGaussianDensity(
+        return ConditionalGaussianPDF(
             M=M,
             b=b,
             Sigma=jnp.tile(self.Sigma, tile_dims),
@@ -567,9 +557,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.get_conditional_mu(x)
 
-    def condition_on_x(
-        self, x: jnp.ndarray, u: jnp.array, **kwargs
-    ) -> densities.GaussianDensity:
+    def condition_on_x(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> pdf.GaussianPDF:
         """Return the Gaussian density
         
         .. math::
@@ -581,7 +569,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
         :return: Gaussian density conditioned on instances x, and u.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.condition_on_x(x)
@@ -604,8 +592,8 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         return cond_gauss.set_y(y)
 
     def affine_joint_transformation(
-        self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
-    ) -> densities.GaussianDensity:
+        self, p_x: pdf.GaussianPDF, u: jnp.array, **kwargs
+    ) -> pdf.GaussianPDF:
         """Perform the affine joint transformation with a given control variable
         
         .. math::
@@ -615,49 +603,49 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
         where :math:`p(Y|X,u)` is the object itself.
 
         :param p_x: Marginal over :math:`X`
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
         :return: The joint density
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_joint_transformation(p_x)
 
     def affine_marginal_transformation(
-        self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
-    ) -> densities.GaussianDensity:
+        self, p_x: pdf.GaussianPDF, u: jnp.array, **kwargs
+    ) -> pdf.GaussianPDF:
         """Return the marginal density :math:`p(Y)` given  :math:`p(Y|X,u)` and :math:`p(X)`, 
         where p(Y|X,u) is the object itself.
 
         :param p_x: Marginal over :math:`X`
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
         :return: Marginal density :math:`p(Y|u)`.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_marginal_transformation(p_x)
 
     def affine_conditional_transformation(
-        self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
-    ) -> "ConditionalGaussianDensity":
+        self, p_x: pdf.GaussianPDF, u: jnp.array, **kwargs
+    ) -> "ConditionalGaussianPDF":
         """Return the conditional density :math:`p(X|Y, u)`, given :math:`p(Y|X,u)` and :math:`p(X)`,           
         where :math:`p(Y|X,u)` is the object itself.
 
         :param p_x: Marginal over :math:`X`
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
         :return: Conditional density :math:`p(X|Y, u)`.
-        :rtype: ConditionalGaussianDensity
+        :rtype: ConditionalGaussianPDF
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_conditional_transformation(p_x)
 
     def conditional_entropy(
-        self, p_x: densities.GaussianDensity, u: jnp.array, **kwargs
+        self, p_x: pdf.GaussianPDF, u: jnp.array, **kwargs
     ) -> jnp.ndarray:
         """Compute the conditional entropy
         
@@ -666,7 +654,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianDensity):
             H_{y|x,u} = H_{y,x|u} - H_x = -\int p(X,Y\\vert u)\ln p(Y|X,u) {\\rm d}x {\\rm d}y
 
         :param p_x: Marginal over condtional variable
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
         :return: Conditional entropy 

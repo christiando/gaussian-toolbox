@@ -1,7 +1,7 @@
 from gaussian_toolbox.gaussian_algebra import (
     factors,
     measures,
-    densities,
+    pdf,
     conditionals,
     approximate_conditionals,
 )
@@ -9,7 +9,7 @@ from gaussian_toolbox.gaussian_algebra import (
 __all__ = [
     "factors",
     "measures",
-    "densities",
+    "pdf",
     "conditionals",
     "approximate_conditionals",
 ]

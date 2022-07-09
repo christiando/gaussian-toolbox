@@ -2,11 +2,11 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from typing import Tuple
-from . import densities, factors, measures, conditionals
+from . import pdf, factors, measures, conditionals
 from ..utils.linalg import invert_matrix
 
 
-class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensity):
+class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianPDF):
     """ Base class for approximate conditionals.
     """
 
@@ -48,12 +48,12 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensi
         raise NotImplementedError("This class doesn't have the function set_y.")
 
     def get_expected_moments(
-        self, p_x: densities.GaussianDensity
+        self, p_x: pdf.GaussianPDF
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Compute the expected covariance :math:`\Sigma_Y = \mathbb{E}[YY^\\top] - \mathbb{E}[Y]\mathbb{E}[Y]^\\top`.
 
         :param p_x: The density which we average over.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Returns the expected mean and covariance. Dimensions are [p_R, Dy], and  [p_R, Dy, Dy].
         :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
@@ -97,11 +97,11 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensi
         Sigma_y -= mu_y[:, None] * mu_y[:, :, None]
         return mu_y, Sigma_y
 
-    def get_expected_cross_terms(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
+    def get_expected_cross_terms(self, p_x: pdf.GaussianPDF) -> jnp.ndarray:
         """Compute :math:`\mathbb{E}[YX^\\top] = \int\int YX^\\top p(Y|X)p(X) {\\rm d}Y{\\rm d}x = \int (M f(X) + b)X^\\top p(X) {\\rm d}X`.
 
         :param p_x: The density which we average over.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Returns the cross expectations. Dimensions are [p_R, Dx, Dy].
         :rtype: jnp.ndarray
         """
@@ -124,8 +124,8 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensi
         return Eyx
 
     def affine_joint_transformation(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         r"""Get an approximation of the joint density
 
         .. math: 
@@ -149,9 +149,9 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensi
 
 
         :param p_x: The density which we average over.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: The joint distribution p(x,y).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
@@ -162,12 +162,12 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensi
         Sigma_xy = jnp.block(
             [[p_x.Sigma, jnp.swapaxes(cov_yx, axis1=1, axis2=2)], [cov_yx, Sigma_y]]
         )
-        p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
+        p_xy = pdf.GaussianPDF(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
 
     def affine_conditional_transformation(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> conditionals.ConditionalGaussianDensity:
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> conditionals.ConditionalGaussianPDF:
         r"""Get an approximation of the joint density via moment matching
         
         .. math::
@@ -175,9 +175,9 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensi
             p(X|Y) \approx {\cal N}(\mu_{X|Y},Sigma_{X|Y}),
 
         :param p_x: The density which we average over.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: The conditional density ::math:`p(X|Y)`.
-        :rtype: conditionals.ConditionalGaussianDensity
+        :rtype: conditionals.ConditionalGaussianPDF
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = invert_matrix(Sigma_y)[0]
@@ -187,14 +187,14 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensi
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        cond_p_xy = conditionals.ConditionalGaussianDensity(
+        cond_p_xy = conditionals.ConditionalGaussianPDF(
             M=M_new, b=b_new, Sigma=Sigma_new,
         )
         return cond_p_xy
 
     def affine_marginal_transformation(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         r""" Get an approximation of the marginal density
         
         .. math::
@@ -214,12 +214,12 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianDensi
             \Sigma_Y = E[YY^\top] - \mu_Y\mu_Y^\top.
 
         :param p_x: The density which we average over.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: The joint distribution p(y).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y,)
+        p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y,)
         return p_y
 
 
@@ -290,10 +290,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         )
 
     def integrate_log_conditional(
-        self,
-        p_yx: densities.GaussianDensity,
-        p_x: densities.GaussianDensity = None,
-        **kwargs
+        self, p_yx: pdf.GaussianPDF, p_x: pdf.GaussianPDF = None, **kwargs
     ) -> jnp.ndarray:
         r"""Integrate over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
         
@@ -355,9 +352,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> callable:
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, **kwargs) -> callable:
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -365,7 +360,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
             f(Y) = \int \log(p(Y|X))p(X){\rm d}X.
     
         :param p_x: Density over :math:`X`.
-        :type p_x: measures.GaussianDensity
+        :type p_x: measures.GaussianPDF
         :raises NotImplementedError: Only implemented for R=1.
         :return: The integral as function of :math:`Y`.
         :rtype: callable
@@ -477,10 +472,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         self.k_func = factors.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
 
     def integrate_log_conditional(
-        self,
-        p_yx: densities.GaussianDensity,
-        p_x: densities.GaussianDensity = None,
-        **kwargs
+        self, p_yx: pdf.GaussianPDF, p_x: pdf.GaussianPDF = None, **kwargs
     ) -> jnp.ndarray:
         r"""Integrate over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
         
@@ -542,9 +534,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> callable:
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, **kwargs) -> callable:
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -552,7 +542,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
             f(Y) = \int \log(p(Y|X))p(X){\rm d}X.
     
         :param p_x: Density over :math:`X`.
-        :type p_x: measures.GaussianDensity
+        :type p_x: measures.GaussianPDF
         :raises NotImplementedError: Only implemented for R=1.
         :return: The integral as function of :math:`Y`.
         :rtype: callable
@@ -602,7 +592,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         return log_expectation_y
 
 
-class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
+class HCCovGaussianConditional(conditionals.ConditionalGaussianPDF):
     """A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
 
     .. math::
@@ -690,18 +680,18 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         )
         return Sigma_y_x
 
-    def condition_on_x(self, x: jnp.ndarray, **kwargs) -> densities.GaussianDensity:
+    def condition_on_x(self, x: jnp.ndarray, **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`X=x`.
 
         :param x: Instances, the mu and Sigma should be conditioned on. Dimensions should be [N, Dx]
         :type x: jnp.ndarray
         :return: The density conditioned on :math:`X=x`.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
         Sigma_new = self.get_conditional_cov(x)
-        return densities.GaussianDensity(Sigma=Sigma_new, mu=mu_new)
+        return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new)
 
     def set_y(self, y: jnp.ndarray, **kwargs):
         """Not valid function for this model class.
@@ -712,7 +702,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         """
         raise AttributeError("HCCovGaussianConditional doesn't have attributee set_y.")
 
-    def integrate_Sigma_x(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
+    def integrate_Sigma_x(self, p_x: pdf.GaussianPDF) -> jnp.ndarray:
         r"""Integrate covariance with respect to :math:`p(X)`.
         
         .. math::
@@ -720,7 +710,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
             \int \Sigma_Y(X)p(X) {\rm d}X.
 
         :param p_x: The density the covatiance is integrated with.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Integrated covariance matrix. Dimensions are [Dy, Dy]
         :rtype: jnp.ndarray
         """
@@ -735,7 +725,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         )
 
     def get_expected_moments(
-        self, p_x: densities.GaussianDensity
+        self, p_x: pdf.GaussianPDF
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Compute the expected mean and covariance
 
@@ -745,7 +735,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
 
 
         :param p_x: The density which we average over.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Returns the expected mean and covariance. Dimensions should be [p_R, Dy] and [p_R, Dy, Dy].
         :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
@@ -757,11 +747,11 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         # Sigma_y = .5 * (Sigma_y + Sigma_y.T)
         return mu_y, Sigma_y
 
-    def get_expected_cross_terms(self, p_x: densities.GaussianDensity) -> jnp.ndarray:
+    def get_expected_cross_terms(self, p_x: pdf.GaussianPDF) -> jnp.ndarray:
         """Compute E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M x + b)x' p(x) dx
 
         :param p_x: The density which we average over.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Cross expectations. Dimensions are [p_R, Dx, Dy]
         :rtype: jnp.ndarray
         """
@@ -771,8 +761,8 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         return Eyx
 
     def affine_joint_transformation(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         """Get an approximation of the joint density
 
             p(x,y) ~= N(mu_{xy},Sigma_{xy}),
@@ -787,9 +777,9 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
                           E[yx'] - mu_ymu_x' E[yy'] - mu_ymu_y').
 
         :param p_x: The density which we average over.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Joint distribution of p(x,y).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
@@ -801,12 +791,12 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         )
         Sigma_xy2 = jnp.concatenate([cov_yx, Sigma_y], axis=2)
         Sigma_xy = jnp.concatenate([Sigma_xy1, Sigma_xy2], axis=1)
-        p_xy = densities.GaussianDensity(Sigma=Sigma_xy, mu=mu_xy)
+        p_xy = pdf.GaussianPDF(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
 
     def affine_conditional_transformation(
-        self, p_x: densities.GaussianDensity
-    ) -> conditionals.ConditionalGaussianDensity:
+        self, p_x: pdf.GaussianPDF
+    ) -> conditionals.ConditionalGaussianPDF:
         r"""Get an approximation of the joint density via moment matching
         
         .. math::
@@ -814,9 +804,9 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
             p(X|Y) \approx {\cal N}(\mu_{X|Y},\Sigma_{X|Y}).
 
         :param p_x: Marginal Gaussian density over :math:`X`.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: Conditional density of :math:`p(X|Y)`.
-        :rtype: conditionals.ConditionalGaussianDensity
+        :rtype: conditionals.ConditionalGaussianPDF
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = invert_matrix(Sigma_y)[0]
@@ -826,14 +816,14 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        cond_p_xy = conditionals.ConditionalGaussianDensity(
+        cond_p_xy = conditionals.ConditionalGaussianPDF(
             M=M_new, b=b_new, Sigma=Sigma_new,
         )
         return cond_p_xy
 
     def affine_marginal_transformation(
-        self, p_x: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         r"""Get an approximation of the marginal density
 
         .. math
@@ -853,12 +843,12 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianDensity):
             \Sigma_y = \mathbb{E}[YY^\top] - \mu_Y\mu_Y^\top.
 
         :param p_x: Marginal Gaussian density over :math`X`.
-        :type p_x: densities.GaussianDensity
+        :type p_x: pdf.GaussianPDF
         :return: The marginal density :math:`p(Y)`.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        p_y = densities.GaussianDensity(Sigma=Sigma_y, mu=mu_y)
+        p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y)
         return p_y
 
     def integrate_log_conditional(

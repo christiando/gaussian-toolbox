@@ -57,7 +57,7 @@ class LinearRegression:
         """
         Sigma = jnp.array([self.sigma_prior ** 2.0 * jnp.eye(self.D)])
         mu = self.mu_prior * jnp.ones((1, self.D))
-        self.prior = densities.GaussianDiagDensity(Sigma=Sigma, mu=mu)
+        self.prior = pdf.GaussianDiagDensity(Sigma=Sigma, mu=mu)
 
     def get_likelihood(self, X: jnp.ndarray, y: jnp.ndarray) -> factors.ConjugateFactor:
         """Computes the likelihood
@@ -79,9 +79,7 @@ class LinearRegression:
         # likelihood = factors.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         Sigma_lk = jnp.ones((self.N, 1, 1)) * self.sigma_y ** 2
         M_lk = self.X[:, None]
-        likelihood_term = conditionals.ConditionalGaussianDensity(
-            M=M_lk, Sigma=Sigma_lk
-        )
+        likelihood_term = conditionals.ConditionalGaussianPDF(M=M_lk, Sigma=Sigma_lk)
         likelihood = likelihood_term.set_y(self.y)
         likelihood = likelihood.product()
         return likelihood
@@ -107,7 +105,7 @@ class LinearRegression:
         self.get_posterior()
         return self.posterior_measure.log_integral()
 
-    def predict(self, X: jnp.ndarray) -> densities.GaussianDensity:
+    def predict(self, X: jnp.ndarray) -> pdf.GaussianDensity:
         """ Predicts y for given X, i.e.
         
             p(y^*\vert X^*) = \int L(y^*\vert X^*, w)p(w\vert X, y).
@@ -115,7 +113,7 @@ class LinearRegression:
         :param X: Input data [N x D]
         :type X: jnp.ndarray
         :return: Posterior density for y.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianDensity
         """
         N = X.shape[0]
         if self.bias:

@@ -271,16 +271,16 @@ class GaussianMeasure(factors.ConjugateFactor):
             self.invert_lambda()
         self.mu = jnp.einsum("abc,ac->ab", self.Sigma, self.nu)
 
-    def get_density(self) -> "GaussianDensity":
+    def get_density(self) -> "GaussianPDF":
         """Return the corresponing normalised density object.
 
         :return: Corresponding density object.
-        :rtype: GaussianDensity
+        :rtype: GaussianPDF
         """
-        from . import densities
+        from . import pdf
 
         self._prepare_integration()
-        return densities.GaussianDensity(
+        return pdf.GaussianPDF(
             Sigma=self.Sigma,
             mu=self.mu,
             Lambda=self.Lambda,

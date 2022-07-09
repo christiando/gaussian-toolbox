@@ -21,7 +21,12 @@ from typing import Tuple
 from ..utils.jax_minimize_wrapper import ScipyMinimize
 
 
-from ..gaussian_algebra import densities, conditionals, approximate_conditionals, factors
+from ..gaussian_algebra import (
+    pdf,
+    conditionals,
+    approximate_conditionals,
+    factors,
+)
 
 
 class StateModel(objax.Module):
@@ -36,67 +41,67 @@ class StateModel(objax.Module):
         self.state_density = None
 
     def prediction(
-        self, pre_filter_density: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, pre_filter_density: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         """Calculate prediction density.
         
         p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1.
 
         :param pre_filter_density: Density p(z_t-1|x_{1:t-1}).
-        :type pre_filter_density: densities.GaussianDensity
+        :type pre_filter_density: pdf.GaussianPDF
         :raises NotImplementedError: Must be implemented.
         :return: Prediction density p(z_t|x_{1:t-1}).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         raise NotImplementedError("Prediction for state model not implemented.")
 
     def smoothing(
         self,
-        cur_filter_density: densities.GaussianDensity,
-        post_smoothing_density: densities.GaussianDensity,
+        cur_filter_density: pdf.GaussianPDF,
+        post_smoothing_density: pdf.GaussianPDF,
         **kwargs
-    ) -> Tuple[densities.GaussianDensity, densities.GaussianDensity]:
+    ) -> Tuple[pdf.GaussianPDF, pdf.GaussianPDF]:
         """Calculate smoothing density p(z_{t} | x_{1:T}), 
         given p(z_{t+1} | x_{1:T}) and p(z_{t} | x_{1:t}).
         
         :param cur_filter_density: Density p(z_t|x_{1:t})
-        :type cur_filter_density: densities.GaussianDensity
+        :type cur_filter_density: pdf.GaussianPDF
         :param post_smoothing_density: Density p(z_{t+1}|x_{1:T})
-        :type post_smoothing_density: densities.GaussianDensity
+        :type post_smoothing_density: pdf.GaussianPDF
         :raises NotImplementedError: Must be implemented.
         :return: Smoothing density p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T})
-        :rtype: Tuple[densities.GaussianDensity, densities.GaussianDensity]
+        :rtype: Tuple[pdf.GaussianPDF, pdf.GaussianPDF]
         """
         raise NotImplementedError("Smoothing for state model not implemented.")
 
     def update_hyperparameters(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         **kwargs
     ):
         """The hyperparameters are updated here, where the the densities p(z_t|x_{1:T}) and 
         p(z_{t+1}, z_t|x_{1:T}) are provided (the latter for the cross-terms.)
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         :raises NotImplementedError: Must be implemented.
         """
         raise NotImplementedError("Hyperparamers for state model not implemented.")
 
     def update_init_density(
-        self, init_smooth_density: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, init_smooth_density: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         """Find the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
 
         :param init_smooth_density: Smoothing density over z_0.
-        :type init_smooth_density: densities.GaussianDensity
+        :type init_smooth_density: pdf.GaussianPDF
         :raises NotImplementedError: Must be implemented.
         :return: The optimal initial distribution.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         raise NotImplementedError(
             "Initial distribution update for state model not implemented."
@@ -117,7 +122,7 @@ class LinearStateModel(StateModel):
         self.Dz = Dz
         self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
         self.A, self.b = jnp.eye(self.Dz), jnp.zeros((self.Dz,))
-        self.state_density = conditionals.ConditionalGaussianDensity(
+        self.state_density = conditionals.ConditionalGaussianPDF(
             jnp.array([self.A]), jnp.array([self.b]), jnp.array([self.Qz])
         )
         self.Qz_inv, self.ln_det_Qz = (
@@ -126,16 +131,16 @@ class LinearStateModel(StateModel):
         )
 
     def prediction(
-        self, pre_filter_density: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, pre_filter_density: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         """Calculate the prediction density.
         
         p(z_t|x_{1:t-1}) = int p(z_t|z_t-1)p(z_t-1|x_1:t-1) dz_t-1
 
         :param pre_filter_density: Density p(z_t-1|x_{1:t-1})
-        :type pre_filter_density: densities.GaussianDensity
+        :type pre_filter_density: pdf.GaussianPDF
         :return: Prediction density p(z_t|x_{1:t-1}).
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         # p(z_t|x_{1:t-1})
         return self.state_density.affine_marginal_transformation(
@@ -144,10 +149,10 @@ class LinearStateModel(StateModel):
 
     def smoothing(
         self,
-        cur_filter_density: densities.GaussianDensity,
-        post_smoothing_density: densities.GaussianDensity,
+        cur_filter_density: pdf.GaussianPDF,
+        post_smoothing_density: pdf.GaussianPDF,
         **kwargs
-    ) -> Tuple[densities.GaussianDensity, densities.GaussianDensity]:
+    ) -> Tuple[pdf.GaussianPDF, pdf.GaussianPDF]:
         """ Perform smoothing step.
         
         First we calculate the backward density
@@ -163,11 +168,11 @@ class LinearStateModel(StateModel):
         $$
 
         :param cur_filter_density: Density p(z_t|x_{1:t})
-        :type cur_filter_density: densities.GaussianDensity
+        :type cur_filter_density: pdf.GaussianPDF
         :param post_smoothing_density: Density p(z_{t+1}|x_{1:T})
-        :type post_smoothing_density: densities.GaussianDensity
+        :type post_smoothing_density: pdf.GaussianPDF
         :return: Smoothing density p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T})
-        :rtype: Tuple[densities.GaussianDensity, densities.GaussianDensity]
+        :rtype: Tuple[pdf.GaussianPDF, pdf.GaussianPDF]
         """
         # p(z_{t} | z_{t+1}, x_{1:t})
         backward_density = self.state_density.affine_conditional_transformation(
@@ -186,8 +191,8 @@ class LinearStateModel(StateModel):
 
     def compute_Q_function(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         **kwargs
     ) -> float:
         """Compute Q-function.
@@ -197,9 +202,9 @@ class LinearStateModel(StateModel):
         where the expection is over the smoothing density.
         
         :param smoothing_density: Smoothing density p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         :return: Evaluated Q-function.
         :rtype: float
         """
@@ -212,8 +217,8 @@ class LinearStateModel(StateModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         **kwargs
     ):
         """Update hyperparameters. 
@@ -221,9 +226,9 @@ class LinearStateModel(StateModel):
         The densities p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T}) need to be provided (the latter for the cross-terms.)
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
         self.update_A(smoothing_density, two_step_smoothing_density, **kwargs)
         self.update_b(smoothing_density, **kwargs)
@@ -232,16 +237,16 @@ class LinearStateModel(StateModel):
 
     def update_A(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         **kwargs
     ):
         """ Update transition matrix.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
         # Ezz = smoothing_density.integrate("xx'")
         mu_b = smoothing_density.mu[:-1, None] * self.b[None, :, None]
@@ -251,11 +256,11 @@ class LinearStateModel(StateModel):
         A = jnp.mean(Ezz, axis=0)  # + 1e-2 * jnp.eye(self.Dz)
         self.A = jnp.linalg.solve(A, jnp.mean(Ezz_cross - mu_b, axis=0)).T
 
-    def update_b(self, smoothing_density: densities.GaussianDensity, **kwargs):
+    def update_b(self, smoothing_density: pdf.GaussianPDF, **kwargs):
         """Update transition offset.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         """
         self.b = jnp.mean(
             smoothing_density.mu[1:] - jnp.dot(self.A, smoothing_density.mu[:-1].T).T,
@@ -264,16 +269,16 @@ class LinearStateModel(StateModel):
 
     def update_Qz(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         **kwargs
     ):
         """Update transition covariance.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
         A_tilde = jnp.eye(2 * self.Dz, self.Dz)
         A_tilde = A_tilde.at[self.Dz :].set(-self.A.T)
@@ -293,7 +298,7 @@ class LinearStateModel(StateModel):
     def update_state_density(self):
         """ Update the state density.
         """
-        self.state_density = conditionals.ConditionalGaussianDensity(
+        self.state_density = conditionals.ConditionalGaussianPDF(
             jnp.array([self.A]), jnp.array([self.b]), jnp.array([self.Qz])
         )
         self.Qz_inv, self.ln_det_Qz = (
@@ -302,32 +307,30 @@ class LinearStateModel(StateModel):
         )
 
     def update_init_density(
-        self, init_smooth_density: densities.GaussianDensity, **kwargs
-    ) -> densities.GaussianDensity:
+        self, init_smooth_density: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
         """Find the optimal distribution over the initial state z_0, 
         provided with the initial smoothing density.
 
         :param init_smooth_density: Smoothing density over z_0.
-        :type init_smooth_density: densities.GaussianDensity
+        :type init_smooth_density: pdf.GaussianPDF
         :return: The optimal initial distribution.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         mu0 = init_smooth_density.integrate("x")
         Sigma0 = init_smooth_density.integrate(
             "(Ax+a)(Bx+b)'", A_mat=None, a_vec=-mu0[0], B_mat=None, b_vec=-mu0[0]
         )
-        opt_init_density = densities.GaussianDensity(Sigma0, mu0)
+        opt_init_density = pdf.GaussianPDF(Sigma0, mu0)
         return opt_init_density
 
-    def condition_on_past(
-        self, z_old: jnp.ndarray, **kwargs
-    ) -> densities.GaussianDensity:
+    def condition_on_past(self, z_old: jnp.ndarray, **kwargs) -> pdf.GaussianPDF:
         """ Return p(Z_t+1|Z_t=z)
 
         :param z_old: Vector of past latent variables.
         :type z_old: jnp.ndarray
         :return: The density of the latent variables at the next step.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         return self.state_density.condition_on_x(z_old, **kwargs)
 
@@ -375,8 +378,8 @@ class NNControlStateModel(LinearStateModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         u: jnp.ndarray,
         **kwargs
     ):
@@ -385,9 +388,9 @@ class NNControlStateModel(LinearStateModel):
         The densities p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T}) need to be provided (the latter for the cross-terms.)
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         :param u: Control variables. Dimensions should be [T, Du]
         :type u: jnp.ndarray
         """
@@ -404,17 +407,17 @@ class NNControlStateModel(LinearStateModel):
 
     def update_Qz(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         u: jnp.ndarray,
         **kwargs
     ):
         """ Update the transition covariance.
         
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         :param u: Control variables. Dimensions should be [T, Du]
         :type u: jnp.ndarray
         """
@@ -436,17 +439,17 @@ class NNControlStateModel(LinearStateModel):
 
     def update_network_params(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         u: jnp.ndarray,
         **kwargs
     ):
         """Update the network parameters by gradient descent.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         :param u: Control variables. Dimensions should be [T, Du]
         :type u: jnp.ndarray
         """
@@ -467,17 +470,17 @@ class NNControlStateModel(LinearStateModel):
 
     def calc_neg_Q_function(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         u: jnp.ndarray,
         **kwargs
     ) -> float:
         """Calculate negative Q-function,
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         :param u: Control variables. Dimensions should be [T, Du]
         :type u: jnp.ndarray
         :return: Negative Q-function
@@ -550,8 +553,8 @@ class LSEMStateModel(LinearStateModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         **kwargs
     ):
         """Update hyperparameters. 
@@ -559,9 +562,9 @@ class LSEMStateModel(LinearStateModel):
         The densities p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T}) need to be provided (the latter for the cross-terms.)
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
         # self.Qz = jit(self.update_Qz, static_argnums=(0,1))(smoothing_density, two_step_smoothing_density)
         # self.update_state_density()
@@ -583,15 +586,15 @@ class LSEMStateModel(LinearStateModel):
 
     def update_AbQ(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
     ):
         """Update transition matrix, offset and covariance are updated here.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
         T = smoothing_density.R - 1
         phi = smoothing_density.slice(jnp.arange(T))
@@ -685,17 +688,17 @@ class LSEMStateModel(LinearStateModel):
 
     def update_kernel_params(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
     ):
         """Update the kernel weights.
         
         Using gradient descent on the (negative) Q-function.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
 
         @objax.Function.with_vars(self.vars())
@@ -787,8 +790,8 @@ class LRBFMStateModel(LinearStateModel):
 
     def update_hyperparameters(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
         **kwargs
     ):
         """Update hyperparameters. 
@@ -796,9 +799,9 @@ class LRBFMStateModel(LinearStateModel):
         The densities p(z_t|x_{1:T}) and p(z_{t+1}, z_t|x_{1:T}) need to be provided (the latter for the cross-terms.)
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
         # self.Qz = jit(self.update_Qz, static_argnums=(0,1))(smoothing_density, two_step_smoothing_density)
         # self.update_state_density()
@@ -820,15 +823,15 @@ class LRBFMStateModel(LinearStateModel):
 
     def update_AbQ(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
     ):
         """Update transition matrix, offset and covariance are updated here.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T}).
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
         T = smoothing_density.R - 1
         phi = smoothing_density.slice(jnp.arange(T))
@@ -927,17 +930,17 @@ class LRBFMStateModel(LinearStateModel):
 
     def update_kernel_params(
         self,
-        smoothing_density: densities.GaussianDensity,
-        two_step_smoothing_density: densities.GaussianDensity,
+        smoothing_density: pdf.GaussianPDF,
+        two_step_smoothing_density: pdf.GaussianPDF,
     ):
         """Update the kernel weights.
         
         Using gradient descent on the (negative) Q-function.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
-        :type smoothing_density: densities.GaussianDensity
+        :type smoothing_density: pdf.GaussianPDF
         :param two_step_smoothing_density: The two point smoothing density  p(z_{t+1}, z_t|x_{1:T}).
-        :type two_step_smoothing_density: densities.GaussianDensity
+        :type two_step_smoothing_density: pdf.GaussianPDF
         """
 
         @objax.Function.with_vars(self.vars())

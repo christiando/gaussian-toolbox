@@ -94,7 +94,7 @@ class StateSpaceEM(objax.Module):
         self.twostep_smoothing_density = self._setup_density(D=int(2 * self.Dz))
         # self.twostep_smoothing_density = self.twostep_smoothing_density.slice(range(self.T))
 
-    def _setup_density(self, D: int = None, T: int = None) -> densities.GaussianDensity:
+    def _setup_density(self, D: int = None, T: int = None) -> pdf.GaussianPDF:
         """ Initialize a density object (with uniform densities).
         """
         if D is None:
@@ -105,7 +105,7 @@ class StateSpaceEM(objax.Module):
         Lambda = jnp.tile(jnp.eye(D)[None], (T, 1, 1))
         mu = jnp.zeros((T, D))
         ln_det_Sigma = D * jnp.log(jnp.ones(T))
-        return densities.GaussianDensity(Sigma, mu, Lambda, ln_det_Sigma)
+        return pdf.GaussianPDF(Sigma, mu, Lambda, ln_det_Sigma)
 
     def run(self):
         """ Run the expectation-maximization algorithm, until converged 
@@ -195,7 +195,7 @@ class StateSpaceEM(objax.Module):
     def forward_step(self, carry, vars_t):
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
-        pre_filter_density = densities.GaussianDensity(
+        pre_filter_density = pdf.GaussianPDF(
             Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma
         )
         cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
@@ -243,7 +243,7 @@ class StateSpaceEM(objax.Module):
             Lambda_filter,
             ln_det_Sigma_filter,
         ) = result
-        new_prediction = densities.GaussianDensity(
+        new_prediction = pdf.GaussianPDF(
             Sigma=Sigma_prediction,
             mu=mu_prediction,
             Lambda=Lambda_prediction,
@@ -251,7 +251,7 @@ class StateSpaceEM(objax.Module):
         )
         t_range = jnp.arange(1, self.T + 1)
         self.prediction_density.update(t_range, new_prediction)
-        new_filter = densities.GaussianDensity(
+        new_filter = pdf.GaussianPDF(
             Sigma=Sigma_filter,
             mu=mu_filter,
             Lambda=Lambda_filter,
@@ -263,7 +263,7 @@ class StateSpaceEM(objax.Module):
         t, uz_t = vars_t
         cur_filter_density = self.filter_density.slice(jnp.array([t]))
         Sigma, mu, Lambda, ln_det_Sigma = carry
-        post_smoothing_density = densities.GaussianDensity(
+        post_smoothing_density = pdf.GaussianPDF(
             Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma
         )
         cur_smoothing_density, cur_two_step_smoothing_density = self.sm.smoothing(
@@ -311,14 +311,14 @@ class StateSpaceEM(objax.Module):
             Lambda_two_step_smooth,
             ln_det_Sigma_two_step_smooth,
         ) = result
-        new_smooth_density = densities.GaussianDensity(
+        new_smooth_density = pdf.GaussianPDF(
             Sigma=Sigma_smooth,
             mu=mu_smooth,
             Lambda=Lambda_smooth,
             ln_det_Sigma=ln_det_Sigma_smooth,
         )
         self.smoothing_density.update(t_range, new_smooth_density)
-        self.twostep_smoothing_density = densities.GaussianDensity(
+        self.twostep_smoothing_density = pdf.GaussianPDF(
             Sigma=Sigma_two_step_smooth[::-1],
             mu=mu_two_step_smooth[::-1],
             Lambda=Lambda_two_step_smooth[::-1],
@@ -341,7 +341,7 @@ class StateSpaceEM(objax.Module):
     def compute_predictive_log_likelihood(
         self,
         X: jnp.ndarray,
-        p0: densities.GaussianDensity = None,
+        p0: pdf.GaussianPDF = None,
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
         ignore_init_samples: int = 0,
@@ -351,7 +351,7 @@ class StateSpaceEM(objax.Module):
         :param X: Data for which likelihood is computed. Dimensions should be [T, Dx].
         :type X: jnp.ndarray
         :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
-        :type p0: densities.GaussianDensity, optional
+        :type p0: pdf.GaussianPDF, optional
         :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
         :type u_x: jnp.ndarray, optional
         :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
@@ -364,7 +364,7 @@ class StateSpaceEM(objax.Module):
         T = X.shape[0]
         if p0 is None:
             # p0 = self.filter_density.slice([0])
-            p0 = densities.GaussianDensity(
+            p0 = pdf.GaussianPDF(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
         init = (p0.Sigma[:1], p0.mu[:1], p0.Lambda[:1], p0.ln_det_Sigma[:1])
@@ -385,7 +385,7 @@ class StateSpaceEM(objax.Module):
             Lambda_filter,
             ln_det_Sigma_filter,
         ) = result
-        prediction_density = densities.GaussianDensity(
+        prediction_density = pdf.GaussianPDF(
             Sigma=Sigma_prediction,
             mu=mu_prediction,
             Lambda=Lambda_prediction,
@@ -400,7 +400,7 @@ class StateSpaceEM(objax.Module):
     def gappy_forward_step(self, carry, vars_t):
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
-        pre_filter_density = densities.GaussianDensity(
+        pre_filter_density = pdf.GaussianPDF(
             Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma
         )
         cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
@@ -429,22 +429,22 @@ class StateSpaceEM(objax.Module):
     def compute_predictive_density(
         self,
         X: jnp.ndarray,
-        p0: densities.GaussianDensity = None,
+        p0: pdf.GaussianPDF = None,
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
-    ) -> densities.GaussianDensity:
+    ) -> pdf.GaussianPDF:
         """Compute the likelihood for given data X.
 
         :param X: Data for which likelihood is computed. Dimensions should be [T, Dx].
         :type X: jnp.ndarray
         :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
-        :type p0: densities.GaussianDensity, optional
+        :type p0: pdf.GaussianPDF, optional
         :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
         :type u_x: jnp.ndarray, optional
         :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
         :type u_z: jnp.ndarray, optional
         :return: Predictive density over data.
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         T = X.shape[0]
         if u_x is None:
@@ -454,7 +454,7 @@ class StateSpaceEM(objax.Module):
             u_z = jnp.empty((T, 0))
         if p0 is None:
             # p0 = self.filter_density.slice([0])
-            p0 = densities.GaussianDensity(
+            p0 = pdf.GaussianPDF(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
         filter_density = self._setup_density(T=T + 1)
@@ -480,7 +480,7 @@ class StateSpaceEM(objax.Module):
             ln_det_Sigma_filter,
         ) = result
 
-        new_prediction_density = densities.GaussianDensity(
+        new_prediction_density = pdf.GaussianPDF(
             Sigma=Sigma_prediction,
             mu=mu_prediction,
             Lambda=Lambda_prediction,
@@ -494,11 +494,11 @@ class StateSpaceEM(objax.Module):
     def predict(
         self,
         X: jnp.ndarray,
-        p0: densities.GaussianDensity = None,
+        p0: pdf.GaussianPDF = None,
         smoothed: bool = False,
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
-    ) -> Tuple[densities.GaussianDensity, jnp.ndarray, jnp.ndarray]:
+    ) -> Tuple[pdf.GaussianPDF, jnp.ndarray, jnp.ndarray]:
         """Obtain predictions for data.
 
         Remark: Slow!
@@ -506,7 +506,7 @@ class StateSpaceEM(objax.Module):
         :param X: Data for which predictions are computed. Non observed values are NaN. Dimensions should be [T, Dx].
         :type X: jnp.ndarray
         :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
-        :type p0: densities.GaussianDensity, optional
+        :type p0: pdf.GaussianPDF, optional
         :param smoothed: Use the smoothed density for prediction. , defaults to False
         :type smoothed: bool, optional
         :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
@@ -514,11 +514,11 @@ class StateSpaceEM(objax.Module):
         :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
         :type u_z: jnp.ndarray, optional
         :return: Density over data, mean and standard deviation.
-        :rtype: Tuple[densities.GaussianDensity, jnp.ndarray, jnp.ndarray]
+        :rtype: Tuple[pdf.GaussianPDF, jnp.ndarray, jnp.ndarray]
         """
         T = X.shape[0]
         if p0 is None:
-            p0 = densities.GaussianDensity(
+            p0 = pdf.GaussianPDF(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
 
@@ -560,7 +560,7 @@ class StateSpaceEM(objax.Module):
                 )
                 mu_unobserved[t - 1, jnp.isnan(X[t - 1])] = mu_ux
                 std_unobserved[t - 1, jnp.isnan(X[t - 1])] = std_ux
-            filter_density = densities.GaussianDensity(
+            filter_density = pdf.GaussianPDF(
                 jnp.asarray(Sigma_f),
                 jnp.asarray(mu_f),
                 jnp.asarray(Lambda_f),
@@ -600,7 +600,7 @@ class StateSpaceEM(objax.Module):
                 )
                 mu_unobserved[t, jnp.isnan(X[t])] = mu_ux
                 std_unobserved[t, jnp.isnan(X[t])] = std_ux
-            smoothing_density = densities.GaussianDensity(
+            smoothing_density = pdf.GaussianPDF(
                 Sigma=jnp.asarray(Sigma_s),
                 mu=jnp.asarray(mu_s),
                 Lambda=jnp.asarray(Lambda_s),
@@ -617,7 +617,7 @@ class StateSpaceEM(objax.Module):
     ) -> Union[dict, jnp.ndarray, jnp.ndarray]:
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
-        pre_filter_density = densities.GaussianDensity(
+        pre_filter_density = pdf.GaussianPDF(
             Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma
         )
         cur_prediction_density = self.sm.prediction(pre_filter_density, u=uz_t)
@@ -647,11 +647,11 @@ class StateSpaceEM(objax.Module):
     def predict_static(
         self,
         X: jnp.ndarray,
-        p0: densities.GaussianDensity = None,
+        p0: pdf.GaussianPDF = None,
         observed_dims: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
         u_x: jnp.ndarray = None,
-    ) -> Tuple[densities.GaussianDensity, jnp.array, jnp.array]:
+    ) -> Tuple[pdf.GaussianPDF, jnp.array, jnp.array]:
         """Predicts data with fixed condition dimensions. Faster, but more rigid than predict().
         
         TODO: Implement also smoothing.
@@ -659,13 +659,13 @@ class StateSpaceEM(objax.Module):
         :param X: Data for which predictions are computed. Non observed values are NaN. Dimensions should be [T, Dx].
         :type X: jnp.ndarray
         :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
-        :type p0: densities.GaussianDensity, optional
+        :type p0: pdf.GaussianPDF, optional
         :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
         :type u_x: jnp.ndarray, optional
         :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
         :type u_z: jnp.ndarray, optional
         :return: Density over data, mean and standard deviation.
-        :rtype: Tuple[densities.GaussianDensity, jnp.ndarray, jnp.ndarray]
+        :rtype: Tuple[pdf.GaussianPDF, jnp.ndarray, jnp.ndarray]
         """
 
         T = X.shape[0]
@@ -675,7 +675,7 @@ class StateSpaceEM(objax.Module):
             u_x = jnp.empty((T, 0))
 
         if p0 is None:
-            p0 = densities.GaussianDensity(
+            p0 = pdf.GaussianPDF(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
         filter_density = self._setup_density(T=T + 1)
@@ -697,7 +697,7 @@ class StateSpaceEM(objax.Module):
         )
         Sigma_f, mu_f, Lambda_f, ln_det_Sigma_f, mu_x, std_x = result
         t_range = jnp.arange(1, T + 1)
-        filter_density_new = densities.GaussianDensity(
+        filter_density_new = pdf.GaussianPDF(
             Sigma=Sigma_f, mu=mu_f, Lambda=Lambda_f, ln_det_Sigma=ln_det_Sigma_f
         )
         filter_density.update(t_range, filter_density_new)
@@ -744,7 +744,7 @@ class StateSpaceEM(objax.Module):
         self,
         X: jnp.ndarray,
         observed_dims: jnp.ndarray = None,
-        p0: densities.GaussianDensity = None,
+        p0: pdf.GaussianPDF = None,
         num_samples: int = 1,
         u_z: jnp.ndarray = None,
         u_x: jnp.ndarray = None,
@@ -756,7 +756,7 @@ class StateSpaceEM(objax.Module):
         :param observed_dims: Dimension that are observed. If none no dimension is observed, defaults to None
         :type observed_dims: jnp.ndarray, optional [num_observed_dimensions]
         :param p0: Initial state density. If none, standard normal., defaults to None
-        :type p0: densities.GaussianDensity, optional
+        :type p0: pdf.GaussianPDF, optional
         :param num_samples: How many trajectories should be sampled, defaults to 1
         :type num_samples: int, optional
         :return: Samples of the latent variables, and the unobserved data dimensions.
@@ -768,7 +768,7 @@ class StateSpaceEM(objax.Module):
         if u_x is None:
             u_x = jnp.empty((T, 0))
         if p0 is None:
-            p0 = densities.GaussianDensity(
+            p0 = pdf.GaussianPDF(
                 Sigma=jnp.array([jnp.eye(self.Dz)]), mu=jnp.zeros((1, self.Dz))
             )
         if observed_dims is None:
@@ -794,11 +794,11 @@ class StateSpaceEM(objax.Module):
 
         return z_sample, X_sample
 
-    def compute_data_density(self) -> densities.GaussianDensity:
+    def compute_data_density(self) -> pdf.GaussianPDF:
         """Compute the data density for the training data, given the prediction density.
 
         :return: Data density
-        :rtype: densities.GaussianDensity
+        :rtype: pdf.GaussianPDF
         """
         px = self.om.emission_density.affine_marginal_transformation(
             self.prediction_density.slice(jnp.arange(1, self.T + 1))
