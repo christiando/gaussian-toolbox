@@ -1,4 +1,4 @@
-from gaussian_toolbox.gaussian_algebra import factors, measures
+from gaussian_toolbox.gaussian_algebra import factor, measure
 import pytest
 from jax import numpy as jnp
 import numpy as np
@@ -7,14 +7,14 @@ import objax
 
 class TestConjugateFactor:
     def setup_class(self):
-        self.test_class = factors.ConjugateFactor
+        self.test_class = factor.ConjugateFactor
 
     @classmethod
     def create_instance(self, R, D):
         Lambda = self.get_pd_matrix(R, D)
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return factors.ConjugateFactor(Lambda, nu, ln_beta)
+        return factor.ConjugateFactor(Lambda, nu, ln_beta)
 
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
@@ -127,7 +127,7 @@ class TestConjugateFactor:
 
 class TestOneRankFactor(TestConjugateFactor):
     def setup_class(self):
-        self.test_class = factors.OneRankFactor
+        self.test_class = factor.OneRankFactor
 
     @classmethod
     def create_instance(self, R, D):
@@ -135,7 +135,7 @@ class TestOneRankFactor(TestConjugateFactor):
         g = jnp.abs(objax.random.normal((R,)))
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return factors.OneRankFactor(v, g, nu, ln_beta)
+        return factor.OneRankFactor(v, g, nu, ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):
@@ -251,13 +251,13 @@ class TestOneRankFactor(TestConjugateFactor):
 
 class TestLinearFactor(TestConjugateFactor):
     def setup_class(self):
-        self.test_class = factors.LinearFactor
+        self.test_class = factor.LinearFactor
 
     @classmethod
     def create_instance(self, R, D):
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return factors.LinearFactor(nu, ln_beta)
+        return factor.LinearFactor(nu, ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):
@@ -279,12 +279,12 @@ class TestLinearFactor(TestConjugateFactor):
 
 class TestConstantFactor(TestConjugateFactor):
     def setup_class(self):
-        self.test_class = factors.ConstantFactor
+        self.test_class = factor.ConstantFactor
 
     @classmethod
     def create_instance(self, R, D):
         ln_beta = objax.random.normal((R,))
-        return factors.ConstantFactor(ln_beta, D)
+        return factor.ConstantFactor(ln_beta, D)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):

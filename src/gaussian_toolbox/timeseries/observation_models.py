@@ -30,9 +30,9 @@ from functools import partial
 
 from ..gaussian_algebra import (
     pdf,
-    conditionals,
-    approximate_conditionals,
-    factors,
+    conditional,
+    approximate_conditional,
+    factor,
 )
 from ..utils.jax_minimize_wrapper import ScipyMinimize
 
@@ -166,7 +166,7 @@ class LinearObservationModel(ObservationModel):
             self.C = jnp.array(np.random.randn(Dx, Dz))
         self.d = jnp.zeros(Dx)
         self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
-        self.emission_density = conditionals.ConditionalGaussianPDF(
+        self.emission_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
@@ -200,7 +200,7 @@ class LinearObservationModel(ObservationModel):
         z_hat = jnp.dot(jnp.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - jnp.dot(z_hat, self.C.T) - self.d
         self.Qx = jnp.dot(delta_X.T, delta_X)
-        self.emission_density = conditionals.ConditionalGaussianPDF(
+        self.emission_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
@@ -458,7 +458,7 @@ class LinearObservationModel(ObservationModel):
     def update_emission_density(self):
         """ Updates the emission density.
         """
-        self.emission_density = conditionals.ConditionalGaussianPDF(
+        self.emission_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
@@ -567,7 +567,7 @@ class LRBFMObservationModel(LinearObservationModel):
         else:
             raise NotImplementedError("Kernel type not implemented.")
 
-        self.emission_density = approximate_conditionals.LRBFGaussianConditional(
+        self.emission_density = approximate_conditional.LRBFGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             mu=self.mu,
@@ -608,7 +608,7 @@ class LRBFMObservationModel(LinearObservationModel):
     def update_emission_density(self):
         """Create new emission density with current parameters.
         """
-        self.emission_density = approximate_conditionals.LRBFGaussianConditional(
+        self.emission_density = approximate_conditional.LRBFGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             mu=self.mu,
@@ -750,7 +750,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
             )
         self.d = jnp.zeros((self.Dx,))
         self.W = objax.TrainVar(jnp.array(np.random.randn(self.Dk, self.Dz + 1)))
-        self.emission_density = approximate_conditionals.LSEMGaussianConditional(
+        self.emission_density = approximate_conditional.LSEMGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             W=self.W,
@@ -781,7 +781,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
     def update_emission_density(self):
         """Create new emission density with current parameters.
         """
-        self.emission_density = approximate_conditionals.LSEMGaussianConditional(
+        self.emission_density = approximate_conditional.LSEMGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             W=self.W,
@@ -921,7 +921,7 @@ class HCCovObservationModel(LinearObservationModel):
         self.W = jnp.array(W)
         self.beta = noise_x ** 2 * jnp.ones(self.Du)
         self.sigma_x = jnp.array([noise_x])
-        self.emission_density = approximate_conditionals.HCCovGaussianConditional(
+        self.emission_density = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
@@ -991,7 +991,7 @@ class HCCovObservationModel(LinearObservationModel):
         self.U = jnp.array(
             scipy.linalg.eigh(cov, eigvals=(self.Dx - self.Du, self.Dx - 1))[1]
         )
-        self.emission_density = approximate_conditionals.HCCovGaussianConditional(
+        self.emission_density = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
@@ -1005,14 +1005,14 @@ class HCCovObservationModel(LinearObservationModel):
     ):
         T = X.shape[0]
         phi_dict = smoothing_density.slice(jnp.arange(1, smoothing_density.R)).to_dict()
-        params = approximate_conditionals.HCCovGaussianConditional.params_to_vector(
+        params = approximate_conditional.HCCovGaussianConditional.params_to_vector(
             self.C, self.d, self.sigma_x, self.beta, self.W
         )
         omega_dagger, omega_star, not_converged = self.get_omegas(
             phi_dict, X, self.W, self.U, self.beta, self.C, self.d, self.sigma_x
         )
         Q_val = (
-            approximate_conditionals.HCCovGaussianConditional.Qfunc(
+            approximate_conditional.HCCovGaussianConditional.Qfunc(
                 params,
                 phi_dict,
                 X,
@@ -1053,7 +1053,7 @@ class HCCovObservationModel(LinearObservationModel):
     def update_emission_density(self):
         """ Updates the emission density.
         """
-        self.emission_density = approximate_conditionals.HCCovGaussianConditional(
+        self.emission_density = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
@@ -1339,10 +1339,10 @@ class HCCovObservationModel(LinearObservationModel):
             ln_beta_plus = ln_beta + b_i
             ln_beta_minus = ln_beta - b_i
             # Create OneRankFactors
-            exp_factor_plus = factors.OneRankFactor(
+            exp_factor_plus = factor.OneRankFactor(
                 v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus
             )
-            exp_factor_minus = factors.OneRankFactor(
+            exp_factor_minus = factor.OneRankFactor(
                 v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus
             )
             # Create the two measures
@@ -1445,10 +1445,10 @@ class HCCovObservationModel(LinearObservationModel):
         ln_beta_plus = ln_beta + b_i
         ln_beta_minus = ln_beta - b_i
         # Create OneRankFactors
-        exp_factor_plus = factors.OneRankFactor(
+        exp_factor_plus = factor.OneRankFactor(
             v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus
         )
-        exp_factor_minus = factors.OneRankFactor(
+        exp_factor_minus = factor.OneRankFactor(
             v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus
         )
         # Create the two measures
@@ -1500,10 +1500,10 @@ class HCCovObservationModel(LinearObservationModel):
         ln_beta_plus = ln_beta + b_i
         ln_beta_minus = ln_beta - b_i
         # Create OneRankFactors
-        exp_factor_plus = factors.OneRankFactor(
+        exp_factor_plus = factor.OneRankFactor(
             v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus
         )
-        exp_factor_minus = factors.OneRankFactor(
+        exp_factor_minus = factor.OneRankFactor(
             v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus
         )
         # Create the two measures
@@ -1548,10 +1548,10 @@ class HCCovObservationModel(LinearObservationModel):
         ln_beta_plus = ln_beta + b_i
         ln_beta_minus = ln_beta - b_i
         # Create OneRankFactors
-        exp_factor_plus = factors.OneRankFactor(
+        exp_factor_plus = factor.OneRankFactor(
             v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus
         )
-        exp_factor_minus = factors.OneRankFactor(
+        exp_factor_minus = factor.OneRankFactor(
             v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus
         )
         # Create the two measures
@@ -1785,7 +1785,7 @@ class BernoulliObservationModel(ObservationModel):
                 nu = nu - self.Theta[:, 1 : self.Dz + 1] * (g * theta_ux)[:, None]
                 # ln_beta = ln_beta + .5 * sign * theta_uz - g * (.5 * theta_uz ** 2 + self.Theta[:,0] * ux_t[0])
 
-            sigma_lb = factors.OneRankFactor(v=v, g=g, nu=nu)
+            sigma_lb = factor.OneRankFactor(v=v, g=g, nu=nu)
             sigma_density = density.multiply(sigma_lb).get_density()
             A_mat = self.Theta[:, 1 : self.Dz + 1]
             a_vec = self.Theta[:, 0]
@@ -1829,7 +1829,7 @@ class BernoulliObservationModel(ObservationModel):
         if ux_t is not None:
             theta_ux = jnp.einsum("ab,b->a", self.Theta[:, self.Dz + 1 :], ux_t[0])
             nu = nu - self.Theta[:, 1 : self.Dz + 1] * (g * theta_ux)[:, None]
-        sigma_lb = factors.OneRankFactor(v=v, g=g, nu=nu)
+        sigma_lb = factor.OneRankFactor(v=v, g=g, nu=nu)
         filter_measure = prediction_density
         for idx in range(self.Dx):
             filter_measure = filter_measure.hadamard(sigma_lb.slice([idx]))
@@ -1919,7 +1919,7 @@ class BernoulliObservationModel(ObservationModel):
                 + 0.5 * sign * theta_ux
                 - g * (0.5 * theta_ux ** 2 + self.Theta[:, 0] * ux_t[0])
             )
-        sigma_lb = factors.OneRankFactor(v=v, g=g, nu=nu, ln_beta=ln_beta)
+        sigma_lb = factor.OneRankFactor(v=v, g=g, nu=nu, ln_beta=ln_beta)
         measure = density
         for idx in range(self.Dx):
             measure = measure.hadamard(sigma_lb.slice([idx]))

@@ -68,7 +68,7 @@ class GaussianMixtureMeasure:
         return signs * jnp.exp(ln_u)
 
     def multiply(
-        self, factor: factors.ConjugateFactor, update_full: bool = False
+        self, factor: factor.ConjugateFactor, update_full: bool = False
     ) -> "GaussianMeasure":
         """ Computes the product between the measure u and a conjugate factor f
 
@@ -94,7 +94,7 @@ class GaussianMixtureMeasure:
         return GaussianMixtureMeasure(components_new, weights=self.weights)
 
     def hadamard(
-        self, factor: factors.ConjugateFactor, update_full: bool = False
+        self, factor: factor.ConjugateFactor, update_full: bool = False
     ) -> "GaussianMeasure":
         """ Computes the hadamard (componentwise) product between the measure u and a conjugate factor f
 

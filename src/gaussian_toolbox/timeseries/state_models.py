@@ -23,9 +23,9 @@ from ..utils.jax_minimize_wrapper import ScipyMinimize
 
 from ..gaussian_algebra import (
     pdf,
-    conditionals,
-    approximate_conditionals,
-    factors,
+    conditional,
+    approximate_conditional,
+    factor,
 )
 
 
@@ -122,7 +122,7 @@ class LinearStateModel(StateModel):
         self.Dz = Dz
         self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
         self.A, self.b = jnp.eye(self.Dz), jnp.zeros((self.Dz,))
-        self.state_density = conditionals.ConditionalGaussianPDF(
+        self.state_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.A]), jnp.array([self.b]), jnp.array([self.Qz])
         )
         self.Qz_inv, self.ln_det_Qz = (
@@ -298,7 +298,7 @@ class LinearStateModel(StateModel):
     def update_state_density(self):
         """ Update the state density.
         """
-        self.state_density = conditionals.ConditionalGaussianPDF(
+        self.state_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.A]), jnp.array([self.b]), jnp.array([self.Qz])
         )
         self.Qz_inv, self.ln_det_Qz = (
@@ -367,7 +367,7 @@ class NNControlStateModel(LinearStateModel):
         self.Dz = Dz
         self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
         self.Du = Du
-        self.state_density = conditionals.NNControlGaussianConditional(
+        self.state_density = conditional.NNControlGaussianConditional(
             Sigma=jnp.array([self.Qz]),
             Dx=self.Dz,
             Du=self.Du,
@@ -540,7 +540,7 @@ class LSEMStateModel(LinearStateModel):
         self.A = self.A.at[:, : self.Dz].set(jnp.eye(self.Dz))
         self.b = jnp.zeros((self.Dz,))
         self.W = objax.TrainVar(jnp.array(np.random.randn(self.Dk, self.Dz + 1)))
-        self.state_density = approximate_conditionals.LSEMGaussianConditional(
+        self.state_density = approximate_conditional.LSEMGaussianConditional(
             M=jnp.array([self.A]),
             b=jnp.array([self.b]),
             W=self.W,
@@ -618,7 +618,7 @@ class LSEMStateModel(LinearStateModel):
         zero_arr = jnp.zeros([self.Dk, 2 * self.Dz])
         v_joint = zero_arr.at[:, self.Dz :].set(self.state_density.k_func.v)
         nu_joint = zero_arr.at[:, self.Dz :].set(self.state_density.k_func.nu)
-        joint_k_func = factors.OneRankFactor(
+        joint_k_func = factor.OneRankFactor(
             v=v_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta
         )
         two_step_k_measure = two_step_smoothing_density.multiply(
@@ -675,7 +675,7 @@ class LSEMStateModel(LinearStateModel):
     def update_state_density(self):
         """ Update the state density.
         """
-        self.state_density = approximate_conditionals.LSEMGaussianConditional(
+        self.state_density = approximate_conditional.LSEMGaussianConditional(
             M=jnp.array([self.A]),
             b=jnp.array([self.b]),
             W=self.W,
@@ -767,7 +767,7 @@ class LRBFMStateModel(LinearStateModel):
         else:
             raise NotImplementedError("Kernel type not implemented.")
 
-        self.state_density = approximate_conditionals.LRBFGaussianConditional(
+        self.state_density = approximate_conditional.LRBFGaussianConditional(
             M=jnp.array([self.A]),
             b=jnp.array([self.b]),
             mu=self.mu,
@@ -859,7 +859,7 @@ class LRBFMStateModel(LinearStateModel):
         )
         nu_joint = jnp.zeros([self.Dk, 2 * self.Dz])
         nu_joint = nu_joint.at[:, self.Dz :].set(self.state_density.k_func.nu)
-        joint_k_func = factors.ConjugateFactor(
+        joint_k_func = factor.ConjugateFactor(
             Lambda=Lambda_joint, nu=nu_joint, ln_beta=self.state_density.k_func.ln_beta
         )
         two_step_k_measure = two_step_smoothing_density.multiply(
@@ -916,7 +916,7 @@ class LRBFMStateModel(LinearStateModel):
     def update_state_density(self):
         """ Update the state density.
         """
-        self.state_density = approximate_conditionals.LRBFGaussianConditional(
+        self.state_density = approximate_conditional.LRBFGaussianConditional(
             M=jnp.array([self.A]),
             b=jnp.array([self.b]),
             mu=self.mu,

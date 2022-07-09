@@ -1,16 +1,16 @@
 from gaussian_toolbox.gaussian_algebra import (
-    factors,
-    measures,
+    factor,
+    measure,
     pdf,
-    conditionals,
-    approximate_conditionals,
+    conditional,
+    approximate_conditional,
 )
 
 __all__ = [
-    "factors",
-    "measures",
+    "factor",
+    "measure",
     "pdf",
-    "conditionals",
-    "approximate_conditionals",
+    "conditional",
+    "approximate_conditional",
 ]
 

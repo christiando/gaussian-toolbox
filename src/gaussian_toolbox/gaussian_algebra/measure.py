@@ -9,13 +9,13 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
-from . import factors
+from . import factor
 from jax.scipy.special import logsumexp
 from typing import Iterable, Tuple
 from ..utils.linalg import invert_matrix, invert_diagonal
 
 
-class GaussianMeasure(factors.ConjugateFactor):
+class GaussianMeasure(factor.ConjugateFactor):
     r"""A measure with a Gaussian form.
 
     .. math::
@@ -120,27 +120,27 @@ class GaussianMeasure(factors.ConjugateFactor):
         self.Sigma, self.ln_det_Lambda = invert_matrix(self.Lambda)
         self.ln_det_Sigma = -self.ln_det_Lambda
 
-    def __mul__(self, factor: factors.ConjugateFactor,) -> "GaussianMeasure":
+    def __mul__(self, factor: factor.ConjugateFactor,) -> "GaussianMeasure":
         r"""Compute the product between the measure :math:`u(X)` and a conjugate factor :math:`f(X)`.
 
         Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
-        :type factor: factors.ConjugateFactor
+        :type factor: factor.ConjugateFactor
         :return: Returns the resulting GaussianMeasure.
         :rtype: GaussianMeasure
         """
         return self.multiply(factor)
 
     def multiply(
-        self, factor: factors.ConjugateFactor, update_full: bool = False
+        self, factor: factor.ConjugateFactor, update_full: bool = False
     ) -> "GaussianMeasure":
         """Compute the product between the measure :math:`u(X)` and a conjugate factor :math:`f(X)`.
 
         Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
-        :type factor: factors.ConjugateFactor
+        :type factor: factor.ConjugateFactor
         :return: Resulting GaussianMeasure.
         :rtype: GaussianMeasure
         """
@@ -148,14 +148,14 @@ class GaussianMeasure(factors.ConjugateFactor):
         return GaussianMeasure(**new_measure_dict)
 
     def hadamard(
-        self, factor: factors.ConjugateFactor, update_full: bool = False
+        self, factor: factor.ConjugateFactor, update_full: bool = False
     ) -> "GaussianMeasure":
         """Compute the hadamard (componentwise) product between the measure :math:`u(X)` and a conjugate factor :math:`f(X)`.
 
         Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
-        :type factor: factors.ConjugateFactor
+        :type factor: factor.ConjugateFactor
         :param update_full: Whether also the covariance and the log determinants of the new Gaussian measure should be computed. , defaults to False
         :type update_full: bool, optional
         :return: Resulting GaussianMeasure.
@@ -165,13 +165,13 @@ class GaussianMeasure(factors.ConjugateFactor):
         return GaussianMeasure(**new_measure_dict)
 
     def product(self) -> "GaussianMeasure":
-        """Compute the product over all factors.
+        """Compute the product over all factor.
         
         .. math::
         
             v(X) = \prod_i u_i(X)
 
-        :return: Factor of all factors.
+        :return: Factor of all factor.
         :rtype: GaussianMeasure
         """
         Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
@@ -1065,11 +1065,11 @@ class GaussianMeasure(factors.ConjugateFactor):
             A_mat, a_vec, B_mat, b_vec, C_mat, c_vec, D_mat, d_vec
         )
 
-    def integrate_log_factor(self, factor: factors.ConjugateFactor) -> jnp.array:
+    def integrate_log_factor(self, factor: factor.ConjugateFactor) -> jnp.array:
         """Integrates over a log factor.
 
         :param factor: The factor, which will be intergrated.
-        :type factor: factors.ConjugateFactor
+        :type factor: factor.ConjugateFactor
         :return: The integral
         :rtype: jnp.array
         """
@@ -1126,13 +1126,13 @@ class GaussianDiagMeasure(GaussianMeasure):
         return new_measure
 
     def product(self) -> "GaussianDiagMeasure":
-        """Computes the product over all factors.
+        """Computes the product over all factor.
         
         .. math::
         
             v(X) = \prod_i u_i(X)
 
-        :return: Factor of all factors.
+        :return: Factor of all factor.
         :rtype: GaussianDiagMeasure
         """
         Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)

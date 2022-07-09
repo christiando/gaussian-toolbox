@@ -1,4 +1,4 @@
-from gaussian_toolbox.gaussian_algebra import pdf, conditionals, measures
+from gaussian_toolbox.gaussian_algebra import pdf, conditional, measure
 from gaussian_toolbox.utils import linalg
 import pytest
 from jax import numpy as jnp
@@ -41,14 +41,14 @@ class TestConditionalGaussianPDF:
         M = objax.random.normal((R, Dy, Dx))
         b = objax.random.normal((R, Dy))
         Lambda, ln_det_Sigma = linalg.invert_matrix(Sigma)
-        cond = conditionals.ConditionalGaussianPDF(M, b, Sigma)
+        cond = conditional.ConditionalGaussianPDF(M, b, Sigma)
         assert jnp.allclose(cond.Lambda, Lambda)
         assert jnp.allclose(cond.ln_det_Sigma, ln_det_Sigma)
         assert jnp.allclose(-cond.ln_det_Lambda, ln_det_Sigma)
         assert jnp.allclose(cond.b, b)
         assert jnp.allclose(cond.M, M)
         Lambda, ln_det_Sigma = linalg.invert_matrix(Sigma)
-        cond = conditionals.ConditionalGaussianPDF(M, Lambda=Lambda)
+        cond = conditional.ConditionalGaussianPDF(M, Lambda=Lambda)
         assert jnp.allclose(cond.Sigma, Sigma)
         assert jnp.allclose(cond.Lambda, Lambda)
         assert jnp.allclose(cond.ln_det_Sigma, ln_det_Sigma)
@@ -240,7 +240,7 @@ class TestNNControlGaussianConditional:
     @classmethod
     def create_instance(self, R, Dx, Dy, Du):
         Sigma = self.get_pd_matrix(R, Dy)
-        cond = conditionals.NNControlGaussianConditional(Sigma, Dx, Du)
+        cond = conditional.NNControlGaussianConditional(Sigma, Dx, Du)
         return cond
 
     @pytest.mark.parametrize(

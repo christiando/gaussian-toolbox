@@ -4,7 +4,7 @@ import sys
 sys.path.append("../")
 from jax import numpy as jnp
 import numpy as np
-from src_jax import factors, densities, conditionals
+from src_jax import factor, densities, conditional
 from matplotlib import pyplot as plt
 from typing import Tuple
 
@@ -59,7 +59,7 @@ class LinearRegression:
         mu = self.mu_prior * jnp.ones((1, self.D))
         self.prior = pdf.GaussianDiagPDF(Sigma=Sigma, mu=mu)
 
-    def get_likelihood(self, X: jnp.ndarray, y: jnp.ndarray) -> factors.ConjugateFactor:
+    def get_likelihood(self, X: jnp.ndarray, y: jnp.ndarray) -> factor.ConjugateFactor:
         """Computes the likelihood
 
             L(y|X,w) = \prod_i N(y_i\vert X_iw, \sigma_x^2)
@@ -69,17 +69,17 @@ class LinearRegression:
         :param y: Target variable [N]
         :type y: jnp.ndarray
         :return: Likelihood object for data X, and y.
-        :rtype: factors.ConjugateFactor
+        :rtype: factor.ConjugateFactor
         """
         # Lambda = jnp.array([jnp.dot(X.T, X) / self.sigma_y ** 2.])
         # nu = jnp.dot(y.T, X) / self.sigma_y ** 2.
         # print(nu.shape)
         # ln_beta = jnp.array([- .5 * (jnp.dot(y.T, y) / self.sigma_y ** 2. +
         #                  self.N * jnp.log(2. * jnp.pi * self.sigma_y ** 2.))])
-        # likelihood = factors.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
+        # likelihood = factor.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         Sigma_lk = jnp.ones((self.N, 1, 1)) * self.sigma_y ** 2
         M_lk = self.X[:, None]
-        likelihood_term = conditionals.ConditionalGaussianPDF(M=M_lk, Sigma=Sigma_lk)
+        likelihood_term = conditional.ConditionalGaussianPDF(M=M_lk, Sigma=Sigma_lk)
         likelihood = likelihood_term.set_y(self.y)
         likelihood = likelihood.product()
         return likelihood
@@ -124,7 +124,7 @@ class LinearRegression:
         M = jnp.reshape(X_new, (N, 1, X_new.shape[1]))
         b = jnp.zeros((N, 1))
         Sigma = self.sigma_y ** 2.0 * jnp.ones((N, 1, 1))
-        likelihood_measure = conditionals.ConditionalGaussianDensity(
+        likelihood_measure = conditional.ConditionalGaussianDensity(
             M=M, b=b, Sigma=Sigma
         )
         return likelihood_measure.affine_marginal_transformation(self.posterior)

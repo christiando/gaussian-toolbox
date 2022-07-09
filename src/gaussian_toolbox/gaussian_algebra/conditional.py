@@ -14,7 +14,7 @@ __all__ = ["ConditionalGaussianPDF", "NNControlGaussianConditional"]
 # from pdf import GaussianPDF
 from jax import numpy as jnp
 from typing import Tuple
-from . import pdf, factors, measures
+from . import pdf, factor, measure
 import objax
 from ..utils.linalg import invert_matrix
 
@@ -143,13 +143,13 @@ class ConditionalGaussianPDF:
             ln_det_Sigma=ln_det_Sigma_new,
         )
 
-    def set_y(self, y: jnp.ndarray, **kwargs) -> factors.ConjugateFactor:
+    def set_y(self, y: jnp.ndarray, **kwargs) -> factor.ConjugateFactor:
         """ Set a specific value for :math:`y` in :math:`p(Y=y|X)` and returns the corresponding conjugate factor. 
 
         :param y: Data for :math:`y`, where the rth entry is associated with the rth conditional density. 
         :type y: jnp.ndarray [R, Dy]
         :return: The conjugate factor where the first dimension is R.
-        :rtype: factors.ConjugateFactor
+        :rtype: factor.ConjugateFactor
         """
         try:
             assert self.R == 1 or y.shape[0] == self.R
@@ -177,7 +177,7 @@ class ConditionalGaussianPDF:
         ln_beta_new = -0.5 * (
             yb_Lambda_yb + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma
         )
-        factor_new = factors.ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
+        factor_new = factor.ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
         return factor_new
 
     def affine_joint_transformation(
@@ -203,7 +203,7 @@ class ConditionalGaussianPDF:
             assert p_x.R == 1 or self.R == 1
         except AssertionError:
             raise RuntimeError(
-                "The combination of combining multiple marginals with multiple conditionals is not implemented."
+                "The combination of combining multiple marginals with multiple conditional is not implemented."
             )
         R = p_x.R * self.R
         D_xy = p_x.D + self.Dy
@@ -277,7 +277,7 @@ class ConditionalGaussianPDF:
             assert p_x.R == 1 or self.R == 1
         except AssertionError:
             raise RuntimeError(
-                "The combination of combining multiple marginals with multiple conditionals is not implemented."
+                "The combination of combining multiple marginals with multiple conditional is not implemented."
             )
         R = p_x.R * self.R
         # Mean
@@ -306,7 +306,7 @@ class ConditionalGaussianPDF:
             assert p_x.R == 1 or self.R == 1
         except AssertionError:
             raise RuntimeError(
-                "The combination of combining multiple marginals with multiple conditionals is not implemented."
+                "The combination of combining multiple marginals with multiple conditional is not implemented."
             )
         R = p_x.R * self.R
         # TODO: Could be flexibly made more effiecient here.
@@ -343,7 +343,7 @@ class ConditionalGaussianPDF:
             \int \log(p(Y|X))p(Y,X){\\rm d}Y{\\rm d}X.
 
         :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :type p_yx: measures.GaussianMeasure
+        :type p_yx: measure.GaussianMeasure
         :raises NotImplementedError: Only implemented for R=1.
         :return: Returns the integral with respect to density :math:`p(Y,X)`.
         :rtype: jnp.ndarray
@@ -372,7 +372,7 @@ class ConditionalGaussianPDF:
            f(Y) = \int \log(p(Y|X))p(X){\\rm d}x.
         
         :param p_x: Density over :math:`X`.
-        :type p_x: measures.GaussianMeasure
+        :type p_x: measure.GaussianMeasure
         :raises NotImplementedError: Only implemented for R=1.
         :return: The integral as function of :math:`Y`.
         :rtype: callable
@@ -574,7 +574,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.condition_on_x(x)
 
-    def set_y(self, y: jnp.ndarray, u: jnp.array, **kwargs) -> factors.ConjugateFactor:
+    def set_y(self, y: jnp.ndarray, u: jnp.array, **kwargs) -> factor.ConjugateFactor:
         """Set an instance of Y and U and returns
         
         .. math:
@@ -586,7 +586,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
         :param u: Control variables [R, Du]
         :type u: jnp.ndarray
         :return: The factor with the instantiation.
-        :rtype: factors.ConjugateFactor
+        :rtype: factor.ConjugateFactor
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.set_y(y)
@@ -665,7 +665,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
         return cond_entropy
 
     def integrate_log_conditional(
-        self, phi_yx: measures.GaussianMeasure, u: jnp.ndarray, **kwargs
+        self, phi_yx: measure.GaussianMeasure, u: jnp.ndarray, **kwargs
     ) -> jnp.ndarray:
         """Integrate over the log conditional with respect to the pdf :math:`p(Y,X)`, i.e.
         
@@ -674,7 +674,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
             \int \log(p(Y|X,u))p(Y,X){\\rm d}Y{\\rm d}X.
 
         :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :type p_yx: measures.GaussianMeasure
+        :type p_yx: measure.GaussianMeasure
         :param u: Control variables [1, Du]
         :type u: jnp.ndarray
         :raises NotImplementedError: Only one network input allowed.
@@ -687,7 +687,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
         return cond_gauss.integrate_log_conditional(phi_yx)
 
     def integrate_log_conditional_y(
-        self, phi_x: measures.GaussianMeasure, u: jnp.ndarray, **kwargs
+        self, phi_x: measure.GaussianMeasure, u: jnp.ndarray, **kwargs
     ) -> callable:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
         
@@ -696,7 +696,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
            f(Y) = \int \log(p(Y|X,u))p(X)dX.
         
         :param p_x: Density over :math:`X`.
-        :type p_x: measures.GaussianMeasure
+        :type p_x: measure.GaussianMeasure
         :param u: Control variables [1, Du]
         :type u: jnp.ndarray
         :raises NotImplementedError: Only one network input allowed.

@@ -14,11 +14,11 @@ import numpy as np
 from typing import Iterable
 
 # from .
-from . import measures
+from . import measure
 from ..utils.linalg import invert_matrix, invert_diagonal
 
 
-class GaussianPDF(measures.GaussianMeasure):
+class GaussianPDF(measure.GaussianMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix.
 
     :param Sigma: Covariance matrices of the Gaussian densities. Dimensions should be [R, D, D].
@@ -169,7 +169,7 @@ class GaussianPDF(measures.GaussianMeasure):
         :return: The corresponding conditional Gaussian density :math:`p(X|Y)`.
         :rtype: ConditionalGaussianPDF
         """
-        from . import conditionals
+        from . import conditional
 
         dim_xy = jnp.arange(self.D, dtype=jnp.int32)
         dim_x = jnp.setxor1d(dim_xy, dim_y)
@@ -178,7 +178,7 @@ class GaussianPDF(measures.GaussianMeasure):
         Sigma_x, ln_det_Lambda_x = invert_matrix(Lambda_x)
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
-        return conditionals.ConditionalGaussianPDF(
+        return conditional.ConditionalGaussianPDF(
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
         )
 
@@ -194,13 +194,13 @@ class GaussianPDF(measures.GaussianMeasure):
         :return: The corresponding conditional Gaussian density :math:`p(X|Y)`.
         :rtype: ConditionalGaussianPDF
         """
-        from . import conditionals
+        from . import conditional
 
         Lambda_x = self.Lambda[:, dim_x][:, :, dim_x]
         Sigma_x, ln_det_Lambda_x = invert_matrix(Lambda_x)
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
-        return conditionals.ConditionalGaussianPDF(
+        return conditional.ConditionalGaussianPDF(
             M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
         )
 
@@ -219,7 +219,7 @@ class GaussianPDF(measures.GaussianMeasure):
         return density_dict
 
 
-class GaussianDiagPDF(GaussianPDF, measures.GaussianDiagMeasure):
+class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix. 
     
     :math`\Sigma` should be diagonal (and hence :math:`Lambda?).

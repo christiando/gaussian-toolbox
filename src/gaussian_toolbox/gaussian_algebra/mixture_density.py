@@ -1,4 +1,4 @@
-class GaussianMixtureDensity(measures.GaussianMixtureMeasure):
+class GaussianMixtureDensity(measure.GaussianMixtureMeasure):
     def __init__(
         self, components: Iterable["GaussianPDF"], weights: jnp.ndarray = None
     ):

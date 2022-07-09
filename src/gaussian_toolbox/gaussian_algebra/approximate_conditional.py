@@ -2,12 +2,12 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from typing import Tuple
-from . import pdf, factors, measures, conditionals
+from . import pdf, factor, measure, conditional
 from ..utils.linalg import invert_matrix
 
 
-class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianPDF):
-    """ Base class for approximate conditionals.
+class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
+    """ Base class for approximate conditional.
     """
 
     def evaluate_phi(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -167,7 +167,7 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianPDF):
 
     def affine_conditional_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
-    ) -> conditionals.ConditionalGaussianPDF:
+    ) -> conditional.ConditionalGaussianPDF:
         r"""Get an approximation of the joint density via moment matching
         
         .. math::
@@ -177,7 +177,7 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianPDF):
         :param p_x: The density which we average over.
         :type p_x: pdf.GaussianPDF
         :return: The conditional density ::math:`p(X|Y)`.
-        :rtype: conditionals.ConditionalGaussianPDF
+        :rtype: conditional.ConditionalGaussianPDF
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = invert_matrix(Sigma_y)[0]
@@ -187,7 +187,7 @@ class LConjugateFactorMGaussianConditional(conditionals.ConditionalGaussianPDF):
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        cond_p_xy = conditionals.ConditionalGaussianPDF(
+        cond_p_xy = conditional.ConditionalGaussianPDF(
             M=M_new, b=b_new, Sigma=Sigma_new,
         )
         return cond_p_xy
@@ -285,7 +285,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         Lambda = jnp.eye(self.Dx)[None] / self.length_scale[:, None] ** 2
         nu = self.mu / self.length_scale ** 2
         ln_beta = -0.5 * jnp.sum((self.mu / self.length_scale) ** 2, axis=1)
-        self.k_func = measures.GaussianDiagMeasure(
+        self.k_func = measure.GaussianDiagMeasure(
             Lambda=Lambda, nu=nu, ln_beta=ln_beta
         )
 
@@ -299,7 +299,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
             \int \log(p(Y|X))p(Y,X){\rm d}Y{\rm d}X.
 
         :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :type p_yx: measures.GaussianMeasure
+        :type p_yx: measure.GaussianMeasure
         :raises NotImplementedError: Only implemented for R=1.
         :return: Returns the integral with respect to density :math:`p(Y,X)`.
         :rtype: jnp.ndarray
@@ -323,7 +323,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         Lambda_joint = Lambda_joint.at[:, self.Dy :, self.Dy :].set(self.k_func.Lambda)
         nu_joint = jnp.zeros([self.Dk, self.Dy + self.Dx])
         nu_joint = nu_joint.at[:, self.Dy :].set(self.k_func.nu)
-        joint_k_func = factors.ConjugateFactor(
+        joint_k_func = factor.ConjugateFactor(
             Lambda=Lambda_joint, nu=nu_joint, ln_beta=self.k_func.ln_beta
         )
         p_yx_k = p_yx.multiply(joint_k_func, update_full=True)
@@ -360,7 +360,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
             f(Y) = \int \log(p(Y|X))p(X){\rm d}X.
     
         :param p_x: Density over :math:`X`.
-        :type p_x: measures.GaussianPDF
+        :type p_x: measure.GaussianPDF
         :raises NotImplementedError: Only implemented for R=1.
         :return: The integral as function of :math:`Y`.
         :rtype: callable
@@ -469,7 +469,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         v = self.W
         nu = self.W * self.w0[:, None]
         ln_beta = -0.5 * self.w0 ** 2
-        self.k_func = factors.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
+        self.k_func = factor.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
 
     def integrate_log_conditional(
         self, p_yx: pdf.GaussianPDF, p_x: pdf.GaussianPDF = None, **kwargs
@@ -481,7 +481,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
             \int \log(p(Y|X))p(Y,X){\rm d}Y{\rm d}X.
 
         :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :type p_yx: measures.GaussianMeasure
+        :type p_yx: measure.GaussianMeasure
         :raises NotImplementedError: Only implemented for R=1.
         :return: Returns the integral with respect to density :math:`p(Y,X)`.
         :rtype: jnp.ndarray
@@ -503,7 +503,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         zero_arr = jnp.zeros([self.Dk, self.Dy + self.Dx])
         v_joint = zero_arr.at[:, self.Dy :].set(self.k_func.v)
         nu_joint = zero_arr.at[:, self.Dy :].set(self.k_func.nu)
-        joint_k_func = factors.OneRankFactor(
+        joint_k_func = factor.OneRankFactor(
             v=v_joint, nu=nu_joint, ln_beta=self.k_func.ln_beta
         )
         p_yx_k = p_yx.multiply(joint_k_func, update_full=True)
@@ -542,7 +542,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
             f(Y) = \int \log(p(Y|X))p(X){\rm d}X.
     
         :param p_x: Density over :math:`X`.
-        :type p_x: measures.GaussianPDF
+        :type p_x: measure.GaussianPDF
         :raises NotImplementedError: Only implemented for R=1.
         :return: The integral as function of :math:`Y`.
         :rtype: callable
@@ -592,7 +592,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         return log_expectation_y
 
 
-class HCCovGaussianConditional(conditionals.ConditionalGaussianPDF):
+class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     """A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
 
     .. math::
@@ -655,8 +655,8 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianPDF):
         """
         nu = self.W[:, 1:]
         ln_beta = self.W[:, 0]
-        self.exp_h_plus = factors.LinearFactor(nu, ln_beta)
-        self.exp_h_minus = factors.LinearFactor(-nu, -ln_beta)
+        self.exp_h_plus = factor.LinearFactor(nu, ln_beta)
+        self.exp_h_minus = factor.LinearFactor(-nu, -ln_beta)
 
     def get_conditional_cov(self, x: jnp.ndarray) -> jnp.ndarray:
         r"""Evaluate the covariance at a given :math:`X=x`, i.e.
@@ -796,7 +796,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianPDF):
 
     def affine_conditional_transformation(
         self, p_x: pdf.GaussianPDF
-    ) -> conditionals.ConditionalGaussianPDF:
+    ) -> conditional.ConditionalGaussianPDF:
         r"""Get an approximation of the joint density via moment matching
         
         .. math::
@@ -806,7 +806,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianPDF):
         :param p_x: Marginal Gaussian density over :math:`X`.
         :type p_x: pdf.GaussianPDF
         :return: Conditional density of :math:`p(X|Y)`.
-        :rtype: conditionals.ConditionalGaussianPDF
+        :rtype: conditional.ConditionalGaussianPDF
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = invert_matrix(Sigma_y)[0]
@@ -816,7 +816,7 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianPDF):
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        cond_p_xy = conditionals.ConditionalGaussianPDF(
+        cond_p_xy = conditional.ConditionalGaussianPDF(
             M=M_new, b=b_new, Sigma=Sigma_new,
         )
         return cond_p_xy
@@ -852,12 +852,12 @@ class HCCovGaussianConditional(conditionals.ConditionalGaussianPDF):
         return p_y
 
     def integrate_log_conditional(
-        self, p_yx: measures.GaussianMeasure, **kwargs
+        self, p_yx: measure.GaussianMeasure, **kwargs
     ) -> jnp.ndarray:
         raise NotImplementedError("Log integal not implemented!")
 
     def integrate_log_conditional_y(
-        self, p_x: measures.GaussianMeasure, **kwargs
+        self, p_x: measure.GaussianMeasure, **kwargs
     ) -> callable:
         raise NotImplementedError("Log integal not implemented!")
 

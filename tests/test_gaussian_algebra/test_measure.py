@@ -1,7 +1,7 @@
-from gaussian_toolbox.gaussian_algebra import measures, factors
+from gaussian_toolbox.gaussian_algebra import measure, factor
 from gaussian_toolbox.utils import linalg
 
-from test_factors import (
+from test_factor import (
     TestConjugateFactor,
     TestOneRankFactor,
     TestLinearFactor,
@@ -22,14 +22,14 @@ from scipy import integrate as sc_integrate
 
 class TestGaussianMeasure(TestConjugateFactor):
     def setup_class(self):
-        self.test_class = measures.GaussianMeasure
+        self.test_class = measure.GaussianMeasure
 
     @classmethod
     def create_instance(self, R, D):
         Lambda = self.get_pd_matrix(R, D)
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return measures.GaussianMeasure(Lambda, nu, ln_beta)
+        return measure.GaussianMeasure(Lambda, nu, ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):
@@ -538,7 +538,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda_u = Lambda_u.at[:].set(jnp.eye(D) * (np.random.rand(R, D))[:, :, None])
         nu_u = jnp.array(1e-4 * np.random.randn(R, D))
         ln_beta_u = jnp.array(np.random.randn(R))
-        u = factors.ConjugateFactor(Lambda_u, nu_u, ln_beta_u)
+        u = factor.ConjugateFactor(Lambda_u, nu_u, ln_beta_u)
         r_ana = m.integrate("log u(x)", factor=u)
         if D == 1:
             for r in range(R):
@@ -574,7 +574,7 @@ class TestGaussianMeasure(TestConjugateFactor):
 
 class TestGaussianDiagMeasure(TestGaussianMeasure):
     def setup_class(self):
-        self.test_class = measures.GaussianDiagMeasure
+        self.test_class = measure.GaussianDiagMeasure
 
     @classmethod
     def create_instance(self, R, D):
@@ -583,4 +583,4 @@ class TestGaussianDiagMeasure(TestGaussianMeasure):
         )
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return measures.GaussianDiagMeasure(Lambda, nu, ln_beta)
+        return measure.GaussianDiagMeasure(Lambda, nu, ln_beta)
