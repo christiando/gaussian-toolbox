@@ -12,8 +12,8 @@ from jax import numpy as jnp
 from jax import jit, lax
 import objax
 
-from . import observation_models, state_models
-from ..gaussian_algebra import densities
+from . import observation_model, state_model
+from ..gaussian_algebra import pdf
 import pickle
 import os
 import numpy as onp
@@ -38,8 +38,8 @@ class StateSpaceEM(objax.Module):
     def __init__(
         self,
         X: jnp.ndarray,
-        observation_model: observation_models.ObservationModel,
-        state_model: state_models.StateModel,
+        observation_model: observation_model.ObservationModel,
+        state_model: state_model.StateModel,
         max_iter: int = 100,
         conv_crit: float = 1e-3,
         u_x: jnp.ndarray = None,
@@ -51,9 +51,9 @@ class StateSpaceEM(objax.Module):
         :param X: Training data. Dimensions should be [T, Dx].
         :type X: jnp.ndarray
         :param observation_model: The observation model of the data.
-        :type observation_model: observation_models.ObservationModel
+        :type observation_model: observation_model.ObservationModel
         :param state_model: The state model for the latent variables.
-        :type state_model: state_models.StateModel
+        :type state_model: state_model.StateModel
         :param max_iter: Maximal number of EM iteration performed_, defaults to 100
         :type max_iter: int, optional
         :param conv_crit: Convergence criterion for the EM procedure, defaults to 1e-3

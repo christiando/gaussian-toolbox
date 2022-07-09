@@ -2,9 +2,9 @@
 
 ## State-space models
 
-State space models (SSMs) are latent variable models for time-series data, where the latent space is continuous and dictates the dynamics of the observation. Here, we consider some (not exhaustive) SSMs, where the latent variables follow a first order Markov process. A state-space model always consists of a _state model_ determining the stochastic dynamics in the latent space $`\mathbf{z}_t\in \mathbb{R}^{D_z}`$, and an _observation model_, dictating the conditional distribution of the observation the observation $`\mathbf{x}_t`$, i.e. $`p(\mathbf{x}_t\vert\mathbf{z}_t)`$. Implementations can be found in [`state_models.py`](state_models.py) and [`observation_models.py`](observation_models.py), respectively. With one instance of each, the Expectation-Maximization (EM) algorithm in [`ssm_em.py`](ssm_em.py) can be invoked, to infer the model parameters given timeseries data.
+State space models (SSMs) are latent variable models for time-series data, where the latent space is continuous and dictates the dynamics of the observation. Here, we consider some (not exhaustive) SSMs, where the latent variables follow a first order Markov process. A state-space model always consists of a _state model_ determining the stochastic dynamics in the latent space $`\mathbf{z}_t\in \mathbb{R}^{D_z}`$, and an _observation model_, dictating the conditional distribution of the observation the observation $`\mathbf{x}_t`$, i.e. $`p(\mathbf{x}_t\vert\mathbf{z}_t)`$. Implementations can be found in [`state_model.py`](state_model.py) and [`observation_model.py`](observation_model.py), respectively. With one instance of each, the Expectation-Maximization (EM) algorithm in [`ssm_em.py`](ssm_em.py) can be invoked, to infer the model parameters given timeseries data.
 
-### [State models](state_models.py)
+### [State models](state_model.py)
 
 The state models that are considered here, have the form
 
@@ -44,7 +44,7 @@ $`k(h) = \exp(-h^2 / 2)`$ and $`h_i(x) = w_i'x + w_{i,0}`$.
 
 The parameters that need to be inferred are $`A, b, \Sigma_z, W`$, where $`W`$ are all the kernel weights.
 
-### [Observation models](observation_models.py)
+### [Observation models](observation_model.py)
 
 #### `ObservationModel`
 
@@ -77,8 +77,8 @@ Parameters to be inferred are $`C, \mathbf{d}, \sigma_x, U, \beta, W, b`$.
 
 ```python
 import numpy
-import observation_models
-import state_models
+import observation_model
+import state_model
 from ssm_em import StateSpaceEM
 
 # Generate or load some timeseries data
@@ -95,9 +95,9 @@ noise_z = .1
 X += noise_x * numpy.random.randn(*X.shape)
 
 # Instantiate a state model
-sm = state_models.LinearStateModel(Dz, noise_z)
+sm = state_model.LinearStateModel(Dz, noise_z)
 # Instantiate an observation model and initialize paramters
-om = observation_models.LinearObservationModel(Dx, Dz, noise_x)
+om = observation_model.LinearObservationModel(Dx, Dz, noise_x)
 om.pca_init(X)
 # Create SSM object and run em.
 ssm_em = StateSpaceEM(X, observation_model=om, state_model=sm)
