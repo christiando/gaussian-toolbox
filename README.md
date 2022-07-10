@@ -1,58 +1,81 @@
-# Gaussian Toolbox
+# Gaussian Toolbox (`GT`)
 
 [![tests](https://github.com//christiando/gaussian-toolbox/actions/workflows/python-app.yml/badge.svg)](https://github.com//christiando/gaussian-toolbox/actions/workflows/python-app.yml)
 
-At the heart of this library the is to quickly manipulate Gaussians and solve integrals with respect to Gaussian measures. These operations are used in a wide range of probabilistic models, such as Gaussian process models, state space models, latent variable models, etc. The plan is to slowly incorporate these models one after the other in this library.
+The main motivation of this library is to make Gaussian manipulations as easy as possible. For this certain [object classes](/docs/source/notebooks/gaussian_objects.ipynb) are defined, which can be manipulated in the following way. The basic code tries to follow roughly this The code roughly follows this [note](http://users.isy.liu.se/en/rt/schon/Publications/SchonL2011.pdf).
 
-## The backbone: Gaussian manipulations
+## Elementary Gaussian manipulation
 
-This library primarily provides the functionality to quickly manipulate, integrate and sample from Gaussians. If 
+Here, just the some important operations are shown and how they can be performed in `GT`. For the following example assume, that 
 
 $$
 p(X) = N(\mu, \Sigma),
 $$
 
-is a Gaussian density, this library allows to quickly compute the resulting functional form
+is a Gaussian density and 
 
 $$
-u(X) = \beta\exp\left(-\frac{1}{2}X^\top\Lambda X + \nu^\top X\right)p(X).
+f(X) = \beta\exp\left(-\frac{1}{2}X^\top\Lambda X + \nu^\top X\right)p(X).
 $$
 
-For the resulting measure certain integrals can then be computed quickly
+is a function that is _conjugate_ to a Gaussian. In `GT` we have two classes `GaussianPDF` and `ConjugateFactor` for these class of functions repectively. 
+### Multiplication with conjugate factors.
+
+We want to calculate the object
 
 $$
-\int f(X) {\rm d}u(X),
+phi(X) = f(X) * u(X).
 $$
 
-where $f$ is can be up to fourth order of $x$. Furthermore, some functionality for mixture measures and density is provided.
+In `GT` this is done as follows
 
-### The code structure
+```
+p_X = GaussianPDF(Sigma=..., mu=...)
+f_X = ConjugateFactor(...)
+fp_X = f_X * p_X
+```
 
-The main code is in `gaussian_algebra` folder. 
+`fp_X` is the resulting object, which can be used for further operations. It's as simple as that.
+### Intergation
 
-+ `factor.py` contains the main utilities for functions that are conjugate to Gaussian measures, i.e. its product with a Gaussian measure is again a Gaussian measure. The main class is `ConjugateFactor`, which is the most general functional form. Check the documentation for subclasses.
-+ `measure.py` contains the functionality of `GaussianMeasure`, i.e. the integration functionality. They can be multiplied with `ConjugateFactor` and the result are again `GaussianMeasure`. In addition `GaussianMixtureMeasure` is provided that is a class for a linear combination of Gaussian measure. Check the documentation for subclasses.
-+ `pdf.py` has the utilities for probability densities, i.e. it is enforced, that they are normalized. One can sample from instances of `GaussianPDF`, marginalize, condition on dimensions. Furthermore, all affine transformations are implemented. Furthermore, they inherit all the functionality from `GaussianMeasure`. Also here the `GaussianMixtureDensity` is provided, which is the density counter part of `GaussianMixtureMeasure`.
-+ `conditional.py` deals with objects that represent conditional densities, i.e. objects that are not densities without defining the conditional dimensions.
-
-The code roughly follows this [note](http://users.isy.liu.se/en/rt/schon/Publications/SchonL2011.pdf).
-
-__Caution__: This is code under development. Integrals were checked by sampling, but no guarantees. ;)
-
-## Time-series models
-
-A certain number of models of probalistic time-series models is provided. One class are __state-space models (SSMs)__, that have the form
+Some times we would like to integrate certain functions with respect to a Gaussian density. For example, we want to calculate
 
 $$
-z_{t} = f(z_{t-1}) + \zeta_t,
+\int (AX + a)(BX + b)^\top p(X){\rm d}X
 $$
 
+In `GT` this can be done as follows:
+
+```
+p_X = GaussianPDF(Sigma=..., mu=...)
+integral = p_X.integrate("(Ax+a)(Bx+b)", A_mat=..., a_vec=..., B_mat=..., b_vec=...)
+```
+
+`GT` implements the integral of several functions (e.g. polynomials up to fourth order) and frees the user from cumbersome computations.
+
+### Affine transformation
+
+For doing _inference_ it is very important to be able to performing certain operations e.g. 
+
 $$
-x_{t} = g(z_{t}) + \xi_t, 
+T_{cond}\[p(X),p(Y\vert X)\] \rightarrow p(X\vert Y).
 $$
 
-with $\!\zeta_t \sim {\cal N}(0,\Sigma_z(t))\!$ and $\!\xi_t \sim {\cal N}(0,\Sigma_x(t))\!$. The first equation is the so-called state equation, defining the _state model_, and the second equation  is the observation (aka emission) equation, defining the _observation model_. This library provides various state- and observation models, that can be combined. An __expectation-maximization (EM) algorithm__ is used for inference. For details see [here](timeseries_jax/README_timeseries.md).
+In order to do so `GT` provides `ConditionalGaussianPDF`, and the operation above can be then written as
 
+```
+p_X = GaussianPDF(Sigma=..., mu=...)
+p_Y_given_X = ConditionalGaussianPDF(...)
+p_X_given_Y = p_Y_given_X.affine_conditional_transformation(...)
+```
+
+Other operations that are provided are conditioning, marginalizing, getting the joint or marginal density. For a more exhaustive example see the [docs](/docs/source/notebooks/affine_transforms.ipynb)
+
+# And much more
+
+Based upon these operations and extensions thereof, basic models (e.g. [linear regression](/docs/source/notebooks/linear_regression.ipynb)), but also more complex models (e.g. for time-series) can be implemented.
+
+Got interested? What can you do with it.
 # Installation
 
 Clone the repository into a directory and go into the folder. Type `pip install .` for installation or `pip install -e .` for developement installation.
