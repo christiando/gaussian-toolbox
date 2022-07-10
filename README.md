@@ -24,18 +24,18 @@ is a function that is _conjugate_ to a Gaussian. In `GT` we have two classes `Ga
 We want to calculate the object
 
 $$
-phi(X) = f(X) * u(X).
+\phi(X) = f(X) * u(X).
 $$
 
 In `GT` this is done as follows
 
-```
+```python
 p_X = GaussianPDF(Sigma=..., mu=...)
 f_X = ConjugateFactor(...)
-fp_X = f_X * p_X
+phi_X = f_X * p_X
 ```
 
-`fp_X` is the resulting object, which can be used for further operations. It's as simple as that.
+`phi_X` is the resulting object, which can be used for further operations. It's as simple as that.
 ### Intergation
 
 Some times we would like to integrate certain functions with respect to a Gaussian density. For example, we want to calculate
@@ -46,7 +46,7 @@ $$
 
 In `GT` this can be done as follows:
 
-```
+```python
 p_X = GaussianPDF(Sigma=..., mu=...)
 integral = p_X.integrate("(Ax+a)(Bx+b)", A_mat=..., a_vec=..., B_mat=..., b_vec=...)
 ```
@@ -63,7 +63,7 @@ $$
 
 In order to do so `GT` provides `ConditionalGaussianPDF`, and the operation above can be then written as
 
-```
+```python
 p_X = GaussianPDF(Sigma=..., mu=...)
 p_Y_given_X = ConditionalGaussianPDF(...)
 p_X_given_Y = p_Y_given_X.affine_conditional_transformation(...)
@@ -74,6 +74,7 @@ Other operations that are provided are conditioning, marginalizing, getting the 
 # And much more
 
 Based upon these operations and extensions thereof, basic models (e.g. [linear regression](/docs/source/notebooks/linear_regression.ipynb)), but also more complex models (e.g. for time-series) can be implemented.
+Furthermore, the `GT` is written completely with [JAX](https://github.com/google/jax/tree/main/docs) and [OBJAX](https://github.com/google/objax), and hence combining Gaussian manipulations with neural networks has never been easier.
 
 Got interested? What can you do with it.
 # Installation
