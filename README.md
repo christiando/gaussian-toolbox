@@ -9,13 +9,13 @@ The main motivation of this library is to make Gaussian manipulations as easy as
 Here, just the some important operations are shown and how they can be performed in `GT`. For the following example assume, that 
 
 $$
-p(X) = N(\mu, \Sigma),
+p(X) = {\cal N}(\mu, \Sigma),
 $$
 
 is a Gaussian density and 
 
 $$
-f(X) = \beta\exp\left(-\frac{1}{2}X^\top\Lambda X + \nu^\top X\right)p(X).
+f(X) = \beta\exp\left(-\frac{1}{2}X^\top\Lambda X + \nu^\top X\right).
 $$
 
 is a function that is _conjugate_ to a Gaussian. In `GT` we have two classes `GaussianPDF` and `ConjugateFactor` for these class of functions repectively. 
@@ -24,7 +24,7 @@ is a function that is _conjugate_ to a Gaussian. In `GT` we have two classes `Ga
 We want to calculate the object
 
 $$
-\phi(X) = f(X) * u(X).
+\phi(X) = f(X) * p(X).
 $$
 
 In `GT` this is done as follows
@@ -47,8 +47,7 @@ $$
 In `GT` this can be done as follows:
 
 ```python
-p_X = GaussianPDF(Sigma=..., mu=...)
-integral = p_X.integrate("(Ax+a)(Bx+b)", A_mat=..., a_vec=..., B_mat=..., b_vec=...)
+integral = p_X.integrate("(Ax+a)(Bx+b)'", A_mat=..., a_vec=..., B_mat=..., b_vec=...)
 ```
 
 `GT` implements the integral of several functions (e.g. polynomials up to fourth order) and frees the user from cumbersome computations.
@@ -58,15 +57,14 @@ integral = p_X.integrate("(Ax+a)(Bx+b)", A_mat=..., a_vec=..., B_mat=..., b_vec=
 For doing _inference_ it is very important to be able to performing certain operations e.g. 
 
 $$
-T_{cond}\[p(X),p(Y\vert X)\] \rightarrow p(X\vert Y).
+T\[p(X),p(Y\vert X)\] \rightarrow p(X\vert Y).
 $$
 
 In order to do so `GT` provides `ConditionalGaussianPDF`, and the operation above can be then written as
 
 ```python
-p_X = GaussianPDF(Sigma=..., mu=...)
 p_Y_given_X = ConditionalGaussianPDF(...)
-p_X_given_Y = p_Y_given_X.affine_conditional_transformation(...)
+p_X_given_Y = p_Y_given_X.affine_conditional_transformation(p_x)
 ```
 
 Other operations that are provided are conditioning, marginalizing, getting the joint or marginal density. For a more exhaustive example see the [docs](/docs/source/notebooks/affine_transforms.ipynb)
