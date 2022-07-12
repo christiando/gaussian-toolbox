@@ -703,8 +703,8 @@ class LSEMStateModel(LinearStateModel):
 
         @objax.Function.with_vars(self.vars())
         def loss():
-            self.state_density.w0 = self.W[:, 0]
-            self.state_density.W = self.W[:, 1:]
+            self.state_density.w0 = self.W.value[:, 0]
+            self.state_density.W = self.W.value[:, 1:]
             self.state_density.update_phi()
             return -self.compute_Q_function(
                 smoothing_density, two_step_smoothing_density
@@ -945,8 +945,8 @@ class LRBFMStateModel(LinearStateModel):
 
         @objax.Function.with_vars(self.vars())
         def loss():
-            self.state_density.mu = self.mu
-            self.state_density.length_scale = self.length_scale
+            self.state_density.mu = self.mu.value
+            self.state_density.length_scale = jnp.exp(self.log_length_scale.value)
             self.state_density.update_phi()
             return -self.compute_Q_function(
                 smoothing_density, two_step_smoothing_density
