@@ -3,9 +3,9 @@ matplotlib
 scipy
 autograd
 pykalman
-jaxlib==0.1.60
-jax==0.2.10
-objax==1.6.0
+jaxlib>=0.1.60
+jax>=0.2.10
+objax>=1.6.0
 scikit-learn
 darts
 plotly
