@@ -13,10 +13,14 @@
 import os
 import sys
 from xml.sax.handler import feature_external_ges
+from recommonmark.parser import CommonMarkParser
 
 from httplib2 import FailedToDecompressContent
 
 sys.path.insert(0, os.path.abspath("../../src/"))
+mathjax_path = (
+    "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
+)
 
 
 # -- Project information -----------------------------------------------------
@@ -71,7 +75,11 @@ html_theme_options = {
     "navigation_depth": 2,
     "includehidden": False,
     "titles_only": True,
+    "logo_only": True,
+    "display_version": False,
 }
+
+html_logo = "gt_logo.png"
 
 add_module_names = False
 
@@ -80,4 +88,11 @@ add_module_names = False
 # copies of each notebook, and myst will choose which to convert based on
 # the order in the source_suffix list. Notebooks which are not executed have
 # outputs stored in ipynb but not in md, so we must convert the ipynb.
-source_suffix = [".rst", ".md", ".pynb"]
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
+
+source_parsers = {
+    ".md": CommonMarkParser,
+}

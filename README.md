@@ -1,4 +1,4 @@
-# Gaussian Toolbox (`GT`)
+# `G`aussian `T`oolbox
 
 [![tests](https://github.com//christiando/gaussian-toolbox/actions/workflows/python-app.yml/badge.svg)](https://github.com//christiando/gaussian-toolbox/actions/workflows/python-app.yml)
 
@@ -57,7 +57,7 @@ integral = p_X.integrate("(Ax+a)(Bx+b)'", A_mat=..., a_vec=..., B_mat=..., b_vec
 For doing _inference_ it is very important to be able to performing certain operations e.g. 
 
 $$
-T\[p(X),p(Y\vert X)\] \rightarrow p(X\vert Y).
+\text{Given marginal and conditional }p(X),p(Y\vert X)\text{ get the {\it other} conditional }p(X\vert Y). 
 $$
 
 In order to do so `GT` provides `ConditionalGaussianPDF`, and the operation above can be then written as

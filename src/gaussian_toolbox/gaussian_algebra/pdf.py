@@ -222,7 +222,7 @@ class GaussianPDF(measure.GaussianMeasure):
 class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix. 
     
-    :math`\Sigma` should be diagonal (and hence :math:`Lambda?).
+    :math:`\Sigma` should be diagonal (and hence :math:`\Lambda`).
 
     :param Sigma: Covariance matrices of the Gaussian densities. Must be diagonal. Dimensions should be [R, D, D].
     :type Sigma: jnp.ndarray
