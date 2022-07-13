@@ -35,3 +35,7 @@ jobs:
       run: |
         pip install .
         pytest --cov src/gaussian_toolbox/
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        python-version: '3.10'
