@@ -340,6 +340,7 @@ tags
 .vscode
 
 docs/source/gaussian_toolbox*
+docs/source/modules.rst
 gp_jax/
 ipynbs
 
