@@ -36,7 +36,6 @@ jobs:
         pip install .
         pytest --cov src/gaussian_toolbox/
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
       run: |
         # Replace `linux` below with the appropriate OS
         # Options are `alpine`, `linux`, `macos`, `windows`
