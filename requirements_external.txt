@@ -1,2 +1,0 @@
-# -e git+https://github.com/AaltoML/Newt.git#egg=newt
--e git+https://github.com/lindermanlab/ssm.git#egg=ssm
