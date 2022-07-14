@@ -36,7 +36,6 @@ jobs:
         pip install .
         pytest --cov src/gaussian_toolbox/
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
       run: |
         curl -Os https://uploader.codecov.io/latest/linux/codecov
         chmod +x codecov
