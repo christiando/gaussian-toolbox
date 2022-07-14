@@ -72,10 +72,24 @@ Other operations that are provided are conditioning, marginalizing, getting the 
 
 # And much more
 
-Based upon these operations and extensions thereof, basic models (e.g. [linear regression](/docs/source/notebooks/linear_regression.ipynb)), but also more complex models (e.g. for time-series) can be implemented.
+Based upon these operations and extensions thereof, basic models (e.g. [linear regression](/docs/source/notebooks/linear_regression.ipynb)), but also more complex models (e.g. for [time-series](/docs/source/notebooks/timeseries.ipynb)) can be implemented.
 Furthermore, the `GT` is written completely with [JAX](https://github.com/google/jax/tree/main/docs) and [OBJAX](https://github.com/google/objax), and hence combining Gaussian manipulations with neural networks has never been easier.
 
 Got interested? What can you do with it.
 # Installation
 
-Clone the repository into a directory and go into the folder. Type `pip install .` for installation or `pip install -e .` for developement installation.
+Clone the repository into a directory and go into the folder. Just do the following
+
+```bash
+git clone https://github.com/christiando/gaussian-toolbox.git
+cd gaussian-toolbox/
+pip install .
+```
+
+For code development do
+```bash
+git clone https://github.com/christiando/gaussian-toolbox.git
+cd gaussian-toolbox/
+pip install -r requirements.txt
+pip install -e .
+```
