@@ -21,20 +21,20 @@ import time
 from typing import Union, Tuple
 
 
-def load_model(model_name: str, path: str = "") -> "StateSpaceEM":
+def load_model(model_name: str, path: str = "") -> "StateSpaceModel":
     """ Loads state space em model.
     
     :param model_name: str
         Name of the model, which is used as file name.
     :param path: str
         Path to which model is saved to. (Default='')
-    :return: StateSpaceEM
+    :return: StateSpaceModel
         Loaded model.
     """
     return pickle.load(open("%s/%s.p" % (path, model_name), "rb"))
 
 
-class StateSpaceEM(objax.Module):
+class StateSpaceModel(objax.Module):
     def __init__(
         self,
         X: jnp.ndarray,
@@ -107,7 +107,7 @@ class StateSpaceEM(objax.Module):
         ln_det_Sigma = D * jnp.log(jnp.ones(T))
         return pdf.GaussianPDF(Sigma, mu, Lambda, ln_det_Sigma)
 
-    def run(self):
+    def fit(self):
         """ Run the expectation-maximization algorithm, until converged 
             or maximal number of iterations is reached.
         """
@@ -153,8 +153,8 @@ class StateSpaceEM(objax.Module):
     def estep(self):
         """ Perform the expectation step, i.e. the forward-backward algorithm.
         """
-        self.forward_path()
-        self.backward_path()
+        self.forward_sweep()
+        self.backward_sweep()
 
     def mstep(self):
         """ Perform the maximization step, i.e. the updates of model parameters.
@@ -220,7 +220,7 @@ class StateSpaceEM(objax.Module):
         )
         return carry, result
 
-    def forward_path(self):
+    def forward_sweep(self):
         """ Iterate forward, alternately doing prediction and filtering step.
         """
         init = (
@@ -287,7 +287,7 @@ class StateSpaceEM(objax.Module):
         )
         return carry, result
 
-    def backward_path(self):
+    def backward_sweep(self):
         """ Iterate backward doing smoothing step.
         """
         last_filter_density = self.filter_density.slice(jnp.array([self.T]))
@@ -486,7 +486,7 @@ class StateSpaceEM(objax.Module):
             Lambda=Lambda_prediction,
             ln_det_Sigma=ln_det_Sigma_prediction,
         )
-        px = self.om.emission_density.affine_marginal_transformation(
+        px = self.om.observation_density.affine_marginal_transformation(
             new_prediction_density
         )
         return px
@@ -800,7 +800,7 @@ class StateSpaceEM(objax.Module):
         :return: Data density
         :rtype: pdf.GaussianPDF
         """
-        px = self.om.emission_density.affine_marginal_transformation(
+        px = self.om.observation_density.affine_marginal_transformation(
             self.prediction_density.slice(jnp.arange(1, self.T + 1))
         )
         return px

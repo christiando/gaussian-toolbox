@@ -90,11 +90,11 @@ class ObservationModel(objax.Module):
         """ This is the template class for observation models in state space models. 
         Basically these classes should contain all functionality for the mapping between 
         the latent variables z, and observations x, i.e. p(x_t|z_t). The object should 
-        have an attribute `emission_density`, which is be a `ConditionalDensity`. 
+        have an attribute `observation_density`, which is be a `ConditionalDensity`. 
         Furthermore, it should be possible to optimize hyperparameters, when provided 
         with a density over the latent space.
         """
-        self.emission_density = None
+        self.observation_density = None
 
     def filtering(
         self, prediction_density: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
@@ -166,12 +166,12 @@ class LinearObservationModel(ObservationModel):
             self.C = jnp.array(np.random.randn(Dx, Dz))
         self.d = jnp.zeros(Dx)
         self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
-        self.emission_density = conditional.ConditionalGaussianPDF(
+        self.observation_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
-            self.emission_density.Lambda[0],
-            self.emission_density.ln_det_Sigma[0],
+            self.observation_density.Lambda[0],
+            self.observation_density.ln_det_Sigma[0],
         )
 
     def pca_init(self, X: jnp.ndarray, smooth_window: int = 10):
@@ -200,12 +200,12 @@ class LinearObservationModel(ObservationModel):
         z_hat = jnp.dot(jnp.linalg.pinv(self.C), (X_smoothed - self.d).T).T
         delta_X = X - jnp.dot(z_hat, self.C.T) - self.d
         self.Qx = jnp.dot(delta_X.T, delta_X)
-        self.emission_density = conditional.ConditionalGaussianPDF(
+        self.observation_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
-            self.emission_density.Lambda[0],
-            self.emission_density.ln_det_Sigma[0],
+            self.observation_density.Lambda[0],
+            self.observation_density.ln_det_Sigma[0],
         )
 
     def filtering(
@@ -223,7 +223,7 @@ class LinearObservationModel(ObservationModel):
         :rtype: pdf.GaussianPDF
         """
         # p(z_t| x_t, x_{1:t-1})
-        p_z_given_x = self.emission_density.affine_conditional_transformation(
+        p_z_given_x = self.observation_density.affine_conditional_transformation(
             prediction_density
         )
         # Condition on x_t
@@ -255,7 +255,9 @@ class LinearObservationModel(ObservationModel):
         else:
             observed_dims = jnp.where(jnp.logical_not(jnp.isnan(x_t[0])))[0]
             # p(z_t, x_t| x_{1:t-1})
-            p_zx = self.emission_density.affine_joint_transformation(prediction_density)
+            p_zx = self.observation_density.affine_joint_transformation(
+                prediction_density
+            )
             # p(z_t, x_t (observed) | x_{1:t-1})
             marginal_dims = jnp.concatenate(
                 [jnp.arange(self.Dz), self.Dz + observed_dims]
@@ -297,7 +299,9 @@ class LinearObservationModel(ObservationModel):
         # In case we have only partial observations
         else:
             # p(z_t, x_t| x_{1:t-1})
-            p_zx = self.emission_density.affine_joint_transformation(prediction_density)
+            p_zx = self.observation_density.affine_joint_transformation(
+                prediction_density
+            )
             # p(z_t, x_t (observed) | x_{1:t-1})
             marginal_dims = jnp.concatenate(
                 [jnp.arange(self.Dz), self.Dz + observed_dims]
@@ -329,7 +333,7 @@ class LinearObservationModel(ObservationModel):
         """
         # In case all data are unobserved
         if jnp.alltrue(jnp.isnan(x_t[0])):
-            p_x = self.emission_density.affine_marginal_transformation(p_z)
+            p_x = self.observation_density.affine_marginal_transformation(p_z)
             return p_x.mu[0], jnp.sqrt(p_x.Sigma[0].diagonal(axis1=-1, axis2=-2))
         # In case all data are observed
         elif jnp.alltrue(jnp.logical_not(jnp.isnan(x_t[0]))):
@@ -338,7 +342,7 @@ class LinearObservationModel(ObservationModel):
         else:
             observed_dims = jnp.where(jnp.logical_not(jnp.isnan(x_t[0])))[0]
             # Density over unobserved variables
-            p_x = self.emission_density.affine_marginal_transformation(p_z)
+            p_x = self.observation_density.affine_marginal_transformation(p_z)
             p_ux_given_ox = p_x.condition_on(observed_dims)
             p_ux = p_ux_given_ox.condition_on_x(x_t[:, observed_dims])
             return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))
@@ -367,7 +371,7 @@ class LinearObservationModel(ObservationModel):
         :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
         if observed_dims == None:
-            p_x = self.emission_density.affine_marginal_transformation(p_z)
+            p_x = self.observation_density.affine_marginal_transformation(p_z)
             return p_x.mu[0], jnp.sqrt(p_x.Sigma[0].diagonal(axis1=-1, axis2=-2))
         # In case all data are observed
         elif len(observed_dims) == self.Dx:
@@ -375,7 +379,7 @@ class LinearObservationModel(ObservationModel):
         else:
             # In case we have only partial observations
             # Density over unobserved variables
-            p_x = self.emission_density.affine_marginal_transformation(p_z)
+            p_x = self.observation_density.affine_marginal_transformation(p_z)
             p_ux_given_ox = p_x.condition_on_explicit(observed_dims, nonobserved_dims)
             p_ux = p_ux_given_ox.condition_on_x(x_t[:, observed_dims])
             return p_ux.mu[0], jnp.sqrt(p_ux.Sigma.diagonal(axis1=-1, axis2=-2))[0]
@@ -384,7 +388,7 @@ class LinearObservationModel(ObservationModel):
         self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ) -> float:
         return jnp.sum(
-            self.emission_density.integrate_log_conditional_y(smoothing_density)(X)
+            self.observation_density.integrate_log_conditional_y(smoothing_density)(X)
         )
 
     def update_hyperparameters(
@@ -401,7 +405,7 @@ class LinearObservationModel(ObservationModel):
         self.update_C(smoothing_density, X)
         self.update_d(smoothing_density, X)
         self.update_Qx(smoothing_density, X)
-        self.update_emission_density()
+        self.update_observation_density()
 
     def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """ Update observation covariance matrix.
@@ -455,15 +459,15 @@ class LinearObservationModel(ObservationModel):
         """
         self.d = jnp.mean(X - jnp.dot(smoothing_density.mu[1:], self.C.T), axis=0)
 
-    def update_emission_density(self):
+    def update_observation_density(self):
         """ Updates the emission density.
         """
-        self.emission_density = conditional.ConditionalGaussianPDF(
+        self.observation_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
-            self.emission_density.Lambda[0],
-            self.emission_density.ln_det_Sigma[0],
+            self.observation_density.Lambda[0],
+            self.observation_density.ln_det_Sigma[0],
         )
 
     def evaluate_llk(self, p_z: pdf.GaussianPDF, X: jnp.ndarray, **kwargs) -> float:
@@ -476,7 +480,7 @@ class LinearObservationModel(ObservationModel):
         :return: Log likelihood
         :rtype: float
         """
-        p_x = self.emission_density.affine_marginal_transformation(p_z)
+        p_x = self.observation_density.affine_marginal_transformation(p_z)
         llk = jnp.sum(p_x.evaluate_ln(X, element_wise=True))
         return llk
 
@@ -501,7 +505,7 @@ class LinearObservationModel(ObservationModel):
         :return: The density over unobserved dimensions.
         :rtype: pdf.GaussianPDF
         """
-        p_x = self.emission_density.condition_on_x(z_sample)
+        p_x = self.observation_density.condition_on_x(z_sample)
         if observed_dims != None:
             p_x = p_x.condition_on_explicit(observed_dims, unobserved_dims)
             p_x = p_x.condition_on_x(x_t[observed_dims][None])
@@ -567,7 +571,7 @@ class LRBFMObservationModel(LinearObservationModel):
         else:
             raise NotImplementedError("Kernel type not implemented.")
 
-        self.emission_density = approximate_conditional.LRBFGaussianConditional(
+        self.observation_density = approximate_conditional.LRBFGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             mu=self.mu,
@@ -575,8 +579,8 @@ class LRBFMObservationModel(LinearObservationModel):
             Sigma=jnp.array([self.Qx]),
         )
         self.Qx_inv, self.ln_det_Qx = (
-            self.emission_density.Lambda[0],
-            self.emission_density.ln_det_Sigma[0],
+            self.observation_density.Lambda[0],
+            self.observation_density.ln_det_Sigma[0],
         )
 
     @property
@@ -601,14 +605,14 @@ class LRBFMObservationModel(LinearObservationModel):
         phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
         self.update_Qx(phi, X)
         self.update_Cd(phi, X)
-        self.update_emission_density()
+        self.update_observation_density()
         self.update_kernel_params(phi, X)
-        self.update_emission_density()
+        self.update_observation_density()
 
-    def update_emission_density(self):
+    def update_observation_density(self):
         """Create new emission density with current parameters.
         """
-        self.emission_density = approximate_conditional.LRBFGaussianConditional(
+        self.observation_density = approximate_conditional.LRBFGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             mu=self.mu,
@@ -616,8 +620,8 @@ class LRBFMObservationModel(LinearObservationModel):
             Sigma=jnp.array([self.Qx]),
         )
         self.Qx_inv, self.ln_det_Qx = (
-            self.emission_density.Lambda[0],
-            self.emission_density.ln_det_Sigma[0],
+            self.observation_density.Lambda[0],
+            self.observation_density.ln_det_Sigma[0],
         )
 
     def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.array):
@@ -631,9 +635,9 @@ class LRBFMObservationModel(LinearObservationModel):
         :type X: jnp.ndarray
         """
         T = X.shape[0]
-        mu_x, Sigma_x = self.emission_density.get_expected_moments(smoothing_density)
+        mu_x, Sigma_x = self.observation_density.get_expected_moments(smoothing_density)
         sum_mu_x2 = jnp.sum(
-            Sigma_x - self.emission_density.Sigma + mu_x[:, None] * mu_x[:, :, None],
+            Sigma_x - self.observation_density.Sigma + mu_x[:, None] * mu_x[:, :, None],
             axis=0,
         )
         sum_X_mu = jnp.sum(X[:, None] * mu_x[:, :, None], axis=0)
@@ -660,7 +664,9 @@ class LRBFMObservationModel(LinearObservationModel):
         T = X.shape[0]
         Ex = smoothing_density.integrate("x")
         # E[k(x)] [R, Dphi - Dx]
-        p_k = smoothing_density.multiply(self.emission_density.k_func, update_full=True)
+        p_k = smoothing_density.multiply(
+            self.observation_density.k_func, update_full=True
+        )
         Ekx = p_k.integrate().reshape((smoothing_density.R, self.Dphi - self.Dz))
         # E[f(x)]
         Ef = jnp.concatenate([Ex, Ekx], axis=1)
@@ -679,7 +685,7 @@ class LRBFMObservationModel(LinearObservationModel):
         # Eff[:,self.Dx:,:self.Dx] = Ekx
         # kernel terms E[k(x)k(x)']
         Ekk = jnp.sum(
-            p_k.multiply(self.emission_density.k_func, update_full=True)
+            p_k.multiply(self.observation_density.k_func, update_full=True)
             .integrate()
             .reshape((smoothing_density.R, self.Dk, self.Dk)),
             axis=0,
@@ -702,9 +708,9 @@ class LRBFMObservationModel(LinearObservationModel):
 
         @objax.Function.with_vars(self.vars())
         def loss():
-            self.emission_density.mu = self.mu.value
-            self.emission_density.length_scale = jnp.exp(self.log_length_scale.value)
-            self.emission_density.update_phi()
+            self.observation_density.mu = self.mu.value
+            self.observation_density.length_scale = jnp.exp(self.log_length_scale.value)
+            self.observation_density.update_phi()
             return -self.compute_Q_function(smoothing_density, X)
 
         minimizer = ScipyMinimize(loss, self.vars(), method="L-BFGS-B")
@@ -750,15 +756,15 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
             )
         self.d = jnp.zeros((self.Dx,))
         self.W = objax.TrainVar(jnp.array(np.random.randn(self.Dk, self.Dz + 1)))
-        self.emission_density = approximate_conditional.LSEMGaussianConditional(
+        self.observation_density = approximate_conditional.LSEMGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             W=self.W,
             Sigma=jnp.array([self.Qx]),
         )
         self.Qx_inv, self.ln_det_Qx = (
-            self.emission_density.Lambda[0],
-            self.emission_density.ln_det_Sigma[0],
+            self.observation_density.Lambda[0],
+            self.observation_density.ln_det_Sigma[0],
         )
 
     def update_hyperparameters(
@@ -774,22 +780,22 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         phi = smoothing_density.slice(jnp.arange(1, smoothing_density.R))
         self.update_Qx(phi, X)
         self.update_Cd(phi, X)
-        self.update_emission_density()
+        self.update_observation_density()
         self.update_kernel_params(phi, X)
-        self.update_emission_density()
+        self.update_observation_density()
 
-    def update_emission_density(self):
+    def update_observation_density(self):
         """Create new emission density with current parameters.
         """
-        self.emission_density = approximate_conditional.LSEMGaussianConditional(
+        self.observation_density = approximate_conditional.LSEMGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             W=self.W,
             Sigma=jnp.array([self.Qx]),
         )
         self.Qx_inv, self.ln_det_Qx = (
-            self.emission_density.Lambda[0],
-            self.emission_density.ln_det_Sigma[0],
+            self.observation_density.Lambda[0],
+            self.observation_density.ln_det_Sigma[0],
         )
 
     def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.array):
@@ -803,9 +809,9 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         :type X: jnp.ndarray
         """
         T = X.shape[0]
-        mu_x, Sigma_x = self.emission_density.get_expected_moments(smoothing_density)
+        mu_x, Sigma_x = self.observation_density.get_expected_moments(smoothing_density)
         sum_mu_x2 = jnp.sum(
-            Sigma_x - self.emission_density.Sigma + mu_x[:, None] * mu_x[:, :, None],
+            Sigma_x - self.observation_density.Sigma + mu_x[:, None] * mu_x[:, :, None],
             axis=0,
         )
         sum_X_mu = jnp.sum(X[:, None] * mu_x[:, :, None], axis=0)
@@ -832,7 +838,9 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         T = X.shape[0]
         Ex = smoothing_density.integrate("x")
         # E[k(x)] [R, Dphi - Dx]
-        p_k = smoothing_density.multiply(self.emission_density.k_func, update_full=True)
+        p_k = smoothing_density.multiply(
+            self.observation_density.k_func, update_full=True
+        )
         Ekx = p_k.integrate().reshape((smoothing_density.R, self.Dphi - self.Dz))
         # E[f(x)]
         Ef = jnp.concatenate([Ex, Ekx], axis=1)
@@ -851,7 +859,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         # Eff[:,self.Dx:,:self.Dx] = Ekx
         # kernel terms E[k(x)k(x)']
         Ekk = jnp.sum(
-            p_k.multiply(self.emission_density.k_func, update_full=True)
+            p_k.multiply(self.observation_density.k_func, update_full=True)
             .integrate()
             .reshape((smoothing_density.R, self.Dk, self.Dk)),
             axis=0,
@@ -874,9 +882,9 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
 
         @objax.Function.with_vars(self.vars())
         def loss():
-            self.emission_density.w0 = self.W.value[:, 0]
-            self.emission_density.W = self.W.value[:, 1:]
-            self.emission_density.update_phi()
+            self.observation_density.w0 = self.W.value[:, 0]
+            self.observation_density.W = self.W.value[:, 1:]
+            self.observation_density.update_phi()
             return -self.compute_Q_function(smoothing_density, X)
 
         minimizer = ScipyMinimize(loss, self.vars(), method="L-BFGS-B")
@@ -921,7 +929,7 @@ class HCCovObservationModel(LinearObservationModel):
         self.W = jnp.array(W)
         self.beta = noise_x ** 2 * jnp.ones(self.Du)
         self.sigma_x = jnp.array([noise_x])
-        self.emission_density = approximate_conditional.HCCovGaussianConditional(
+        self.observation_density = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
@@ -956,7 +964,7 @@ class HCCovObservationModel(LinearObservationModel):
             # self.beta.at[(self.beta / self.sigma_x ** 2) < .5].set(.5 / self.sigma_x ** 2)
         # self.C = lin_om.C
         # self.d = lin_om.d
-        self.update_emission_density()
+        self.update_observation_density()
 
     def pca_init(self, X: jnp.ndarray, smooth_window: int = 10):
         """Set the model parameters to an educated initial guess, based on principal component analysis.
@@ -991,7 +999,7 @@ class HCCovObservationModel(LinearObservationModel):
         self.U = jnp.array(
             scipy.linalg.eigh(cov, eigvals=(self.Dx - self.Du, self.Dx - 1))[1]
         )
-        self.emission_density = approximate_conditional.HCCovGaussianConditional(
+        self.observation_density = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
@@ -1048,12 +1056,12 @@ class HCCovObservationModel(LinearObservationModel):
             val_old = val
             num_iter += 1
         print(num_iter)
-        self.update_emission_density()
+        self.update_observation_density()
 
-    def update_emission_density(self):
+    def update_observation_density(self):
         """ Updates the emission density.
         """
-        self.emission_density = approximate_conditional.HCCovGaussianConditional(
+        self.observation_density = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
             sigma_x=self.sigma_x,
@@ -1941,7 +1949,7 @@ class BernoulliObservationModel(ObservationModel):
         """
         T = X.shape[0]
         llk = 0
-        # p_x = self.emission_density.affine_marginal_transformation(p_z)
+        # p_x = self.observation_density.affine_marginal_transformation(p_z)
         for t in range(0, T):
             if u_x is not None:
                 ux_t = u_x[t : t + 1]
