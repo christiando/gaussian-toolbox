@@ -36,7 +36,6 @@ jobs:
         pip install .
         pytest --cov src/gaussian_toolbox/ --cov-report xml:cov.xml
     - name: Upload coverage to Codecov
-      run: |
-        curl -Os https://uploader.codecov.io/latest/linux/codecov
-        chmod +x codecov
-        ./codecov -t ${{ secrets.CODECOV_TOKEN }} -f cov.xml
+    - uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
