@@ -32,9 +32,9 @@ jobs:
         pip install -r requirements.txt
     - name: Test with pytest
       run: |
-        pip install .
-        pytest --cov ./src/gaussian_toolbox/
-        pytest --cov ./src/gaussian_toolbox/ --cov-report xml
+        pip install -e . 
+        pytest --cov ./src/
+        pytest --cov=./src/ --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
