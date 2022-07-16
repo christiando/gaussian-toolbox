@@ -33,7 +33,7 @@ jobs:
     - name: Test with pytest
       run: |
         pip install -e . 
-        pytest --cov=./gaussian_toolbox/ --cov-report=xml
+        pytest --cov=. --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
