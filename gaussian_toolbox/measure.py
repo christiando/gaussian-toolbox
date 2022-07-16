@@ -10,9 +10,8 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from . import factor
-from jax.scipy.special import logsumexp
-from typing import Iterable, Tuple
-from ..utils.linalg import invert_matrix, invert_diagonal
+from typing import Tuple
+from .utils.linalg import invert_matrix, invert_diagonal
 
 
 class GaussianMeasure(factor.ConjugateFactor):

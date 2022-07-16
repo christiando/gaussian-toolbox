@@ -9,7 +9,7 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
-from ..utils import linalg
+from .utils import linalg
 
 
 class ConjugateFactor:

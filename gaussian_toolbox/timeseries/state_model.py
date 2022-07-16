@@ -21,7 +21,7 @@ from typing import Tuple
 from ..utils.jax_minimize_wrapper import ScipyMinimize
 
 
-from ..gaussian_algebra import (
+from .. import (
     pdf,
     conditional,
     approximate_conditional,

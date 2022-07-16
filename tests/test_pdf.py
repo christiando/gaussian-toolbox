@@ -1,4 +1,4 @@
-from gaussian_toolbox.gaussian_algebra import pdf
+from gaussian_toolbox import pdf
 from gaussian_toolbox.utils import linalg
 import pytest
 from jax import numpy as jnp

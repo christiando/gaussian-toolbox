@@ -28,7 +28,7 @@ from jax import jit, value_and_grad, vmap
 import objax
 from functools import partial
 
-from ..gaussian_algebra import (
+from .. import (
     pdf,
     conditional,
     approximate_conditional,

@@ -1,4 +1,4 @@
-from gaussian_toolbox.gaussian_algebra import (
+from gaussian_toolbox import (
     pdf,
     conditional,
     measure,

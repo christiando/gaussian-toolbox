@@ -3,7 +3,7 @@ __author__ = "Christian Donner"
 from jax import numpy as jnp
 from typing import Tuple
 from . import pdf, factor, measure, conditional
-from ..utils.linalg import invert_matrix
+from .utils.linalg import invert_matrix
 
 
 class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
@@ -285,9 +285,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         Lambda = jnp.eye(self.Dx)[None] / self.length_scale[:, None] ** 2
         nu = self.mu / self.length_scale ** 2
         ln_beta = -0.5 * jnp.sum((self.mu / self.length_scale) ** 2, axis=1)
-        self.k_func = measure.GaussianDiagMeasure(
-            Lambda=Lambda, nu=nu, ln_beta=ln_beta
-        )
+        self.k_func = measure.GaussianDiagMeasure(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     def integrate_log_conditional(
         self, p_yx: pdf.GaussianPDF, p_x: pdf.GaussianPDF = None, **kwargs

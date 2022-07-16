@@ -17,7 +17,7 @@ from recommonmark.parser import CommonMarkParser
 
 from httplib2 import FailedToDecompressContent
 
-sys.path.insert(0, os.path.abspath("../../src/"))
+sys.path.insert(0, os.path.abspath("../../"))
 mathjax_path = (
     "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
 )

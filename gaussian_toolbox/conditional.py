@@ -16,7 +16,7 @@ from jax import numpy as jnp
 from typing import Tuple
 from . import pdf, factor, measure
 import objax
-from ..utils.linalg import invert_matrix
+from .utils.linalg import invert_matrix
 
 
 class ConditionalGaussianPDF:

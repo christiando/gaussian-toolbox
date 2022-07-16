@@ -9,13 +9,11 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
-from jax import lax, random
 import numpy as np
-from typing import Iterable
 
 # from .
 from . import measure
-from ..utils.linalg import invert_matrix, invert_diagonal
+from .utils.linalg import invert_matrix, invert_diagonal
 
 
 class GaussianPDF(measure.GaussianMeasure):

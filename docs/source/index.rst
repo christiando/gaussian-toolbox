@@ -26,5 +26,4 @@ Welcome to Gaussian Toolbox's documentation!
    :maxdepth: 1
    :caption: API
 
-   gaussian_toolbox.gaussian_algebra
-   gaussian_toolbox.timeseries
+   gaussian_toolbox

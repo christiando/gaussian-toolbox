@@ -1,4 +1,4 @@
-from gaussian_toolbox.gaussian_algebra import measure, factor
+from gaussian_toolbox import measure, factor
 from gaussian_toolbox.utils import linalg
 
 from test_factor import (

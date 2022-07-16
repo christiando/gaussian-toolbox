@@ -1,4 +1,4 @@
-from gaussian_toolbox.gaussian_algebra import factor, measure
+from gaussian_toolbox import factor, measure
 import pytest
 from jax import numpy as jnp
 import numpy as np

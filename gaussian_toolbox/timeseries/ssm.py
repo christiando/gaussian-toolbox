@@ -13,7 +13,7 @@ from jax import jit, lax
 import objax
 
 from . import observation_model, state_model
-from ..gaussian_algebra import pdf
+from .. import pdf
 import pickle
 import os
 import numpy as onp
