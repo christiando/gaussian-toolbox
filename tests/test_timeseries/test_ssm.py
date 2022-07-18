@@ -14,7 +14,7 @@ def test_ssm_linear(T, Dx, Dz, Dk):
     ssm.fit()
     assert len(ssm.llk_list) == 2
     assert ssm.llk_list[0] < ssm.llk_list[1]
-    ssm.predict_static(X, p0=ssm.filter_density.slice(jnp.array([0])))
+    ssm.predict(X, p0=ssm.filter_density.slice(jnp.array([0])))
 
 
 @pytest.mark.parametrize("T, Dx, Dz, Dk", [(10, 2, 1, 3)])
@@ -26,7 +26,7 @@ def test_ssm_se_state(T, Dx, Dz, Dk):
     ssm.fit()
     assert len(ssm.llk_list) == 2
     assert ssm.llk_list[0] < ssm.llk_list[1]
-    ssm.predict_static(X, p0=ssm.filter_density.slice(jnp.array([0])))
+    ssm.predict(X, p0=ssm.filter_density.slice(jnp.array([0])))
 
 
 @pytest.mark.parametrize("T, Dx, Dz, Dk", [(10, 2, 1, 3)])
@@ -38,7 +38,7 @@ def test_ssm_rbf_state(T, Dx, Dz, Dk):
     ssm.fit()
     assert len(ssm.llk_list) == 2
     assert ssm.llk_list[0] < ssm.llk_list[1]
-    ssm.predict_static(X, p0=ssm.filter_density.slice(jnp.array([0])))
+    ssm.predict(X, p0=ssm.filter_density.slice(jnp.array([0])))
 
 
 @pytest.mark.parametrize("T, Dx, Dz, Dk", [(10, 2, 1, 3)])
@@ -50,7 +50,7 @@ def test_ssm_se_observation(T, Dx, Dz, Dk):
     ssm.fit()
     assert len(ssm.llk_list) == 2
     assert ssm.llk_list[0] < ssm.llk_list[1]
-    ssm.predict_static(X, p0=ssm.filter_density.slice(jnp.array([0])))
+    ssm.predict(X, p0=ssm.filter_density.slice(jnp.array([0])))
 
 
 @pytest.mark.parametrize("T, Dx, Dz, Dk", [(10, 2, 1, 3)])
@@ -62,4 +62,4 @@ def test_ssm_rbf_observation(T, Dx, Dz, Dk):
     ssm.fit()
     assert len(ssm.llk_list) == 2
     assert ssm.llk_list[0] < ssm.llk_list[1]
-    ssm.predict_static(X, p0=ssm.filter_density.slice(jnp.array([0])))
+    ssm.predict(X, p0=ssm.filter_density.slice(jnp.array([0])))
