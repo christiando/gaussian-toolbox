@@ -35,6 +35,26 @@ def load_model(model_name: str, path: str = "") -> "StateSpaceModel":
 
 
 class StateSpaceModel(objax.Module):
+    """Class to fit a state space model with the expectation-maximization procedure.
+
+    :param X: Training data. Dimensions should be [T, Dx].
+    :type X: jnp.ndarray
+    :param observation_model: The observation model of the data.
+    :type observation_model: observation_model.ObservationModel
+    :param state_model: The state model for the latent variables.
+    :type state_model: state_model.StateModel
+    :param max_iter: Maximal number of EM iteration performed_, defaults to 100
+    :type max_iter: int, optional
+    :param conv_crit: Convergence criterion for the EM procedure, defaults to 1e-3
+    :type conv_crit: float, optional
+    :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
+    :type u_x: jnp.ndarray, optional
+    :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
+    :type u_z: jnp.ndarray, optional
+    :param timeit:  If true, prints the timings. , defaults to False
+    :type timeit: bool, optional
+    """
+
     def __init__(
         self,
         X: jnp.ndarray,
@@ -46,25 +66,6 @@ class StateSpaceModel(objax.Module):
         u_z: jnp.ndarray = None,
         timeit: bool = False,
     ):
-        """Class to fit a state space model with the expectation-maximization procedure.
-
-        :param X: Training data. Dimensions should be [T, Dx].
-        :type X: jnp.ndarray
-        :param observation_model: The observation model of the data.
-        :type observation_model: observation_model.ObservationModel
-        :param state_model: The state model for the latent variables.
-        :type state_model: state_model.StateModel
-        :param max_iter: Maximal number of EM iteration performed_, defaults to 100
-        :type max_iter: int, optional
-        :param conv_crit: Convergence criterion for the EM procedure, defaults to 1e-3
-        :type conv_crit: float, optional
-        :param u_x: Control variables for observation model. Leading dimensions should be [T,...], defaults to None
-        :type u_x: jnp.ndarray, optional
-        :param u_z:  Control variables for state model. Leading dimensions should be [T,...], defaults to None
-        :type u_z: jnp.ndarray, optional
-        :param timeit:  If true, prints the timings. , defaults to False
-        :type timeit: bool, optional
-        """
         self.X = X
         self.T, self.Dx = self.X.shape
         if u_x is None:
@@ -108,19 +109,20 @@ class StateSpaceModel(objax.Module):
         return pdf.GaussianPDF(Sigma, mu, Lambda, ln_det_Sigma)
 
     def fit(self):
-        """ Run the expectation-maximization algorithm, until converged 
-            or maximal number of iterations is reached.
+        """ Fits the expectation-maximization algorithm.
+        
+        Runs until convergence or maximal number of iterations is reached.
         """
         converged = False
         while self.iteration < self.max_iter and not converged:
             time_start_total = time.perf_counter()
-            self.estep()
+            self._estep()
             etime = time.perf_counter() - time_start_total
             time_start = time.perf_counter()
             self.llk_list.append(self.compute_log_likelihood())
             llk_time = time.perf_counter() - time_start
             time_start = time.perf_counter()
-            self.mstep()
+            self._mstep()
             mtime = time.perf_counter() - time_start
             if self.iteration > 3:
                 conv = (self.llk_list[-1] - self.llk_list[-2]) / jnp.amax(
@@ -150,13 +152,13 @@ class StateSpaceModel(objax.Module):
         else:
             print("EM did converge.")
 
-    def estep(self):
+    def _estep(self):
         """ Perform the expectation step, i.e. the forward-backward algorithm.
         """
         self.forward_sweep()
         self.backward_sweep()
 
-    def mstep(self):
+    def _mstep(self):
         """ Perform the maximization step, i.e. the updates of model parameters.
         """
         # Update parameters of state model
@@ -176,9 +178,15 @@ class StateSpaceModel(objax.Module):
         )
 
     def compute_Q_function(self) -> float:
-        """Compute Q-function.
+        r"""Compute Q-function.
+        
+        .. math::
+        
+            Q(w,w_{\rm old}) = \mathbb{E}\left[\ln p(Z_0\vert w)\right] + \sum_{t=1}^T\mathbb{E}\left[\ln p(X_t\vert Z_t, w)\right] + \sum_{t=1}^T\mathbb{E}\left[\ln p(Z_t\vert Z_{t-1}, w)\right],
+            
+        where the expectation is over the smoothing density :math:`q(Z_{0:T}\vert w_{\rm old})`.
 
-        :return: Eavluated Q-function.
+        :return: Evluated Q-function.
         :rtype: float
         """
         p0 = self.filter_density.slice(jnp.array([0]))
@@ -192,7 +200,16 @@ class StateSpaceModel(objax.Module):
         total_Q = init_Q + sm_Q + om_Q
         return total_Q
 
-    def forward_step(self, carry, vars_t):
+    def _forward_step(self, carry: Tuple, vars_t: Tuple):
+        """Compute one step forward in time (prediction & filter).
+
+        :param carry: Observations and control variables
+        :type carry: Tuple
+        :param vars_t: Data for for constructing the filter density of the last step
+        :type vars_t: Tuple
+        :return: Data of new filter density and prediction and filter density.
+        :rtype: Tuple
+        """
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
         pre_filter_density = pdf.GaussianPDF(
@@ -229,7 +246,7 @@ class StateSpaceModel(objax.Module):
             self.filter_density.Lambda[:1],
             self.filter_density.ln_det_Sigma[:1],
         )
-        forward_step = jit(lambda cf, vars_t: self.forward_step(cf, vars_t))
+        forward_step = jit(lambda cf, vars_t: self._forward_step(cf, vars_t))
         _, result = lax.scan(
             forward_step, init, (self.X, self.u_z[:, None], self.u_x[:, None])
         )
@@ -259,7 +276,16 @@ class StateSpaceModel(objax.Module):
         )
         self.filter_density.update(t_range, new_filter)
 
-    def backward_step(self, carry, vars_t: Tuple[int, jnp.array]):
+    def _backward_step(self, carry: Tuple, vars_t: Tuple[int, jnp.array]):
+        """Compute one step backward in time (smoothing).
+
+        :param carry: Observations and control variables
+        :type carry: Tuple
+        :param vars_t: Data for for constructing the smoothing density of the last (future) step
+        :type vars_t: Tuple
+        :return: Data of new smoothing density and smoothing and two step smoothing density.
+        :rtype: Tuple
+        """
         t, uz_t = vars_t
         cur_filter_density = self.filter_density.slice(jnp.array([t]))
         Sigma, mu, Lambda, ln_det_Sigma = carry
@@ -298,7 +324,7 @@ class StateSpaceModel(objax.Module):
             last_filter_density.ln_det_Sigma,
         )
         self.smoothing_density.update(jnp.array([self.T]), last_filter_density)
-        backward_step = jit(lambda cs, vars_t: self.backward_step(cs, vars_t))
+        backward_step = jit(lambda cs, vars_t: self._backward_step(cs, vars_t))
         t_range = jnp.arange(self.T - 1, -1, -1)
         _, result = lax.scan(backward_step, cs_init, (t_range, self.u_z[:, None]))
         (
@@ -326,11 +352,12 @@ class StateSpaceModel(objax.Module):
         )
 
     def compute_log_likelihood(self) -> float:
-        """ Computes the log-likelihood of the model, given by
+        r""" Compute the log-likelihood of the model, given by
     
-        $$
-        \ell = \sum_t \ln p(x_t|x_{1:t-1}).
-        $$
+        .. math::
+        
+            \ell(X_{1:T}) = \sum_t \ln p(X_t|X_{1:t-1}).
+        
         
         :return: Data log likelihood.
         :rtype: float
@@ -346,7 +373,7 @@ class StateSpaceModel(objax.Module):
         u_z: jnp.ndarray = None,
         ignore_init_samples: int = 0,
     ) -> float:
-        """Compute the likelihood for given data X.
+        """Compute the likelihood for given data :math:`X`.
 
         :param X: Data for which likelihood is computed. Dimensions should be [T, Dx].
         :type X: jnp.ndarray
@@ -373,7 +400,7 @@ class StateSpaceModel(objax.Module):
 
         if u_z is None:
             u_z = jnp.empty((T, 0))
-        forward_step = jit(lambda cf, vars_t: self.forward_step(cf, vars_t))
+        forward_step = jit(lambda cf, vars_t: self._forward_step(cf, vars_t))
         _, result = lax.scan(forward_step, init, (X, u_z[:, None], u_x[:, None]))
         (
             Sigma_prediction,
@@ -397,7 +424,7 @@ class StateSpaceModel(objax.Module):
         u_x_tmp = u_x[ignore_init_samples:]
         return self.om.evaluate_llk(p_z, X[ignore_init_samples:], u_x=u_x_tmp)
 
-    def gappy_forward_step(self, carry, vars_t):
+    def _gappy_forward_step(self, carry, vars_t):
         X_t, uz_t, ux_t = vars_t
         Sigma, mu, Lambda, ln_det_Sigma = carry
         pre_filter_density = pdf.GaussianPDF(
@@ -433,7 +460,7 @@ class StateSpaceModel(objax.Module):
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
     ) -> pdf.GaussianPDF:
-        """Compute the likelihood for given data X.
+        """Compute the predictive density for given data X.
 
         :param X: Data for which likelihood is computed. Dimensions should be [T, Dx].
         :type X: jnp.ndarray
@@ -466,7 +493,9 @@ class StateSpaceModel(objax.Module):
             filter_density.Lambda[:1],
             filter_density.ln_det_Sigma[:1],
         )
-        gappy_forward_step = jit(lambda cf, vars_t: self.gappy_forward_step(cf, vars_t))
+        gappy_forward_step = jit(
+            lambda cf, vars_t: self._gappy_forward_step(cf, vars_t)
+        )
         _, result = lax.scan(gappy_forward_step, init, (X, u_z[:, None], u_x[:, None]))
 
         (
@@ -491,7 +520,7 @@ class StateSpaceModel(objax.Module):
         )
         return px
 
-    def predict(
+    def predict_nans(
         self,
         X: jnp.ndarray,
         p0: pdf.GaussianPDF = None,
@@ -499,7 +528,7 @@ class StateSpaceModel(objax.Module):
         u_x: jnp.ndarray = None,
         u_z: jnp.ndarray = None,
     ) -> Tuple[pdf.GaussianPDF, jnp.ndarray, jnp.ndarray]:
-        """Obtain predictions for data.
+        """Obtain predictions for data, where entries are NaN.
 
         Remark: Slow!
         
@@ -608,7 +637,7 @@ class StateSpaceModel(objax.Module):
             )
             return smoothing_density, mu_unobserved, std_unobserved
 
-    def gappy_forward_step_static(
+    def _gappy_forward_step_static(
         self,
         carry,
         vars_t,
@@ -644,7 +673,7 @@ class StateSpaceModel(objax.Module):
         )
         return carry, result
 
-    def predict_static(
+    def predict(
         self,
         X: jnp.ndarray,
         p0: pdf.GaussianPDF = None,
@@ -652,7 +681,7 @@ class StateSpaceModel(objax.Module):
         u_z: jnp.ndarray = None,
         u_x: jnp.ndarray = None,
     ) -> Tuple[pdf.GaussianPDF, jnp.array, jnp.array]:
-        """Predicts data with fixed condition dimensions. Faster, but more rigid than predict().
+        """Predicts data with fixed condition dimensions. Faster, but more rigid than `predict_nans()`.
         
         TODO: Implement also smoothing.
 
@@ -687,7 +716,7 @@ class StateSpaceModel(objax.Module):
             nonobserved_dims = jnp.setxor1d(jnp.arange(self.Dx), observed_dims)
 
         gappy_forward_step_static = jit(
-            lambda cf, vars_t: self.gappy_forward_step_static(
+            lambda cf, vars_t: self._gappy_forward_step_static(
                 cf, vars_t, observed_dims, nonobserved_dims
             )
         )
@@ -703,7 +732,7 @@ class StateSpaceModel(objax.Module):
         filter_density.update(t_range, filter_density_new)
         return filter_density, mu_x, std_x
 
-    def sample_step_static(
+    def _sample_step(
         self,
         z_old: jnp.array,
         vars_t: Tuple,
@@ -740,7 +769,7 @@ class StateSpaceModel(objax.Module):
         result = z_sample, x_sample
         return z_sample, result
 
-    def sample_trajectory_static(
+    def sample_trajectory(
         self,
         X: jnp.ndarray,
         observed_dims: jnp.ndarray = None,
@@ -780,7 +809,7 @@ class StateSpaceModel(objax.Module):
 
         init = jnp.asarray(p0.sample(num_samples)[:, 0])
         sample_step = jit(
-            lambda z_old, vars_t: self.sample_step_static(
+            lambda z_old, vars_t: self._sample_step(
                 z_old, vars_t, observed_dims, unobserved_dims
             )
         )
