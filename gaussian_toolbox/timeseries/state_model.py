@@ -731,12 +731,7 @@ class LSEMStateModel(LinearStateModel):
                 smoothing_density, two_step_smoothing_density
             )
 
-        minimizer = ScipyMinimize(
-            loss,
-            self.vars(),
-            method="L-BFGS-B",
-            bounds=jnp.array([(-1e1, 1e1)] * (self.Dk * (self.Dz + 1))),
-        )
+        minimizer = ScipyMinimize(loss, self.vars(), method="L-BFGS-B",)
         minimizer.minimize()
 
     # TODO: Optimal initial state density
