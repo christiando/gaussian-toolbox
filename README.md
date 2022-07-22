@@ -65,7 +65,7 @@ In order to do so `GT` provides `ConditionalGaussianPDF`, and the operation abov
 
 ```python
 p_Y_given_X = ConditionalGaussianPDF(...)
-p_X_given_Y = p_Y_given_X.affine_conditional_transformation(p_x)
+p_X_given_Y = p_Y_given_X.affine_conditional_transformation(p_X)
 ```
 
 Other operations that are provided are conditioning, marginalizing, getting the joint or marginal density. For a more exhaustive example see the [docs](/docs/source/notebooks/affine_transforms.ipynb)
