@@ -22,8 +22,8 @@ from typing import Union, Tuple
 
 
 def load_model(model_name: str, path: str = "") -> "StateSpaceModel":
-    """ Loads state space em model.
-    
+    """Loads state space em model.
+
     :param model_name: str
         Name of the model, which is used as file name.
     :param path: str
@@ -96,8 +96,7 @@ class StateSpaceModel(objax.Module):
         # self.twostep_smoothing_density = self.twostep_smoothing_density.slice(range(self.T))
 
     def _setup_density(self, D: int = None, T: int = None) -> pdf.GaussianPDF:
-        """ Initialize a density object (with uniform densities).
-        """
+        """Initialize a density object (with uniform densities)."""
         if D is None:
             D = self.Dz
         if T is None:
@@ -109,8 +108,8 @@ class StateSpaceModel(objax.Module):
         return pdf.GaussianPDF(Sigma, mu, Lambda, ln_det_Sigma)
 
     def fit(self):
-        """ Fits the expectation-maximization algorithm.
-        
+        """Fits the expectation-maximization algorithm.
+
         Runs until convergence or maximal number of iterations is reached.
         """
         converged = False
@@ -153,14 +152,12 @@ class StateSpaceModel(objax.Module):
             print("EM did converge.")
 
     def _estep(self):
-        """ Perform the expectation step, i.e. the forward-backward algorithm.
-        """
+        """Perform the expectation step, i.e. the forward-backward algorithm."""
         self.forward_sweep()
         self.backward_sweep()
 
     def _mstep(self):
-        """ Perform the maximization step, i.e. the updates of model parameters.
-        """
+        """Perform the maximization step, i.e. the updates of model parameters."""
         # Update parameters of state model
         self.sm.update_hyperparameters(
             self.smoothing_density,
@@ -179,11 +176,11 @@ class StateSpaceModel(objax.Module):
 
     def compute_Q_function(self) -> float:
         r"""Compute Q-function.
-        
+
         .. math::
-        
+
             Q(w,w_{\rm old}) = \mathbb{E}\left[\ln p(Z_0\vert w)\right] + \sum_{t=1}^T\mathbb{E}\left[\ln p(X_t\vert Z_t, w)\right] + \sum_{t=1}^T\mathbb{E}\left[\ln p(Z_t\vert Z_{t-1}, w)\right],
-            
+
         where the expectation is over the smoothing density :math:`q(Z_{0:T}\vert w_{\rm old})`.
 
         :return: Evluated Q-function.
@@ -238,8 +235,7 @@ class StateSpaceModel(objax.Module):
         return carry, result
 
     def forward_sweep(self):
-        """ Iterate forward, alternately doing prediction and filtering step.
-        """
+        """Iterate forward, alternately doing prediction and filtering step."""
         init = (
             self.filter_density.Sigma[:1],
             self.filter_density.mu[:1],
@@ -314,8 +310,7 @@ class StateSpaceModel(objax.Module):
         return carry, result
 
     def backward_sweep(self):
-        """ Iterate backward doing smoothing step.
-        """
+        """Iterate backward doing smoothing step."""
         last_filter_density = self.filter_density.slice(jnp.array([self.T]))
         cs_init = (
             last_filter_density.Sigma,
@@ -352,13 +347,13 @@ class StateSpaceModel(objax.Module):
         )
 
     def compute_log_likelihood(self) -> float:
-        r""" Compute the log-likelihood of the model, given by
-    
+        r"""Compute the log-likelihood of the model, given by
+
         .. math::
-        
+
             \ell(X_{1:T}) = \sum_t \ln p(X_t|X_{1:t-1}).
-        
-        
+
+
         :return: Data log likelihood.
         :rtype: float
         """
@@ -493,9 +488,7 @@ class StateSpaceModel(objax.Module):
             filter_density.Lambda[:1],
             filter_density.ln_det_Sigma[:1],
         )
-        gappy_forward_step = jit(
-            lambda cf, vars_t: self._gappy_forward_step(cf, vars_t)
-        )
+        gappy_forward_step = jit(lambda cf, vars_t: self._forward_step(cf, vars_t))
         _, result = lax.scan(gappy_forward_step, init, (X, u_z[:, None], u_x[:, None]))
 
         (
@@ -531,7 +524,7 @@ class StateSpaceModel(objax.Module):
         """Obtain predictions for data, where entries are NaN.
 
         Remark: Slow!
-        
+
         :param X: Data for which predictions are computed. Non observed values are NaN. Dimensions should be [T, Dx].
         :type X: jnp.ndarray
         :param p0: Density for the initial latent state. If None, it is standard normal, defaults to None
@@ -682,7 +675,7 @@ class StateSpaceModel(objax.Module):
         u_x: jnp.ndarray = None,
     ) -> Tuple[pdf.GaussianPDF, jnp.array, jnp.array]:
         """Predicts data with fixed condition dimensions. Faster, but more rigid than `predict_nans()`.
-        
+
         TODO: Implement also smoothing.
 
         :param X: Data for which predictions are computed. Non observed values are NaN. Dimensions should be [T, Dx].
