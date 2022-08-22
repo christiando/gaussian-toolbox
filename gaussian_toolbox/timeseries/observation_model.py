@@ -87,11 +87,11 @@ def logcosh(x: jnp.ndarray) -> jnp.ndarray:
 
 class ObservationModel(objax.Module):
     def __init__(self):
-        """ This is the template class for observation models in state space models. 
-        Basically these classes should contain all functionality for the mapping between 
-        the latent variables z, and observations x, i.e. p(x_t|z_t). The object should 
-        have an attribute `observation_density`, which is be a `ConditionalDensity`. 
-        Furthermore, it should be possible to optimize hyperparameters, when provided 
+        """This is the template class for observation models in state space models.
+        Basically these classes should contain all functionality for the mapping between
+        the latent variables z, and observations x, i.e. p(x_t|z_t). The object should
+        have an attribute `observation_density`, which is be a `ConditionalDensity`.
+        Furthermore, it should be possible to optimize hyperparameters, when provided
         with a density over the latent space.
         """
         self.observation_density = None
@@ -100,7 +100,7 @@ class ObservationModel(objax.Module):
         self, prediction_density: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
     ) -> pdf.GaussianPDF:
         """Calculate filter density.
-        
+
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
 
         :param prediction_density: Prediction density p(z_t|x_{1:t-1}).
@@ -149,7 +149,7 @@ class ObservationModel(objax.Module):
 class LinearObservationModel(ObservationModel):
     def __init__(self, Dx: int, Dz: int, noise_x: float = 1.0):
         """This class implements a linear observation model, where the observations are generated as
-        
+
             x_t = C z_t + d + xi_t     with      xi_t ~ N(0,Qx).
 
         :param Dx: Dimensionality of observations.
@@ -165,7 +165,7 @@ class LinearObservationModel(ObservationModel):
         else:
             self.C = jnp.array(np.random.randn(Dx, Dz))
         self.d = jnp.zeros(Dx)
-        self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
+        self.Qx = noise_x**2 * jnp.eye(self.Dx)
         self.observation_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
@@ -176,10 +176,10 @@ class LinearObservationModel(ObservationModel):
 
     def pca_init(self, X: jnp.ndarray, smooth_window: int = 10):
         """Set the model parameters to an educated initial guess, based on principal component analysis.
-        
-        More specifically `d` is set to the mean of the data and `C` to the first principal components 
+
+        More specifically `d` is set to the mean of the data and `C` to the first principal components
         of the (smoothed) data. The covariance `Qx` is set to the empirical covariance of the residuals.
-            
+
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :param smooth_window: Width of the box car filter data are smoothed with., defaults to 10
@@ -212,7 +212,7 @@ class LinearObservationModel(ObservationModel):
         self, prediction_density: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
     ) -> pdf.GaussianPDF:
         """_"Calculate filter density.
-        
+
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
 
         :param prediction_density: Prediction density p(z_t|x_{1:t-1}).
@@ -233,13 +233,13 @@ class LinearObservationModel(ObservationModel):
     def gappy_filtering(
         self, prediction_density: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
     ) -> pdf.GaussianPDF:
-        """Calculate the filtering density for incomplete data. Not observed values should be nans. 
-        
+        """Calculate the filtering density for incomplete data. Not observed values should be nans.
+
         Remark: Slow!
 
         :param prediction_density: Prediction density p(z_t|x_{1:t-1}).
         :type prediction_density: pdf.GaussianPDF
-        :param x_t: Observation vector. Dimensions should be [1, Dx]. Not observed values should be nans. 
+        :param x_t: Observation vector. Dimensions should be [1, Dx]. Not observed values should be nans.
         :type x_t: jnp.ndarray
         :return: Filter density p(z_t|x_{1:t}).
         :rtype: pdf.GaussianPDF
@@ -282,7 +282,7 @@ class LinearObservationModel(ObservationModel):
 
         :param prediction_density: Prediction density p(z_t|x_{1:t-1}).
         :type prediction_density: pdf.GaussianPDF
-        :param x_t: Observation vector. Dimensions should be [1, Dx]. Not observed values should be nans. 
+        :param x_t: Observation vector. Dimensions should be [1, Dx]. Not observed values should be nans.
         :type x_t: jnp.ndarray
         :param observed_dims: Dimensions that are observed. If non empty set., defaults to None
         :type observed_dims: jnp.ndarray, optional
@@ -323,7 +323,7 @@ class LinearObservationModel(ObservationModel):
         self, p_z: pdf.GaussianPDF, x_t: jnp.ndarray, **kwargs
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Calculate data density for incomplete data. Not observed values should be nans.
-        
+
         :param p_z: Density over latent dimensions.
         :type p_z: pdf.GaussianPDF
         :param x_t: Observation, where unobserved dimensions are filled with NANs. Dimensions should be [1, Dx].
@@ -356,7 +356,7 @@ class LinearObservationModel(ObservationModel):
         **kwargs
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Calculate data density for incomplete data, where non-observed dimensions ar fixed.
-        
+
          p(x_t) = \int p(x_t|z_t)p(z_t) dz_t
 
         :param p_z: Density over latent dimensions.
@@ -408,7 +408,7 @@ class LinearObservationModel(ObservationModel):
         self.update_observation_density()
 
     def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
-        """ Update observation covariance matrix.
+        """Update observation covariance matrix.
 
         :param smoothing_density: The smoothing density over the latent space.
         :type smoothing_density: pdf.GaussianPDF
@@ -460,8 +460,7 @@ class LinearObservationModel(ObservationModel):
         self.d = jnp.mean(X - jnp.dot(smoothing_density.mu[1:], self.C.T), axis=0)
 
     def update_observation_density(self):
-        """ Updates the emission density.
-        """
+        """Updates the emission density."""
         self.observation_density = conditional.ConditionalGaussianPDF(
             jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
         )
@@ -492,7 +491,7 @@ class LinearObservationModel(ObservationModel):
         unobserved_dims: jnp.ndarray,
         **kwargs
     ) -> pdf.GaussianPDF:
-        """ Returns the density p(x_unobserved|X_observed=x, Z=z).
+        """Returns the density p(x_unobserved|X_observed=x, Z=z).
 
         :param z_sample: Values of latent variable
         :type z_sample: jnp.ndarray
@@ -522,16 +521,16 @@ class LRBFMObservationModel(LinearObservationModel):
         kernel_type: bool = "isotropic",
     ):
         """This implements a linear+RBF mean (LRBFM) observation model
-        
+
             x_t = C phi(z_t) + d + xi_t     with      xi_t ~ N(0,Qx).
-            
-            The feature function is 
-            
+
+            The feature function is
+
             phi(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
-            
+
             The kernel and linear activation function are given by
-            
-            k(h) = exp(-h^2 / 2) and h_i(x) = (x_i + mu_i) / l_i. 
+
+            k(h) = exp(-h^2 / 2) and h_i(x) = (x_i + mu_i) / l_i.
 
 
         :param Dx: Dimensions of observations.
@@ -542,14 +541,14 @@ class LRBFMObservationModel(LinearObservationModel):
         :type Dk: int
         :param noise_z: Initial isoptropic std. on the state transition., defaults to 1.0
         :type noise_z: float, optional
-        :param kernel_type: Parameter determining, which kernel is used. 'scalar' same length scale for all kernels and 
-            dimensions. 'isotropic' same length scale for dimensions, but different for each kernel. 'anisotropic' 
+        :param kernel_type: Parameter determining, which kernel is used. 'scalar' same length scale for all kernels and
+            dimensions. 'isotropic' same length scale for dimensions, but different for each kernel. 'anisotropic'
             different length scale for all kernels and dimensions., defaults to 'isotropic
         :type kernel_type: str
         """
         self.Dx, self.Dz, self.Dk = Dx, Dz, Dk
         self.Dphi = self.Dk + self.Dz
-        self.Qx = noise_z ** 2 * jnp.eye(self.Dx)
+        self.Qx = noise_z**2 * jnp.eye(self.Dx)
         self.C = jnp.array(np.random.randn(self.Dx, self.Dphi))
         if self.Dx == self.Dz:
             self.C = self.C.at[:, : self.Dz].set(jnp.eye(self.Dx))
@@ -561,9 +560,17 @@ class LRBFMObservationModel(LinearObservationModel):
         self.mu = objax.TrainVar(objax.random.normal((self.Dk, self.Dz)))
         self.kernel_type = kernel_type
         if self.kernel_type == "scalar":
-            self.log_length_scale = objax.TrainVar(objax.random.normal((1, 1),))
+            self.log_length_scale = objax.TrainVar(
+                objax.random.normal(
+                    (1, 1),
+                )
+            )
         elif self.kernel_type == "isotropic":
-            self.log_length_scale = objax.TrainVar(objax.random.normal((self.Dk, 1),))
+            self.log_length_scale = objax.TrainVar(
+                objax.random.normal(
+                    (self.Dk, 1),
+                )
+            )
         elif self.kernel_type == "anisotropic":
             self.log_length_scale = objax.TrainVar(
                 objax.random.normal((self.Dk, self.Dz))
@@ -610,8 +617,7 @@ class LRBFMObservationModel(LinearObservationModel):
         self.update_observation_density()
 
     def update_observation_density(self):
-        """Create new emission density with current parameters.
-        """
+        """Create new emission density with current parameters."""
         self.observation_density = approximate_conditional.LRBFGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
@@ -626,7 +632,7 @@ class LRBFMObservationModel(LinearObservationModel):
 
     def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.array):
         """Update observation covariance matrix Qx.
-        
+
         Qx* = E[(X-C phi(z) - d)(X-C phi(z) - d)']
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
@@ -650,7 +656,7 @@ class LRBFMObservationModel(LinearObservationModel):
 
     def update_Cd(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update observation observation matrix C and vector d.
-        
+
         C* = E[(X - d)phi(z)']E[phi(z)phi(z)']^{-1}
         d* = E[(X - C phi(x))]
 
@@ -697,7 +703,7 @@ class LRBFMObservationModel(LinearObservationModel):
 
     def update_kernel_params(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update the kernel weights.
-        
+
         Using gradient descent on the (negative) Q-function.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
@@ -719,21 +725,25 @@ class LRBFMObservationModel(LinearObservationModel):
 
 class LSEMObservationModel(LinearObservationModel, objax.Module):
     def __init__(
-        self, Dx: int, Dz: int, Dk: int, noise_x: float = 1.0,
+        self,
+        Dx: int,
+        Dz: int,
+        Dk: int,
+        noise_x: float = 1.0,
     ):
         """
         This implements a linear+squared exponential mean (LSEM) observation model
-        
+
             x_t = C phi(z_{t}) + d + xi_t     with      xi_t ~ N(0,Qx).
-            
-            The feature function is 
-            
+
+            The feature function is
+
             phi(x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x))).
-            
+
             The kernel and linear activation function are given by
-            
+
             k(h) = exp(-h^2 / 2) and h_i(x) = w_i'x + w_{i,0}.
-            
+
 
         :param Dx: Dimensions of observations.
         :type Dx: int
@@ -746,7 +756,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         """
         self.Dx, self.Dz, self.Dk = Dx, Dz, Dk
         self.Dphi = self.Dk + self.Dz
-        self.Qx = noise_x ** 2 * jnp.eye(self.Dx)
+        self.Qx = noise_x**2 * jnp.eye(self.Dx)
         self.C = jnp.array(np.random.randn(self.Dx, self.Dphi))
         if self.Dx == self.Dz:
             self.C = self.C.at[:, : self.Dz].set(jnp.eye(self.Dx))
@@ -785,8 +795,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
         self.update_observation_density()
 
     def update_observation_density(self):
-        """Create new emission density with current parameters.
-        """
+        """Create new emission density with current parameters."""
         self.observation_density = approximate_conditional.LSEMGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
@@ -800,7 +809,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
 
     def update_Qx(self, smoothing_density: pdf.GaussianPDF, X: jnp.array):
         """Update observation covariance matrix Qx.
-        
+
         Qx* = E[(X-C phi(z) - d)(X-C phi(z) - d)']
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
@@ -824,7 +833,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
 
     def update_Cd(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update observation observation matrix C and vector d.
-        
+
         C* = E[(X - d)phi(z)']E[phi(z)phi(z)']^{-1}
         d* = E[(X - C phi(x))]
 
@@ -871,7 +880,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
 
     def update_kernel_params(self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray):
         """Update the kernel weights.
-        
+
         Using gradient descent on the (negative) Q-function.
 
         :param smoothing_density: The smoothing density  p(z_t|x_{1:T})
@@ -894,13 +903,13 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
 class HCCovObservationModel(LinearObservationModel):
     def __init__(self, Dx: int, Dz: int, Du: int, noise_x: float = 1.0):
         """This class implements a linear observation model, where the observations are generated as
-        
+
             x_t = C z_t + d + xi_t     with      xi_t ~ N(0,Qx(z_t)),
-            
-        where 
-        
+
+        where
+
             Qx(z) = sigma_x^2 I + \sum_i U_i D_i(z) U_i',
-            
+
         with D_i(z) = 2 * beta_i * cosh(h_i(z)) and h_i(z) = w_i'z + b_i.
 
         :param Dx: Dimensionality of observations.
@@ -918,7 +927,7 @@ class HCCovObservationModel(LinearObservationModel):
             self.C = jnp.eye(Dx)
         else:
             self.C = jnp.array(np.random.randn(Dx, Dz))
-            self.C = self.C / jnp.sqrt(jnp.sum(self.C ** 2, axis=0))[None]
+            self.C = self.C / jnp.sqrt(jnp.sum(self.C**2, axis=0))[None]
         self.d = jnp.zeros(Dx)
         rand_mat = np.random.rand(self.Dx, self.Dx) - 0.5
         Q, R = np.linalg.qr(rand_mat)
@@ -927,7 +936,7 @@ class HCCovObservationModel(LinearObservationModel):
         W = 1e-2 * np.random.randn(self.Du, self.Dz + 1)
         W[:, 0] = 0
         self.W = jnp.array(W)
-        self.beta = noise_x ** 2 * jnp.ones(self.Du)
+        self.beta = noise_x**2 * jnp.ones(self.Du)
         self.sigma_x = jnp.array([noise_x])
         self.observation_density = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([self.C]),
@@ -968,12 +977,12 @@ class HCCovObservationModel(LinearObservationModel):
 
     def pca_init(self, X: jnp.ndarray, smooth_window: int = 10):
         """Set the model parameters to an educated initial guess, based on principal component analysis.
-        
-        More specifically `d` is set to the mean of the data and `C` to the first principal components 
-        of the (smoothed) data. 
-        Then `U` is initialized with the first pricinpal components of the empirical covariance of the 
+
+        More specifically `d` is set to the mean of the data and `C` to the first principal components
+        of the (smoothed) data.
+        Then `U` is initialized with the first pricinpal components of the empirical covariance of the
         residuals.
-            
+
         :param X: Observations. Dimensions should be [T, Dx]
         :type X: jnp.ndarray
         :param smooth_window: Width of the box car filter data are smoothed with., defaults to 10
@@ -1009,7 +1018,9 @@ class HCCovObservationModel(LinearObservationModel):
         )
 
     def compute_Q_function(
-        self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray,
+        self,
+        smoothing_density: pdf.GaussianPDF,
+        X: jnp.ndarray,
     ):
         T = X.shape[0]
         phi_dict = smoothing_density.slice(jnp.arange(1, smoothing_density.R)).to_dict()
@@ -1050,7 +1061,7 @@ class HCCovObservationModel(LinearObservationModel):
         converged = False
         num_iter = 0
 
-        while not converged and num_iter < 1000:
+        while not converged and num_iter < 10000:
             val = self.step(phi_dict, X, num_iter)
             converged = jnp.abs((val - val_old) / val_old) < 1e-5
             val_old = val
@@ -1059,8 +1070,7 @@ class HCCovObservationModel(LinearObservationModel):
         self.update_observation_density()
 
     def update_observation_density(self):
-        """ Updates the emission density.
-        """
+        """Updates the emission density."""
         self.observation_density = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([self.C]),
             b=jnp.array([self.d]),
@@ -1216,7 +1226,7 @@ class HCCovObservationModel(LinearObservationModel):
         num_params += cur_params
         cur_params = Du
         y = jnp.exp(params[jnp.arange(num_params, num_params + cur_params)])
-        beta = 0.25 * sigma_x ** 2 + y
+        beta = 0.25 * sigma_x**2 + y
         num_params += cur_params
         cur_params = Du * (Dz + 1)
         W = params[jnp.arange(num_params, num_params + cur_params)].reshape(
@@ -1234,7 +1244,7 @@ class HCCovObservationModel(LinearObservationModel):
     ):
         C_flattened = C.flatten()
         ln_sigma2_x = 2.0 * jnp.log(sigma_x)
-        ln_y = jnp.log(beta - 0.25 * sigma_x ** 2)
+        ln_y = jnp.log(beta - 0.25 * sigma_x**2)
         W_flattened = W.flatten()
         params = jnp.concatenate([C_flattened, d, ln_sigma2_x, ln_y, W_flattened])
         return params
@@ -1266,9 +1276,9 @@ class HCCovObservationModel(LinearObservationModel):
         )
         E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
-        Qm = -0.5 * (E_epsilon2 - E_D_inv_epsilon2) / sigma_x ** 2
+        Qm = -0.5 * (E_epsilon2 - E_D_inv_epsilon2) / sigma_x**2
         # determinant part
-        Qm = Qm - 0.5 * E_ln_sigma2_f + 0.5 * T * (Du - Dx) * jnp.log(sigma_x ** 2)
+        Qm = Qm - 0.5 * E_ln_sigma2_f + 0.5 * T * (Du - Dx) * jnp.log(sigma_x**2)
         return jnp.squeeze(Qm) / T
 
     @staticmethod
@@ -1299,9 +1309,9 @@ class HCCovObservationModel(LinearObservationModel):
         )
         E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
-        Qm = -0.5 * (E_epsilon2 - E_D_inv_epsilon2) / sigma_x ** 2
+        Qm = -0.5 * (E_epsilon2 - E_D_inv_epsilon2) / sigma_x**2
         # determinant part
-        Qm = Qm - 0.5 * E_ln_sigma2_f + 0.5 * T * (Du - Dx) * jnp.log(sigma_x ** 2)
+        Qm = Qm - 0.5 * E_ln_sigma2_f + 0.5 * T * (Du - Dx) * jnp.log(sigma_x**2)
         return jnp.squeeze(Qm) / T
 
     ###################### Lower bound functions #######################################################################
@@ -1340,8 +1350,8 @@ class HCCovObservationModel(LinearObservationModel):
             nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
             nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
             ln_beta = (
-                -jnp.log(sigma_x ** 2 + HCCovObservationModel.f(omega_star, beta))
-                - 0.5 * g_omega * (b_i ** 2 - omega_star ** 2)
+                -jnp.log(sigma_x**2 + HCCovObservationModel.f(omega_star, beta))
+                - 0.5 * g_omega * (b_i**2 - omega_star**2)
                 + jnp.log(beta)
             )
             ln_beta_plus = ln_beta + b_i
@@ -1446,8 +1456,8 @@ class HCCovObservationModel(LinearObservationModel):
         nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
         ln_beta = (
-            -jnp.log(sigma_x ** 2 + HCCovObservationModel.f(omega_star, beta))
-            - 0.5 * g_omega * (b_i ** 2 - omega_star ** 2)
+            -jnp.log(sigma_x**2 + HCCovObservationModel.f(omega_star, beta))
+            - 0.5 * g_omega * (b_i**2 - omega_star**2)
             + jnp.log(beta)
         )
         ln_beta_plus = ln_beta + b_i
@@ -1496,13 +1506,13 @@ class HCCovObservationModel(LinearObservationModel):
         quad_int = quad_int_plus + quad_int_minus
         omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
         f_omega_dagger = HCCovObservationModel.f(omega_dagger, beta)
-        log_lb = jnp.log(sigma_x ** 2 + f_omega_dagger)
+        log_lb = jnp.log(sigma_x**2 + f_omega_dagger)
         g_omega = HCCovObservationModel.g(omega_star, beta, sigma_x)
         nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
         ln_beta = (
-            -jnp.log(sigma_x ** 2 + HCCovObservationModel.f(omega_star, beta))
-            - 0.5 * g_omega * (b_i ** 2 - omega_star ** 2)
+            -jnp.log(sigma_x**2 + HCCovObservationModel.f(omega_star, beta))
+            - 0.5 * g_omega * (b_i**2 - omega_star**2)
             + jnp.log(beta)
         )
         ln_beta_plus = ln_beta + b_i
@@ -1537,7 +1547,15 @@ class HCCovObservationModel(LinearObservationModel):
         vmap, in_axes=(None, None, 0, 1, 0, 0, 0, None, None, None), out_axes=(0, 0)
     )
     def get_R(
-        phi: pdf.GaussianPDF, X: jnp.ndarray, W_i, beta, u_i, omega_star, C, d, sigma_x,
+        phi: pdf.GaussianPDF,
+        X: jnp.ndarray,
+        W_i,
+        beta,
+        u_i,
+        omega_star,
+        C,
+        d,
+        sigma_x,
     ):
 
         # Lower bound for E[ln (sigma_x^2 + f(h))]
@@ -1549,8 +1567,8 @@ class HCCovObservationModel(LinearObservationModel):
         nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
         ln_beta = (
-            -jnp.log(sigma_x ** 2 + HCCovObservationModel.f(omega_star, beta))
-            - 0.5 * g_omega * (b_i ** 2 - omega_star ** 2)
+            -jnp.log(sigma_x**2 + HCCovObservationModel.f(omega_star, beta))
+            - 0.5 * g_omega * (b_i**2 - omega_star**2)
             + jnp.log(beta)
         )
         ln_beta_plus = ln_beta + b_i
@@ -1583,7 +1601,7 @@ class HCCovObservationModel(LinearObservationModel):
     @staticmethod
     def f(h: jnp.ndarray, beta: float) -> jnp.ndarray:
         """Compute the function
-            
+
         f(h) = 2 * beta * cosh(h)
 
         :param h: Activation functions.
@@ -1597,10 +1615,10 @@ class HCCovObservationModel(LinearObservationModel):
 
     @staticmethod
     def f_prime(h: jnp.ndarray, beta: float) -> jnp.ndarray:
-        """ Computes the derivative of f
-            
+        """Computes the derivative of f
+
             f'(h) = 2 * beta * sinh(h)
-            
+
         :param h: Activation functions.
         :type h: jnp.ndarray
         :param beta: Scaling factor.
@@ -1613,9 +1631,9 @@ class HCCovObservationModel(LinearObservationModel):
     @staticmethod
     def g(omega: jnp.ndarray, beta: jnp.ndarray, sigma_x: float) -> jnp.ndarray:
         """Computes the function
-        
+
             g(omega) = f'(omega) / (sigma_x^2 + f(omega)) / |omega|
-            
+
             for the variational bound
 
         :param omega: Free variational parameter.
@@ -1629,18 +1647,18 @@ class HCCovObservationModel(LinearObservationModel):
         """
         return (
             HCCovObservationModel.f_prime(omega, beta)
-            / (sigma_x ** 2 + HCCovObservationModel.f(omega, beta))
+            / (sigma_x**2 + HCCovObservationModel.f(omega, beta))
             / jnp.abs(omega)
         )
 
     @staticmethod
     def g_prime(omega: jnp.ndarray, beta: jnp.ndarray, sigma_x: float) -> jnp.ndarray:
-        """ Computes the function
-        
+        """Computes the function
+
             g(omega) = f'(omega) / (sigma_x^2 + f(omega)) / |omega|
-            
+
             for the variational boind
-            
+
         :param omega: Free variational parameter.
         :type omega: jnp.ndarray
         :param beta:  Scaling factor.
@@ -1651,25 +1669,25 @@ class HCCovObservationModel(LinearObservationModel):
         :rtype: jnp.ndarray
         """
         f = HCCovObservationModel.f(omega, beta)
-        denominator = (sigma_x ** 2 + f) * jnp.abs(omega)
+        denominator = (sigma_x**2 + f) * jnp.abs(omega)
 
         g_p = f / denominator
         f_p = HCCovObservationModel.f_prime(omega, beta)
-        g_p -= f_p * (f_p * jnp.abs(omega) + sigma_x ** 2 + f) / denominator ** 2
+        g_p -= f_p * (f_p * jnp.abs(omega) + sigma_x**2 + f) / denominator**2
         return g_p
 
 
 class BernoulliObservationModel(ObservationModel):
     def __init__(self, Dx: int, Dz: int, Dphi_u: int = 0):
-        """ This class implements an observation model for Bernoulli data `x\in(0,1)`, where the observations 
+        """This class implements an observation model for Bernoulli data `x\in(0,1)`, where the observations
         are generated as
-        
+
             x_{t,i} \sim \sigma(h_{t,i}).
-            
+
             with h_{t,i} = \theta_i' phi_i(z_t),
-            
+
             phi_i(z) = (1,z,u_i)
-            
+
         :param Dx: int
             Dimensionality of observations.
         :param Dz: int
@@ -1684,15 +1702,15 @@ class BernoulliObservationModel(ObservationModel):
     def compute_feature_vector(
         self, z: jnp.ndarray, ux: jnp.ndarray = None
     ) -> jnp.ndarray:
-        """ Constructs the feature vector
-        
+        """Constructs the feature vector
+
             phi_i(z) = (1,z,u_i)
-            
+
         :param z: jnp.ndarray [T, Dz]
             Instantiation of latent variables.
         :param uz: jnp.ndarray [T, Dphi_u] or [T, Dphi_u, Dx]
             Control variables. (Default=None)
-            
+
         :return: jnp.ndarray [T, Dphi, Dx]
             Feature vector.
         """
@@ -1707,15 +1725,15 @@ class BernoulliObservationModel(ObservationModel):
     def compute_expected_feature_vector(
         self, density: pdf.GaussianPDF, ux: jnp.ndarray = None
     ) -> jnp.ndarray:
-        """ Computes the expected feature vector
-        
+        """Computes the expected feature vector
+
             E[phi_i(z)] = (1,E[z],u_i)
-            
+
         :param density: GaussianPDF
             Density over z.
         :param uz: jnp.ndarray [T, Dphi_u] or [T, Dphi_u, Dx]
             Control variables. (Default=None)
-            
+
         :return: jnp.ndarray [T, Dx, Dphi]
             Expected feature vector.
         """
@@ -1730,17 +1748,17 @@ class BernoulliObservationModel(ObservationModel):
     def compute_expected_feature_outer_product(
         self, density: pdf.GaussianPDF, ux: jnp.ndarray = None
     ) -> jnp.ndarray:
-        """ Computes the expected feature vector
-        
+        """Computes the expected feature vector
+
             E[phi_i(z) phi_i(z)'] = (1,    E[z'],   u_i',
                                      E[z], E[zz'],  E[z]u_i',
                                      u_i,  E[z]u_i, u_iu_i')
-            
+
         :param density: GaussianPDF
             Density over z.
         :param ux: jnp.ndarray [T, Dx, Dphi_u] or [T, Dphi_u]
             Control variables. (Default=None)
-            
+
         :return: jnp.ndarray [T,  Dx, Dphi, Dphi]
             Expected feature vector.
         """
@@ -1775,8 +1793,7 @@ class BernoulliObservationModel(ObservationModel):
         ux_t: jnp.ndarray = None,
         conv_crit: float = 1e-4,
     ) -> jnp.ndarray:
-        """ Gets the optimal variational parameter.
-        """
+        """Gets the optimal variational parameter."""
 
         omega_old = jnp.ones((self.Dx))
         converged = False
@@ -1815,10 +1832,10 @@ class BernoulliObservationModel(ObservationModel):
         ux_t: jnp.ndarray = None,
         **kwargs
     ) -> pdf.GaussianPDF:
-        """ Here the variational approximation of filtering density is calculated.
-        
+        """Here the variational approximation of filtering density is calculated.
+
         p(z_t|x_{1:t}) = p(x_t|z_t)p(z_t|x_{1:t-1}) / p(x_t)
-        
+
         :param prediction_density: GaussianPDF
             Prediction density p(z_t|x_{1:t-1}).
         :param x_t: jnp.ndarray [1, Dx]
@@ -1850,8 +1867,7 @@ class BernoulliObservationModel(ObservationModel):
         ux_t: jnp.ndarray = None,
         conv_crit: float = 1e-4,
     ) -> jnp.ndarray:
-        """ Gets the optimal variational parameter.
-        """
+        """Gets the optimal variational parameter."""
 
         A_mat = self.Theta[:, 1 : self.Dz + 1]
         a_vec = self.Theta[:, 0]
@@ -1872,8 +1888,8 @@ class BernoulliObservationModel(ObservationModel):
         u_x: jnp.ndarray = None,
         **kwargs
     ):
-        """ This procedure updates the hyperparameters of the observation model.
-        
+        """This procedure updates the hyperparameters of the observation model.
+
         :param smoothing_density: GaussianPDF
             The smoothing density over the latent space.
         :param X: jnp.ndarray [T, Dx]
@@ -1901,10 +1917,12 @@ class BernoulliObservationModel(ObservationModel):
         self.Theta = jnp.linalg.solve(A_theta, b_theta)
 
     def get_lb_sigma(
-        self, density: pdf.GaussianPDF, x_t: jnp.ndarray, ux_t: jnp.ndarray = None,
+        self,
+        density: pdf.GaussianPDF,
+        x_t: jnp.ndarray,
+        ux_t: jnp.ndarray = None,
     ) -> jnp.ndarray:
-        """ Computes the lower bounds for the data probability.
-        """
+        """Computes the lower bounds for the data probability."""
         omega_star = self.get_omega_star(density, x_t, ux_t)
         v = self.Theta[:, 1 : self.Dz + 1]
         g = 1.0 / jnp.abs(omega_star) * jnp.tanh(0.5 * omega_star)
@@ -1917,7 +1935,7 @@ class BernoulliObservationModel(ObservationModel):
             -jnp.log(2)
             - logcosh(0.5 * omega_star)
             + 0.5 * sign * self.Theta[:, 0]
-            - 0.5 * g * (self.Theta[:, 0] ** 2 - omega_star ** 2)
+            - 0.5 * g * (self.Theta[:, 0] ** 2 - omega_star**2)
         )
         if ux_t is not None:
             theta_ux = jnp.einsum("ab,b->a", self.Theta[:, self.Dz + 1 :], ux_t[0])
@@ -1925,7 +1943,7 @@ class BernoulliObservationModel(ObservationModel):
             ln_beta = (
                 ln_beta
                 + 0.5 * sign * theta_ux
-                - g * (0.5 * theta_ux ** 2 + self.Theta[:, 0] * ux_t[0])
+                - g * (0.5 * theta_ux**2 + self.Theta[:, 0] * ux_t[0])
             )
         sigma_lb = factor.OneRankFactor(v=v, g=g, nu=nu, ln_beta=ln_beta)
         measure = density
@@ -1937,13 +1955,13 @@ class BernoulliObservationModel(ObservationModel):
     def evaluate_llk(
         self, p_z: pdf.GaussianPDF, X: jnp.ndarray, u_x: jnp.ndarray = None, **kwargs
     ) -> float:
-        """ Computes the lower bound of log likelihood of data given distribution over latent variables.
-        
+        """Computes the lower bound of log likelihood of data given distribution over latent variables.
+
         :param p_z: GaussianPDF
             Density over latent variables.
         :param X: jnp.ndarray [T, Dx]
             Observations.
-            
+
         :return: float
             Log likelihood lower bound.
         """
