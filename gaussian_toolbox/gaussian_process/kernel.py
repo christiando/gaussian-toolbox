@@ -197,7 +197,7 @@ class Matern32(Kernel):
     lengthscale parameter ℓ. σ²  is the variance parameter.
     """
 
-    def evaluate(self, XA, XB=None) -> jnp.ndarray:
+    def evaluate(self, XA: jnp.ndarray, XB: jnp.ndarray = None) -> jnp.ndarray:
         """
         :param XA: Input data [N x D] where the kernel is evaluated
         :type XA: jnp.ndarray
@@ -225,7 +225,7 @@ class Matern52(Kernel):
     lengthscale parameter ℓ. σ²  is the variance parameter.
     """
 
-    def evaluate(self, XA, XB=None) -> jnp.ndarray:
+    def evaluate(self, XA: jnp.ndarray, XB: jnp.ndarray = None) -> jnp.ndarray:
         """
         :param XA: Input data [N x D] where the kernel is evaluated
         :type XA: jnp.ndarray
@@ -259,7 +259,7 @@ class Exponential(Kernel):
     doubled lengthscales.
     """
 
-    def evaluate(self, XA, XB=None) -> jnp.ndarray:
+    def evaluate(self, XA: jnp.ndarray, XB: jnp.ndarray = None) -> jnp.ndarray:
         """
         :param XA: Input data [N x D] where the kernel is evaluated
         :type XA: jnp.ndarray
@@ -289,7 +289,7 @@ class RationalQuadratic(Kernel):
     For α → ∞, the RQ kernel becomes equivalent to the squared exponential.
     """
 
-    def evaluate(self, XA, XB=None) -> jnp.ndarray:
+    def evaluate(self, XA: jnp.ndarray, XB: jnp.ndarray = None) -> jnp.ndarray:
         """
         :param XA: Input data [N x D] where the kernel is evaluated
         :type XA: jnp.ndarray
