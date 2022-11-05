@@ -109,6 +109,13 @@ class SparseGP_Prior(GP_Prior):
         super().__init__(kernel=kernel, mean=mean)
         self.optimize_Xu = optimize_Xu
         if self.optimize_Xu:
-            self.Xu = objax.TrainVar(Xu)
+            self._Xu = objax.TrainVar(Xu)
         else:
-            self.Xu = Xu
+            self._Xu = Xu
+
+    @property
+    def Xu(self):
+        if self.optimize_Xu:
+            return self._Xu.value
+        else:
+            return self._Xu

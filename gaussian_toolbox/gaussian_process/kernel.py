@@ -47,11 +47,11 @@ class Kernel(objax.Module):
 
     @property
     def length_scale(self):
-        return jnp.exp(self.log_length_scale)
+        return jnp.exp(self.log_length_scale.value)
 
     @property
     def variance(self):
-        return jnp.exp(self.log_variance)
+        return jnp.exp(self.log_variance.value)
 
     def scale(self, X: jnp.ndarray) -> jnp.ndarray:
         """

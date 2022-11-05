@@ -12,11 +12,11 @@ class GaussianLikelihood(objax.Module):
 
     @property
     def sigma_y(self):
-        return jnp.exp(self.log_sigma_y)
+        return jnp.exp(self.log_sigma_y.value)
 
     @property
     def lambda_y(self):
-        return jnp.exp(-self.log_sigma_y)
+        return jnp.exp(-self.log_sigma_y.value)
 
     def get_conditional(self, N: int):
         Sigma_y = self.sigma_y * jnp.eye(N)[None]
@@ -54,6 +54,6 @@ class GaussianLikelihood(objax.Module):
             * jnp.sum((ymb) ** 2 + cond_prior.Sigma[:, :, 0], axis=0)
             * self.lambda_y
         )
-        ln_beta -= 0.5 * N * (jnp.log(2 * jnp.pi) + self.log_sigma_y)
+        ln_beta -= 0.5 * N * (jnp.log(2 * jnp.pi) + self.log_sigma_y.value)
         sparse_lk_factor = factor.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         return sparse_lk_factor
