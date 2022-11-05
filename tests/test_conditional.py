@@ -34,7 +34,12 @@ class TestConditionalGaussianPDF:
         return psd_mat
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy", [(1, 5, 2), (1, 10, 3), (1, 2, 5),],
+        "R, Dx, Dy",
+        [
+            (1, 5, 2),
+            (1, 10, 3),
+            (1, 2, 5),
+        ],
     )
     def test_init(self, R, Dx, Dy):
         Sigma = self.get_pd_matrix(R, Dy)
@@ -244,7 +249,12 @@ class TestNNControlGaussianConditional:
         return cond
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du", [(1, 5, 2, 4), (1, 10, 1, 3), (1, 2, 4, 10),],
+        "R, Dx, Dy, Du",
+        [
+            (1, 5, 2, 4),
+            (1, 10, 1, 3),
+            (1, 2, 4, 10),
+        ],
     )
     def test_init(self, R, Dx, Dy, Du):
         cond = self.create_instance(R, Dx, Dy, Du)
@@ -254,7 +264,12 @@ class TestNNControlGaussianConditional:
         assert jnp.allclose(-cond.ln_det_Lambda, ln_det_Sigma)
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du", [(1, 5, 2, 4), (1, 10, 1, 3), (1, 2, 4, 10),],
+        "R, Dx, Dy, Du",
+        [
+            (1, 5, 2, 4),
+            (1, 10, 1, 3),
+            (1, 2, 4, 10),
+        ],
     )
     def test_set_control_variable(self, R, Dx, Dy, Du):
         cond_u = self.create_instance(R, Dx, Dy, Du)
@@ -268,7 +283,12 @@ class TestNNControlGaussianConditional:
         assert cond.b.shape == (R, Dy)
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du", [(1, 5, 2, 4), (1, 10, 1, 3), (1, 2, 4, 10),],
+        "R, Dx, Dy, Du",
+        [
+            (1, 5, 2, 4),
+            (1, 10, 1, 3),
+            (1, 2, 4, 10),
+        ],
     )
     def test_mutual_information(self, R, Dx, Dy, Du):
         cond_u = self.create_instance(R, Dx, Dy, Du)
@@ -283,7 +303,12 @@ class TestNNControlGaussianConditional:
         assert jnp.allclose(mi1, mi2)
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du", [(1, 5, 2, 4), (1, 10, 1, 3), (1, 2, 4, 10),],
+        "R, Dx, Dy, Du",
+        [
+            (1, 5, 2, 4),
+            (1, 10, 1, 3),
+            (1, 2, 4, 10),
+        ],
     )
     def test_set_y(self, R, Dx, Dy, Du):
         cond_u = self.create_instance(R, Dx, Dy, Du)
@@ -322,7 +347,12 @@ class TestNNControlGaussianConditional:
         assert jnp.allclose(set_y.ln_beta, ln_beta_new)
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du", [(1, 5, 2, 4), (1, 10, 1, 3), (1, 2, 4, 10),],
+        "R, Dx, Dy, Du",
+        [
+            (1, 5, 2, 4),
+            (1, 10, 1, 3),
+            (1, 2, 4, 10),
+        ],
     )
     def test_integrate_log_conditional(self, R, Dx, Dy, Du):
         cond_u = self.create_instance(R, Dx, Dy, Du)
@@ -345,3 +375,185 @@ class TestNNControlGaussianConditional:
         r_ana_sample = jnp.mean(cond_u.integrate_log_conditional_y(px, u=u)(y), axis=0)
         assert jnp.allclose(r_sample, r_ana, atol=1e-2, rtol=np.inf)
         assert jnp.allclose(r_sample, r_ana_sample, atol=1e-2, rtol=np.inf)
+
+
+class TestConditionalIdentityGaussianPDF:
+    @classmethod
+    def create_instance(self, R, D):
+        Sigma_y = self.get_pd_matrix(R, D)
+        mu = objax.random.normal((R, D))
+        py = pdf.GaussianPDF(Sigma_y, mu)
+        Sigma_xy = self.get_pd_matrix(R, D)
+        M = jnp.tile(jnp.eye(D)[None], (R, 1, 1))
+        b = jnp.zeros((R, D))
+        px_given_y1 = conditional.ConditionalGaussianPDF(M, b, Sigma_xy)
+        px_given_y2 = conditional.ConditionalIdentityGaussianPDF(Sigma_xy)
+
+        # py = pxy.get_marginal(dim_y)
+        return px_given_y1, px_given_y2, py
+
+    @staticmethod
+    def get_pd_matrix(R, D, eigen_mu=1):
+        # Q = objax.random.normal((R, D, D))
+        # eig_vals = jnp.abs(eigen_mu + objax.random.normal((R, D)))
+        # psd_mat = jnp.einsum("abc,abd->acd", Q * eig_vals[:, :, None], Q)
+        # psd_mat = 0.5 * (psd_mat + jnp.swapaxes(psd_mat, -1, -2))
+        A = objax.random.uniform((R, D, D))
+        psd_mat = jnp.einsum("abc,abd->acd", A, A)
+        psd_mat += jnp.eye(D)[None]
+        return psd_mat
+
+    @pytest.mark.parametrize(
+        "R, D",
+        [
+            (1, 1),
+            (1, 2),
+            (1, 10),
+        ],
+    )
+    def test_affine_transformation1(self, R, D):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        pxy1 = px_given_y1.affine_joint_transformation(py)
+        pxy2 = px_given_y2.affine_joint_transformation(py)
+        assert jnp.allclose(pxy1.mu, pxy2.mu, atol=1e-6)
+        assert jnp.allclose(pxy1.ln_det_Sigma, pxy2.ln_det_Sigma, atol=1e-6)
+        assert jnp.allclose(pxy1.Sigma, pxy2.Sigma, atol=1e-6)
+
+    @pytest.mark.parametrize(
+        "R, D",
+        [
+            (1, 1),
+            (1, 2),
+            (1, 10),
+        ],
+    )
+    def test_affine_transformation3(self, R, D):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        py_given_x1 = px_given_y1.affine_conditional_transformation(py).slice(
+            jnp.array([0])
+        )
+        py_given_x2 = px_given_y2.affine_conditional_transformation(py).slice(
+            jnp.array([0])
+        )
+        assert jnp.allclose(py_given_x1.M, py_given_x2.M)
+        assert jnp.allclose(py_given_x1.b, py_given_x2.b)
+        assert jnp.allclose(py_given_x1.Sigma, py_given_x2.Sigma)
+        assert jnp.allclose(py_given_x1.Lambda, py_given_x2.Lambda)
+
+    @pytest.mark.parametrize(
+        "R, D",
+        [
+            (1, 1),
+            (1, 2),
+            (1, 10),
+        ],
+    )
+    def test_affine_transformation2(self, R, D):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        px1 = px_given_y1.affine_marginal_transformation(py)
+        px2 = px_given_y2.affine_marginal_transformation(py)
+        assert jnp.allclose(px1.mu, px2.mu)
+        assert jnp.allclose(px1.Sigma, px2.Sigma)
+        assert jnp.allclose(px1.Lambda, px2.Lambda)
+
+    @pytest.mark.parametrize(
+        "R, D",
+        [
+            (1, 1),
+            (1, 2),
+            (1, 10),
+        ],
+    )
+    def test_condition_on_x(self, R, D):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        x = objax.random.normal((2, D))
+        cond_x1 = px_given_y1.condition_on_x(x)
+        cond_x2 = px_given_y2.condition_on_x(x)
+        assert jnp.allclose(cond_x1.mu, cond_x2.mu)
+        assert jnp.allclose(cond_x1.Sigma, cond_x2.Sigma)
+
+    @pytest.mark.parametrize(
+        "R, D",
+        [
+            (1, 1),
+            (1, 2),
+            (1, 10),
+        ],
+    )
+    def test_set_y(self, R, D):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        y = objax.random.normal((2, D))
+        set_y1 = px_given_y1.set_y(y)
+        set_y2 = px_given_y2.set_y(y)
+
+        assert jnp.allclose(set_y1.Lambda, set_y2.Lambda)
+        assert jnp.allclose(set_y1.nu, set_y2.nu)
+        assert jnp.allclose(set_y1.ln_beta, set_y2.ln_beta)
+
+    @pytest.mark.parametrize(
+        "R, D",
+        [
+            (1, 1),
+            (1, 2),
+            (1, 10),
+        ],
+    )
+    def test_integrate_log_conditional(self, R, D):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        pxy1 = px_given_y1.affine_joint_transformation(py)
+        pxy2 = px_given_y2.affine_joint_transformation(py)
+        r1 = px_given_y1.integrate_log_conditional(pxy1)
+        r2 = px_given_y1.integrate_log_conditional(pxy2)
+        assert jnp.allclose(r1, r2)
+
+    @pytest.mark.parametrize(
+        "R, D",
+        [
+            (1, 1),
+            (1, 2),
+            (1, 10),
+        ],
+    )
+    def test_mutual_information(self, R, D):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        mi1 = px_given_y1.mutual_information(py)
+        mi2 = px_given_y2.mutual_information(py)
+        assert jnp.allclose(mi1, mi2)
+
+    @pytest.mark.parametrize(
+        "R, D",
+        [
+            (1, 1),
+            (1, 2),
+            (1, 10),
+        ],
+    )
+    def test_update_Sigma(self, R, D):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        Sigma_new = self.get_pd_matrix(R, D)
+        px_given_y1.update_Sigma(Sigma_new)
+        px_given_y2.update_Sigma(Sigma_new)
+        assert jnp.allclose(px_given_y1.Sigma, px_given_y2.Sigma)
+        assert jnp.allclose(px_given_y1.Lambda, px_given_y2.Lambda)
+        assert jnp.allclose(px_given_y1.ln_det_Sigma, px_given_y2.ln_det_Sigma)
+        assert jnp.allclose(px_given_y1.ln_det_Lambda, px_given_y2.ln_det_Lambda)
+
+
+class TestConditionalIdentityDiagGaussianPDF(TestConditionalIdentityGaussianPDF):
+    @classmethod
+    def create_instance(self, R, D):
+        Sigma_y = self.get_pd_matrix(R, D)
+        mu = objax.random.normal((R, D))
+        py = pdf.GaussianPDF(Sigma_y, mu)
+        Sigma_xy = self.get_diagonal_mat(R, D)
+        M = jnp.tile(jnp.eye(D)[None], (R, 1, 1))
+        b = jnp.zeros((R, D))
+        px_given_y1 = conditional.ConditionalGaussianPDF(M, b, Sigma_xy)
+        px_given_y2 = conditional.ConditionalIdentityDiagGaussianPDF(Sigma_xy)
+        # py = pxy.get_marginal(dim_y)
+        return px_given_y1, px_given_y2, py
+
+    @staticmethod
+    def get_diagonal_mat(R, D, eigen_mu=1):
+        diag_mat = jnp.tile(jnp.diag(objax.random.uniform((D,)))[None], (R, 1, 1))
+        return diag_mat
