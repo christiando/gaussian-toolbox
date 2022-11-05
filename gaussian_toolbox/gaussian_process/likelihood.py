@@ -32,6 +32,10 @@ class GaussianLikelihood(objax.Module):
     def sigma_y(self):
         return jnp.exp(self.log_sigma_y)
 
+    @property
+    def lambda_y(self):
+        return jnp.exp(-self.log_sigma_y)
+
     def get_conditional(self, N: int):
         Sigma_y = self.sigma_y * jnp.eye(N)[None]
         Lambda_y = 1.0 / self.sigma_y * jnp.eye(N)[None]
@@ -50,42 +54,27 @@ class GaussianLikelihood(objax.Module):
     def get_sparse_likelihood_factor(
         self,
         y: jnp.ndarray,
-        X: jnp.ndarray,
-        sgp_prior: prior.SparseGP_Prior,
+        cond_prior: conditional.ConditionalGaussianPDF,
     ):
-        sparse_conditional_prior = self.prior.get_conditional_prior(
-            self.X, self.prior_density, ignore_covariances=True
-        )
-        lk_factor = self.get_likelihood_factor(y)
-        Lambda_M = (
-            lk_factor.Lambda.diagonal(axis1=1, axis2=2)[:, :, None]
-            * sparse_conditional_prior.M
-        )
-
-        Lambda_new = jnp.einsum("abc, abd -> abd", sparse_conditional_prior.M, Lambda_M)
-        nu_new = jnp.einsum(
-            "ab, abc -> ac", lk_factor.nu, sparse_conditional_prior.M
-        ) - jnp.einsum("ab,abc -> ac", sparse_conditional_prior.b, Lambda_M)
-        b_Lambda_b = jnp.einsum(
-            "ab,ab->a",
-            lk_factor.Lambda.diagonal(axis1=1, axis2=2) * sparse_conditional_prior.b,
-            sparse_conditional_prior.b,
-        )
-        ln_beta_new = (
-            lk_factor.ln_beta
-            - 0.5
-            * jnp.trace(
-                jnp.einsum("abc,abd->acd", lk_factor.Lambda, K),
-                axis1=1,
-                axis2=2,
+        N = y.shape[0]
+        Lambda = (
+            jnp.sum(
+                jnp.einsum("abc, abd -> acd", cond_prior.M, cond_prior.M),
+                axis=0,
+                keepdims=True,
             )
-            + jnp.einsum("ab,ab->a", lk_factor.nu, sparse_conditional_prior.b)
-            - 0.5 * b_Lambda_b
+            * self.lambda_y
         )
-        sparse_likelihood_factor = factor.ConjugateFactor(
-            Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new
+        ymb = y[:, None] - cond_prior.b
+        nu = jnp.sum(ymb[:, :, None] * cond_prior.M * self.lambda_y, axis=0)
+        ln_beta = (
+            -0.5
+            * jnp.sum((ymb) ** 2 + cond_prior.Sigma[:, :, 0], axis=0)
+            * self.lambda_y
         )
-        return sparse_likelihood_factor
+        ln_beta -= 0.5 * N * (jnp.log(2 * jnp.pi) + self.log_sigma_y)
+        sparse_lk_factor = factor.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
+        return sparse_lk_factor
 
 
 '''

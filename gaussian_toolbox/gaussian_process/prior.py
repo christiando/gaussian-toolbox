@@ -72,7 +72,6 @@ class GP_Prior(objax.Module):
             Sigma_f_diag = K_star_diag - jnp.sum(M * K_cross_T, axis=1)
             Sigma_f = Sigma_f_diag.reshape(N_star, 1, 1)
             M = M.reshape(N_star, 1, N)
-            print(mu_star.shape, M.shape, self.mean(X).shape)
             b = mu_star[:, None] - jnp.dot(M, self.mean(X))
         else:
             K_star = self.kernel.evaluate(X_star)[None]
@@ -113,13 +112,3 @@ class SparseGP_Prior(GP_Prior):
             self.Xu = objax.TrainVar(Xu)
         else:
             self.Xu = Xu
-
-    def get_conditional_prior(
-        self,
-        X_star: jnp.ndarray,
-        prior_density: pdf.GaussianPDF = None,
-    ) -> conditional.ConditionalGaussianPDF:
-        return super().get_conditional_prior(X_star, self.Xu, prior_density)
-
-    def get_density(self, X: jnp.ndarray) -> pdf.GaussianPDF:
-        return super().get_density(self.Xu)

@@ -2,7 +2,7 @@ from jax import numpy as jnp
 import jax
 from sklearn.covariance import log_likelihood
 from gaussian_toolbox.gaussian_process import prior, likelihood
-from gaussian_toolbox import pdf, measure
+from gaussian_toolbox import pdf, measure, conditional
 import objax
 from gaussian_toolbox.utils.jax_minimize_wrapper import ScipyMinimize
 
@@ -24,10 +24,10 @@ class GPRegressionModel(objax.Module):
         self.posterior_density = self.get_posterior()
 
     def predict_gp(
-        self, X_star: jnp.ndarray, only_marginals: bool = False
+        self, X_star: jnp.ndarray, only_marginals: bool = True
     ) -> pdf.GaussianPDF:
-        conditional_prior_density = self.prior.get_conditional_prior(
-            X_star, self.X, self.prior_density, only_marginals=only_marginals
+        conditional_prior_density = self._get_conditional_prior(
+            X_star, only_marginals=only_marginals
         )
         predictive_density = conditional_prior_density.affine_marginal_transformation(
             self.posterior_density
@@ -35,7 +35,7 @@ class GPRegressionModel(objax.Module):
         return predictive_density
 
     def predict_data(
-        self, X_star: jnp.ndarray, only_marginals: bool = False
+        self, X_star: jnp.ndarray, only_marginals: bool = True
     ) -> pdf.GaussianPDF:
         predictive_gp_density = self.predict_gp(X_star, only_marginals=only_marginals)
         if only_marginals:
@@ -53,6 +53,8 @@ class GPRegressionModel(objax.Module):
         return posterior_density
 
     def _get_unnormalized_posterior(self) -> measure.GaussianMeasure:
+        if self.prior_density is None:
+            self.prior_density = self.prior.get_density(self.X)
         lk_factor = self.likelihood.get_likelihood_factor(self.y)
         unormalized_posterior = self.prior_density * lk_factor
         return unormalized_posterior
@@ -62,15 +64,26 @@ class GPRegressionModel(objax.Module):
         log_likelihood = unormalized_posterior.log_integral_light()
         return log_likelihood
 
+    def _get_prior_density(self):
+        self.prior_density = self.prior.get_density(self.X)
+
+    def _get_conditional_prior(
+        self, X_star: jnp.ndarray, only_marginals: bool
+    ) -> conditional.ConditionalGaussianPDF:
+        conditional_prior_density = self.prior.get_conditional_prior(
+            X_star, self.X, self.prior_density, only_marginals=only_marginals
+        )
+        return conditional_prior_density
+
     def optimize_hyperparameters(self):
         @objax.Function.with_vars(self.vars())
         def loss():
-            self.prior_density = self.prior.get_density(self.X)
+            self._get_prior_density()
             return -self.objective().squeeze()
 
         minimizer = ScipyMinimize(loss, self.vars(), method="L-BFGS-B")
         minimizer.minimize()
-        self.prior_density = self.prior.get_density(self.X)
+        self._get_prior_density()
 
 
 class SGPRegressionModel(GPRegressionModel):
@@ -81,17 +94,31 @@ class SGPRegressionModel(GPRegressionModel):
         self.posterior_density = None
         self.objective = self.get_elbo
 
+    def _get_prior_density(self):
+        self.prior_density = self.prior.get_density(self.prior.Xu)
+
     def get_posterior(self) -> pdf.GaussianPDF:
         unormalized_posterior = self._get_unnormalized_posterior()
         posterior_density = unormalized_posterior.get_density()
         return posterior_density
 
     def _get_unnormalized_posterior(self) -> measure.GaussianMeasure:
+        if self.prior_density is None:
+            self._get_prior_density()
+        cond_prior = self._get_conditional_prior(self.X, True)
         sparse_lk_factor = self.likelihood.get_sparse_likelihood_factor(
-            self.y, self.X, self.prior
+            self.y, cond_prior
         )
         unormalized_posterior = self.prior_density * sparse_lk_factor
         return unormalized_posterior
+
+    def _get_conditional_prior(
+        self, X_star: jnp.ndarray, only_marginals: bool
+    ) -> conditional.ConditionalGaussianPDF:
+        conditional_prior_density = self.prior.get_conditional_prior(
+            X_star, self.prior.Xu, self.prior_density, only_marginals=only_marginals
+        )
+        return conditional_prior_density
 
     def get_elbo(self) -> float:
         unormalized_posterior = self._get_unnormalized_posterior()
