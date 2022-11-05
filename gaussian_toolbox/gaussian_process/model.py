@@ -1,6 +1,4 @@
 from jax import numpy as jnp
-import jax
-from sklearn.covariance import log_likelihood
 from gaussian_toolbox.gaussian_process import prior, likelihood
 from gaussian_toolbox import pdf, measure, conditional
 import objax
