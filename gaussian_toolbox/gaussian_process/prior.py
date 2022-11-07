@@ -8,7 +8,7 @@ class GP_Prior(objax.Module):
     def __init__(
         self,
         kernel: kernel.Kernel,
-        mean: callable = lambda x: jnp.zeros(x.shape[0]),
+        mean: objax.Module = None,
     ):
         """
         Base class for Gaussian Processes.
@@ -20,7 +20,15 @@ class GP_Prior(objax.Module):
         :type mean: lambda function, optional
         """
         self.kernel = kernel
-        self.mean = mean
+        if mean is None:
+            self._mu = objax.TrainVar(jnp.array(0))
+            self.mean = lambda x: self.mu * jnp.ones(x.shape[0])
+        else: 
+            self.mean= mean
+            
+    @property
+    def mu(self):
+        return self._mu.value
 
     def get_density(self, X: jnp.ndarray) -> pdf.GaussianPDF:
         """Compute the prediction density at the requested points. If not training data, prior is returned.
@@ -29,7 +37,7 @@ class GP_Prior(objax.Module):
 
             p(f^\star|X^\star) = \int p(f^\star|X^\star,f)p(f|X) df.
 
-        # TODO: Shouldn't be the prior part of the GP?
+        TODO: Shouldn't be the prior part of the GP?
 
         :param X_star: Data points for which prediction is required.
         :type X_star: jnp.ndarray
@@ -71,6 +79,8 @@ class GP_Prior(objax.Module):
             K_star_diag = self.kernel.eval_diag(X_star)
             Sigma_f_diag = K_star_diag - jnp.sum(M * K_cross_T, axis=1)
             Sigma_f = Sigma_f_diag.reshape(N_star, 1, 1)
+            Lambda_f = 1. / Sigma_f
+            ln_det_Sigma = jnp.log(Sigma_f[:,:,0])
             M = M.reshape(N_star, 1, N)
             b = mu_star[:, None] - jnp.dot(M, self.mean(X))
         else:
@@ -78,10 +88,12 @@ class GP_Prior(objax.Module):
             K_star = K_star.reshape(1, N_star, N_star)
             Sigma_f = K_star - jnp.dot(M, K_cross)
             Sigma_f = Sigma_f.reshape(1, N_star, N_star)
+            Lambda_f = None
+            ln_det_Sigma = None
             M = M.reshape(1, N_star, N)
             b = mu_star - jnp.dot(M, self.mean(X))
 
-        return conditional.ConditionalGaussianPDF(M, b, Sigma_f)
+        return conditional.ConditionalGaussianPDF(M, b, Sigma_f, Lambda_f, ln_det_Sigma)
 
 
 class SparseGP_Prior(GP_Prior):
@@ -89,7 +101,7 @@ class SparseGP_Prior(GP_Prior):
         self,
         kernel: kernel.Kernel,
         Xu: jnp.ndarray,
-        mean: callable = lambda x: jnp.zeros(x.shape[0]),
+        mean: objax.Module = None,
         optimize_Xu: bool = False,
     ):
         """Class for sparse GP according to [Titsias, 2009], i.e.
