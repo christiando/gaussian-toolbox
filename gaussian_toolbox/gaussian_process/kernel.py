@@ -125,7 +125,7 @@ class Kernel(objax.Module):
         :rtype: jnp.ndarray
         """
         N = XA.shape[0]
-        return self.variance * jnp.ones((1, N))
+        return (self.variance + self.regularization_const)* jnp.ones((1, N))
 
 
 class RBF(Kernel):
