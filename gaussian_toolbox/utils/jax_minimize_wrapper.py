@@ -207,7 +207,7 @@ class ScipyMinimize(Module):
         vc: VarCollection,
         method=None,
         args=(),
-        bounds=None,
+        bounds_dict=None,
         constraints=(),
         tol=None,
         callback=None,
@@ -227,11 +227,40 @@ class ScipyMinimize(Module):
         self.train_vars = ModuleList(TrainRef(x) for x in vc.subset(TrainVar))
         self.method = method
         self.args = args
-        self.bounds = bounds
+        if bounds_dict is None:
+            self.bounds = None
+        else:
+            self._set_up_bounds(vc, bounds_dict)
         self.constraints = constraints
         self.tol = tol
         self.callback = callback
         self.options = options
+        
+    def _set_up_bounds(self, vc: VarCollection, bounds_dict: dict):
+        
+        min_vals, max_vals = [], []
+        for k,v in vc.items():
+            key_found = False
+            for key in bounds_dict.keys():
+                if key in k:
+                    key_found = True
+                    if v.shape == ():
+                        min_vals.append(bounds_dict[key][0])
+                        max_vals.append(bounds_dict[key][1])
+                    else:
+                        min_vals.append(bounds_dict[key][0] * jn.ones(v.shape))
+                        max_vals.append(bounds_dict[key][1] * jn.ones(v.shape))
+            if not key_found:
+                if v.shape == ():
+                    min_vals.append(jn.array([-jn.inf]))
+                    max_vals.append(jn.array([jn.inf]))
+                else:
+                    min_vals.append(-jn.inf * jn.ones(v.shape))
+                    max_vals.append(jn.inf * jn.ones(v.shape))
+            min_arr, max_arr = self.ravel_vars(min_vals), self.ravel_vars(max_vals)
+            self.bounds = scipy.optimize.Bounds(lb=min_arr, ub=max_arr)
+        
+        
 
     def unravel_vars(self, x):
         total_elements = 0
