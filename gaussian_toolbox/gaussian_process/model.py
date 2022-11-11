@@ -6,6 +6,13 @@ from gaussian_toolbox.utils.jax_minimize_wrapper import ScipyMinimize
 
 
 class GPRegressionModel(objax.Module):
+    """Model for doing inference in GP regression and predictions,
+
+    :param prior: Gaussian process prior
+    :type prior: prior.GP_Prior
+    :param lk: Gaussian likelihood object.
+    :type lk: likelihood.GaussianLikelihood
+    """
     def __init__(self, prior: prior.GP_Prior, lk: likelihood.GaussianLikelihood):
         self.prior = prior
         self.likelihood = lk
@@ -14,6 +21,15 @@ class GPRegressionModel(objax.Module):
         self.objective = self.get_log_likelihood
 
     def infer(self, X: jnp.ndarray, y: jnp.ndarray, update_hyperparams: bool = True):
+        """Infers the model posterior and learns hyperparamaters.
+
+        :param X: Input data [N,Dx].
+        :type X: jnp.ndarray
+        :param y: Observations [N,].
+        :type y: jnp.ndarray
+        :param update_hyperparams: Whether model hyperparamters should be optimized, defaults to True
+        :type update_hyperparams: bool, optional
+        """
         self.X = X
         self.y = y
         self.N, self.D = self.X.shape
@@ -24,6 +40,19 @@ class GPRegressionModel(objax.Module):
     def predict_gp(
         self, X_star: jnp.ndarray, only_marginals: bool = True
     ) -> pdf.GaussianPDF:
+        r"""Get the predictive posterior
+        
+        .. math:
+        
+            p(g^*\vert X, y) = \int p(g\vert g_y)p(g_y\vert X, y){\rm d}g_y.
+
+        :param X_star: Input points, where predictive posterior should be evaluated.
+        :type X_star: jnp.ndarray
+        :param only_marginals: Whether only marginals should be returned, defaults to True
+        :type only_marginals: bool, optional
+        :return: Predictive GP posterior.
+        :rtype: pdf.GaussianPDF
+        """
         conditional_prior_density = self._get_conditional_prior(
             X_star, only_marginals=only_marginals
         )
@@ -35,6 +64,19 @@ class GPRegressionModel(objax.Module):
     def predict_data(
         self, X_star: jnp.ndarray, only_marginals: bool = True
     ) -> pdf.GaussianPDF:
+        r"""Get predictive data density
+
+        .. math:
+        
+            p(y^*\vert X, y) = \int p(y^*\vert g^*)p(g^*\vert X, y){\rm d}g_y.        
+    
+        :param X_star: Input points, where predictive posterior should be evaluated.
+        :type X_star: jnp.ndarray
+        :param only_marginals: Whether only marginals should be returned, defaults to True
+        :type only_marginals: bool, optional
+        :return: Predictive data posterior.
+        :rtype: pdf.GaussianPDF
+        """
         predictive_gp_density = self.predict_gp(X_star, only_marginals=only_marginals)
         if only_marginals:
             lk_conditional = self.likelihood.get_conditional(1)
@@ -46,11 +88,25 @@ class GPRegressionModel(objax.Module):
         return predictive_data_density
 
     def get_posterior(self) -> pdf.GaussianPDF:
+        """Get the posterior :math:`p(g_y\vert X, y)`
+
+        :return: Density of Posterior GP at data points.
+        :rtype: pdf.GaussianPDF
+        """
         unormalized_posterior = self._get_unnormalized_posterior()
         posterior_density = unormalized_posterior.get_density()
         return posterior_density
 
     def _get_unnormalized_posterior(self) -> measure.GaussianMeasure:
+        """Get the unnormalized posterior
+        
+        .. math:
+        
+            p(y, g \vert X) = p(y\vert g)p(g\vert X).  
+
+        :return: Measure of unnormalized Posterior GP at data points.
+        :rtype: measure.GaussianMeasure
+        """
         if self.prior_density is None:
             self.prior_density = self.prior.get_density(self.X)
         lk_factor = self.likelihood.get_likelihood_factor(self.y)
@@ -58,22 +114,44 @@ class GPRegressionModel(objax.Module):
         return unormalized_posterior
 
     def get_log_likelihood(self) -> float:
+        """Get the marginal log likelihood (evidence).
+        
+        .. math:
+        
+            \ln p(y \vert X) = \ln \int p(y, g \vert X) {\rm diff g}.  
+
+        :return: Marginal log likelihood.
+        :rtype: float
+        """
         unormalized_posterior = self._get_unnormalized_posterior()
         log_likelihood = unormalized_posterior.log_integral_light()
         return log_likelihood
 
     def _get_prior_density(self):
+        """Computes the prior density over the data input points.
+        """
         self.prior_density = self.prior.get_density(self.X)
 
     def _get_conditional_prior(
         self, X_star: jnp.ndarray, only_marginals: bool
     ) -> conditional.ConditionalGaussianPDF:
+        """Compute the prior conditional of the GP :math:`p(g^*\vert g_y)`.
+
+        :param X_star: Input points. [R, Dx]
+        :type X_star: jnp.ndarray
+        :param only_marginals: Whether joint or marginal conditionals should be returned.
+        :type only_marginals: bool
+        :return: The conditional prior.
+        :rtype: conditional.ConditionalGaussianPDF
+        """
         conditional_prior_density = self.prior.get_conditional_prior(
             X_star, self.X, self.prior_density, only_marginals=only_marginals
         )
         return conditional_prior_density
 
     def optimize_hyperparameters(self):
+        """Maximized evidence to find optimal hyperparameters.
+        """
         @objax.Function.with_vars(self.vars())
         def loss():
             self._get_prior_density()
@@ -85,6 +163,14 @@ class GPRegressionModel(objax.Module):
 
 
 class SGPRegressionModel(GPRegressionModel):
+    """Model for doing inference in GP regression and predictions with a sparse prior.
+
+    :param prior: Sparse Gaussian process prior
+    :type prior: prior.SparseGP_Prior
+    :param lk: Gaussian likelihood object.
+    :type lk: likelihood.GaussianLikelihood
+    """
+
     def __init__(self, prior: prior.SparseGP_Prior, lk: likelihood.GaussianLikelihood):
         self.prior = prior
         self.likelihood = lk
@@ -93,14 +179,30 @@ class SGPRegressionModel(GPRegressionModel):
         self.objective = self.get_elbo
 
     def _get_prior_density(self):
+        """Get the prior :math:`p(g_u\vert X_u)`.
+        """
         self.prior_density = self.prior.get_density(self.prior.Xu)
 
     def get_posterior(self) -> pdf.GaussianPDF:
+        """Get the (approximate) posterior :math:`p(g_u\vert X, y, X_u)` at the inducing points.
+
+        :return: Density of approximate posterior GP at inducing points.
+        :rtype: pdf.GaussianPDF
+        """
         unormalized_posterior = self._get_unnormalized_posterior()
         posterior_density = unormalized_posterior.get_density()
         return posterior_density
 
     def _get_unnormalized_posterior(self) -> measure.GaussianMeasure:
+        """Get the unnormalized posterior
+        
+        .. math:
+        
+            p(y, g_u \vert X, X_u) = p(y\vert g_u, X)p(g_u\vert X_u).  
+
+        :return: Measure of unnormalized Posterior GP at data points.
+        :rtype: measure.GaussianMeasure
+        """
         if self.prior_density is None:
             self._get_prior_density()
         cond_prior = self._get_conditional_prior(self.X, True)
@@ -113,46 +215,28 @@ class SGPRegressionModel(GPRegressionModel):
     def _get_conditional_prior(
         self, X_star: jnp.ndarray, only_marginals: bool
     ) -> conditional.ConditionalGaussianPDF:
+        """Compute the prior conditional of the GP :math:`p(g^*\vert g_u)`, conditioned on inducing points.
+
+        :param X_star: Input points. [R, Dx]
+        :type X_star: jnp.ndarray
+        :param only_marginals: Whether joint or marginal conditionals should be returned.
+        :type only_marginals: bool
+        :return: The conditional prior.
+        :rtype: conditional.ConditionalGaussianPDF
+        """
         conditional_prior_density = self.prior.get_conditional_prior(
             X_star, self.prior.Xu, self.prior_density, only_marginals=only_marginals
         )
         return conditional_prior_density
 
     def get_elbo(self) -> float:
+        """Compute evidence lower bound.
+
+        :return: Evidence lower bound.
+        :rtype: float
+        """
         unormalized_posterior = self._get_unnormalized_posterior()
         posterior_density = unormalized_posterior.get_density()
         elbo = posterior_density.integrate("log u(x)", factor=unormalized_posterior)
         elbo += posterior_density.entropy()
         return elbo
-
-
-"""
-class VariationalInference(ExactInference):
-    def __init__(
-        self, prior: gp.SparseGaussianProcess, lk: likelihood.GaussianLikelihood
-    ):
-        super().__init__(prior, lk)
-        if not self.likelihood.sparse:
-            self.likelihood.sparsify(self.prior)
-
-    def get_log_likelihood(self) -> float:
-        raise NotImplementedError("Exact likelihood non-tractable. Use ELBO instead.")
-
-    def get_elbo(self, posterior: pdf.GaussianPDF) -> float:
-        kl_div = posterior.kl_divergence(self.prior.prior_density)
-        exp_log_likelihood = posterior.integrate(
-            "log u(x)", factor=self.likelihood.sparse_likelihood_factor
-        )
-        elbo = exp_log_likelihood - kl_div
-        return elbo
-
-    def optimize_hyperparameters(self, posterior: pdf.GaussianPDF):
-        @objax.Function.with_vars(self.vars())
-        def loss():
-            self.prior.update_prior(self.likelihood.X)
-            self.likelihood.sparsify(self.prior)
-            return -self.get_elbo(posterior)
-
-        minimizer = ScipyMinimize(loss, self.vars(), method="L-BFGS-B")
-        minimizer.minimize()
-"""

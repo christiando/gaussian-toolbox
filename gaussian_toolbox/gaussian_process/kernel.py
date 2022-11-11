@@ -21,7 +21,7 @@ class Kernel(objax.Module):
         length_scale: float = 0.1,
         variance: float = 1.0,
         alpha: float = 1.0,
-        regularization_const: float = 1e-5,
+        regularization_const: float = 1e-6,
     ) -> None:
         """
         Base class for isotropic and stationary kernels, i.e., kernels that only
@@ -117,7 +117,7 @@ class Kernel(objax.Module):
         return K
 
     def eval_diag(self, XA: jnp.ndarray) -> jnp.ndarray:
-        """_summary_
+        """Evaluates the diagonal of the covariance matrix.
 
         :param XA: Input data [N x D]
         :type XA: jnp.ndarray

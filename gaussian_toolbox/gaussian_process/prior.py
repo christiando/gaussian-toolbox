@@ -15,9 +15,8 @@ class GP_Prior(objax.Module):
 
         :param kernel: kernel function of the gaussian process
         :type kernel: kernels.Kernel
-
-        :param mean: mean function of the gaussian process, defaults to 0
-        :type mean: lambda function, optional
+        :param mean: Mean function. If None it is zero, defaults to None.
+        :type mean: callable, optional
         """
         self.kernel = kernel
         if mean is None:
@@ -39,7 +38,7 @@ class GP_Prior(objax.Module):
 
         TODO: Shouldn't be the prior part of the GP?
 
-        :param X_star: Data points for which prediction is required.
+        :param X_star: Data points for which prediction is required. [N_star, D]
         :type X_star: jnp.ndarray
         :param posterior_X: Posterior density over the points X, defaults to =None
         :type posterior_X: pdf.GaussianPDF, optional
@@ -61,7 +60,7 @@ class GP_Prior(objax.Module):
     ) -> conditional.ConditionalGaussianPDF:
         """Computes the conditional GP prior :math:`p(y^\star|X^\star,y)`.
 
-        :param X_star: Points for which the conditional priot should be computed.
+        :param X_star: Points for which the conditional prior should be computed.
         :type X_star: jnp.ndarray
         :return: Conditional density for the GP.
         :rtype: conditional.ConditionalGaussianPDF
@@ -113,10 +112,12 @@ class SparseGP_Prior(GP_Prior):
 
         :param kernel: Kernel function that defines the GP.
         :type kernel: kernel.Kernel
-        :param Xu: Inducing points.
+        :param Xu: Inducing points. [Nu, D]
         :type Xu: jnp.ndarray
-        :param mean: Mean function, defaults to lambdax:jnp.zeros(x.shape[0])
+        :param mean: Mean function. If None it is zero, defaults to None.
         :type mean: callable, optional
+        :param optimize_Xu: Wheter inducing points should be optimized.
+        :type optimize_Xu: bool
         """
         super().__init__(kernel=kernel, mean=mean)
         self.optimize_Xu = optimize_Xu
@@ -126,7 +127,9 @@ class SparseGP_Prior(GP_Prior):
             self._Xu = Xu
 
     @property
-    def Xu(self):
+    def Xu(self) -> jnp.ndarray:
+        """Inducing points.
+        """
         if self.optimize_Xu:
             return self._Xu.value
         else:
