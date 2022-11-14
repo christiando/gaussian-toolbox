@@ -21,6 +21,7 @@ Welcome to Gaussian Toolbox's documentation!
    notebooks/affine_transforms
    notebooks/linear_regression
    notebooks/timeseries
+   notebooks/gp
 
 .. toctree::
    :maxdepth: 1
