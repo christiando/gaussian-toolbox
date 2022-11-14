@@ -199,7 +199,7 @@ import scipy
 
 
 class ScipyMinimize(Module):
-    """Adam optimizer."""
+    """Scipy minimize wrapper for objax."""
 
     def __init__(
         self,
@@ -212,17 +212,14 @@ class ScipyMinimize(Module):
         tol=None,
         callback=None,
         options=None,
+        do_jit:bool=True
     ):
-        """Constructor for Adam optimizer class.
-
-            Args:
-                vc: collection of variables to optimize.
-                beta1: value of Adam's beta1 hyperparameter. Defaults to 0.9.
-                beta2: value of Adam's beta2 hyperparameter. Defaults to 0.999.
-                eps: value of Adam's epsilon hyperparameter. Defaults to 1e-8.
-            """
-        self.fun = Jit(fun)
-        self.jac = Jit(Grad(fun, vc))
+        if do_jit:
+            self.fun = Jit(fun)
+            self.jac = Jit(Grad(fun, vc))
+        else:
+            self.fun = fun
+            self.jac = Grad(fun, vc)
         self.step = StateVar(jn.array(0, jn.uint32), reduce=lambda x: x[0])
         self.train_vars = ModuleList(TrainRef(x) for x in vc.subset(TrainVar))
         self.method = method

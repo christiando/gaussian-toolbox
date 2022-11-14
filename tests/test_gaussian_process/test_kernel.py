@@ -1,6 +1,4 @@
-import os
-import sys
-import scipy
+
 import pytest
 import numpy as np
 from jax import numpy as jnp
