@@ -902,7 +902,7 @@ class LSEMObservationModel(LinearObservationModel, objax.Module):
 
 class HCCovObservationModel(LinearObservationModel):
     def __init__(self, Dx: int, Dz: int, Du: int, noise_x: float = 1.0):
-        """This class implements a linear observation model, where the observations are generated as
+        r"""This class implements a linear observation model, where the observations are generated as
 
             x_t = C z_t + d + xi_t     with      xi_t ~ N(0,Qx(z_t)),
 
@@ -976,7 +976,7 @@ class HCCovObservationModel(LinearObservationModel):
         self.update_observation_density()
 
     def pca_init(self, X: jnp.ndarray, smooth_window: int = 10):
-        """Set the model parameters to an educated initial guess, based on principal component analysis.
+        r"""Set the model parameters to an educated initial guess, based on principal component analysis.
 
         More specifically `d` is set to the mean of the data and `C` to the first principal components
         of the (smoothed) data.
@@ -1630,7 +1630,7 @@ class HCCovObservationModel(LinearObservationModel):
 
     @staticmethod
     def g(omega: jnp.ndarray, beta: jnp.ndarray, sigma_x: float) -> jnp.ndarray:
-        """Computes the function
+        r"""Computes the function
 
             g(omega) = f'(omega) / (sigma_x^2 + f(omega)) / |omega|
 
@@ -1679,7 +1679,7 @@ class HCCovObservationModel(LinearObservationModel):
 
 class BernoulliObservationModel(ObservationModel):
     def __init__(self, Dx: int, Dz: int, Dphi_u: int = 0):
-        """This class implements an observation model for Bernoulli data `x\in(0,1)`, where the observations
+        r"""This class implements an observation model for Bernoulli data `x\in(0,1)`, where the observations
         are generated as
 
             x_{t,i} \sim \sigma(h_{t,i}).
