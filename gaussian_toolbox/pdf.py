@@ -8,6 +8,8 @@
 
 __author__ = "Christian Donner"
 
+from jax.random import PRNGKey
+import jax
 from jax import numpy as jnp
 import numpy as np
 
@@ -52,7 +54,7 @@ class GaussianPDF(measure.GaussianMeasure):
     def __str__(self) -> str:
         return "Gaussian density p(x)"
 
-    def sample(self, num_samples: int) -> jnp.ndarray:
+    def sample(self, key: PRNGKey, num_samples: int) -> jnp.ndarray:
         """Sample from the Gaussian density.
 
         :param num_samples: Number of samples that are generated.
@@ -60,7 +62,7 @@ class GaussianPDF(measure.GaussianMeasure):
         :return: Samples. Dimensions are [num_samples, R, D].
         :rtype: jnp.ndarray
         """
-        rand_nums = np.random.randn(num_samples, self.R, self.D)
+        rand_nums = jax.random.normal(key, (num_samples, self.R, self.D))
         L = jnp.linalg.cholesky(self.Sigma)
         x_samples = self.mu[None] + jnp.einsum("abc,dac->dab", L, rand_nums)
         return x_samples

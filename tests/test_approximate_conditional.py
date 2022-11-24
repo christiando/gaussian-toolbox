@@ -9,6 +9,7 @@ import pytest
 from jax import numpy as jnp
 from jax import scipy as jsc
 from jax import config
+import jax
 
 config.update("jax_enable_x64", True)
 import numpy as np
@@ -80,7 +81,8 @@ class TestLRBFGaussianConditional:
         pxy = cond.affine_joint_transformation(p_X)
         dim_y = jnp.arange(Dx, Dy + Dx)
         dim_x = jnp.arange(0, Dx)
-        xy = pxy.sample(100000)[:, 0]
+        key = jax.random.PRNGKey(0)
+        xy = pxy.sample(key, 100000)[:, 0]
         y = xy[:, dim_y]
         r_ana = cond.integrate_log_conditional(pxy)
         r_ana_sample = jnp.mean(cond.integrate_log_conditional_y(p_X)(y), axis=0)

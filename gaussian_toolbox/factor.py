@@ -235,6 +235,24 @@ class ConjugateFactor:
         :rtype: jnp.ndarray
         """
         return jnp.sum(A.diagonal(axis1=-1, axis2=-2), axis=1)
+    
+    
+    def to_dict(self) -> dict:
+        """Write Factor into dict.
+
+        :return: Dictionary with relevant parameters.
+        :rtype: dict
+        """
+        factor_dict = {
+            "Lambda": self.Lambda,
+            "nu": self.nu,
+            "ln_beta": self.ln_beta
+        }
+        return factor_dict
+    
+    @classmethod
+    def from_dict(cls, cls_dict: dict):
+        return cls(**cls_dict)
 
 
 class LowRankFactor(ConjugateFactor):
@@ -414,6 +432,20 @@ class OneRankFactor(LowRankFactor):
                 }
             )
         return new_density_dict
+    
+    def to_dict(self) -> dict:
+        """Write Factor into dict.
+
+        :return: Dictionary with relevant parameters.
+        :rtype: dict
+        """
+        factor_dict = {
+            "v": self.v,
+            "g": self.g,
+            "nu": self.nu,
+            "ln_beta": self.ln_beta
+        }
+        return factor_dict
 
 
 class LinearFactor(ConjugateFactor):
@@ -538,6 +570,18 @@ class LinearFactor(ConjugateFactor):
                 }
             )
         return new_density_dict
+    
+    def to_dict(self) -> dict:
+        """Write Factor into dict.
+
+        :return: Dictionary with relevant parameters.
+        :rtype: dict
+        """
+        factor_dict = {
+            "nu": self.nu,
+            "ln_beta": self.ln_beta
+        }
+        return factor_dict
 
 
 class ConstantFactor(ConjugateFactor):
@@ -652,4 +696,16 @@ class ConstantFactor(ConjugateFactor):
                 }
             )
         return new_density_dict
+    
+    def to_dict(self) -> dict:
+        """Write Factor into dict.
+
+        :return: Dictionary with relevant parameters.
+        :rtype: dict
+        """
+        factor_dict = {
+            "ln_beta": self.ln_beta,
+            "D": self.D
+        }
+        return factor_dict
 

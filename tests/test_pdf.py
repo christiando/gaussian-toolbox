@@ -6,6 +6,7 @@ from jax import scipy as jsc
 import numpy as np
 import objax
 from scipy.stats import multivariate_normal
+import jax
 
 
 class TestGaussianPDF:
@@ -43,7 +44,8 @@ class TestGaussianPDF:
         np.random.seed(0)
         d = self.create_instance(R, D)
         num_samples = 1000000
-        samples = d.sample(num_samples)
+        key = jax.random.PRNGKey(0)
+        samples = d.sample(key, num_samples)
         mu_sample = jnp.mean(samples, axis=0)
         std_sample = jnp.std(samples, axis=0)
         std = jnp.sqrt(jnp.diagonal(d.Sigma, axis1=1, axis2=2))

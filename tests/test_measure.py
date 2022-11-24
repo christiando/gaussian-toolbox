@@ -13,6 +13,7 @@ from jax import numpy as jnp
 from jax import scipy as jsc
 from jax import config
 from jax import jit
+import jax
 
 config.update("jax_enable_x64", True)
 import numpy as np
@@ -366,7 +367,8 @@ class TestGaussianMeasure(TestConjugateFactor):
             "(Ax+a)(Bx+b)'", A_mat=A_mat, a_vec=a_vec, B_mat=B_mat, b_vec=b_vec
         )
         d = m.get_density()
-        x_sample = d.sample(1000000)
+        key = jax.random.PRNGKey(0)
+        x_sample = d.sample(key, 1000000)
         sample = jnp.einsum("ab,cdb->cda", A_mat, x_sample) + a_vec
         Bx_b_sample = jnp.einsum("ab,cdb->cda", B_mat, x_sample) + b_vec
         integral_sample = (
@@ -558,7 +560,8 @@ class TestGaussianMeasure(TestConjugateFactor):
                 assert np.allclose(r_num, r_ana[r], atol=1e-2)
         else:
             p = m.get_density()
-            x_sample = p.sample(1000000)
+            key = jax.random.PRNGKey(0)
+            x_sample = p.sample(key, 1000000)
             int_m = m.integrate()
             r_sample = []
             for ridx in range(R):

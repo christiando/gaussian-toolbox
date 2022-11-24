@@ -15,7 +15,6 @@ __all__ = ["ConditionalGaussianPDF", "NNControlGaussianConditional"]
 from jax import numpy as jnp
 from typing import Tuple
 from . import pdf, factor, measure
-import objax
 from .utils.linalg import invert_matrix, invert_diagonal
 
 
@@ -514,7 +513,7 @@ class ConditionalGaussianDiagPDF(ConditionalGaussianPDF):
             self.ln_det_Sigma = -self.ln_det_Lambda
 
 
-class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
+class NNControlGaussianConditional(ConditionalGaussianPDF):
     """A conditional Gaussian density, where the transition model is determined through a (known) control variable u.
 
         .. math::
@@ -543,10 +542,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
         Sigma: jnp.ndarray,
         Dx: int,
         Du: int,
-        hidden_units: list = [
-            16,
-        ],
-        non_linearity: callable = objax.functional.tanh,
+        control_func: callable
     ):
         self.Sigma = Sigma
         self.R = Sigma.shape[0]
@@ -555,24 +551,21 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
         self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
         self.ln_det_Lambda = -self.ln_det_Sigma
         self.Dy, self.Dx, self.Du = self.Sigma.shape[1], Dx, Du
-        self.hidden_units = hidden_units
-        self.non_linearity = non_linearity
-        self.network = self._build_network()
+        self.control_func = control_func
+        
+    def __call__(self, x: jnp.ndarray, u: jnp.ndarray, **kwargs) -> pdf.GaussianPDF:
+        """Get Gaussian Density conditioned on :amt:`x`, i.e.
 
-    def _build_network(self) -> objax.Module:
-        """Construct the network.
+        .. math::
 
-        :return: The network.
-        :rtype: objax.Module
+            p(Y\\vert X=x) =  {\cal N}(\mu(X=x), \Sigma)
+
+        :param x: Instances, the :math:`\mu` should be conditioned on. Dimensions should be [N, Dx].
+        :type x: jnp.ndarray
+        :return: The density conditioned on x.
+        :rtype: pdf.GaussianPDF
         """
-        nn_list = []
-        prev_layer = self.Du
-        for num_hidden in self.hidden_units:
-            nn_list += [objax.nn.Linear(prev_layer, num_hidden), self.non_linearity]
-            prev_layer = num_hidden
-        nn_list += [objax.nn.Linear(prev_layer, self.Dy * (self.Dx + 1))]
-        network = objax.nn.Sequential(nn_list)
-        return network
+        return self.condition_on_x_u(x, u)
 
     def get_M_b(self, u: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Construct :math:`M(u)` and :math:`b(u)` from the output.
@@ -582,7 +575,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
         :return: Returns :math:`M(u)` [R, Dy, Dx] and :math:`b(u)` [R, Dy]
         :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
-        output = self.network(u)
+        output = self.control_func(u)
         M = output[:, : self.Dy * self.Dx].reshape((-1, self.Dy, self.Dx))
         b = output[:, self.Dy * self.Dx :]
         return M, b
@@ -627,7 +620,7 @@ class NNControlGaussianConditional(objax.Module, ConditionalGaussianPDF):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.get_conditional_mu(x)
 
-    def condition_on_x(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> pdf.GaussianPDF:
+    def condition_on_x_u(self, x: jnp.ndarray, u: jnp.array, **kwargs) -> pdf.GaussianPDF:
         """Return the Gaussian density
 
         .. math::

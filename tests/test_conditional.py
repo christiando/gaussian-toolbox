@@ -4,6 +4,7 @@ import pytest
 from jax import numpy as jnp
 from jax import scipy as jsc
 from jax import config
+import jax
 
 config.update("jax_enable_x64", True)
 import numpy as np
@@ -183,7 +184,8 @@ class TestConditionalGaussianPDF:
     def test_integrate_log_conditional(self, R, D, dim_y):
         px_given_y, pxy, dim_x = self.create_instance(R, D, dim_y)
         py = pxy.get_marginal(dim_y)
-        xy = pxy.sample(100000)[:, 0]
+        key = jax.random.PRNGKey(0)
+        xy = pxy.sample(key, 100000)[:, 0]
         x = xy[:, dim_x]
         y = xy[:, dim_y]
         r_sample = jnp.mean(
@@ -245,7 +247,8 @@ class TestNNControlGaussianConditional:
     @classmethod
     def create_instance(self, R, Dx, Dy, Du):
         Sigma = self.get_pd_matrix(R, Dy)
-        cond = conditional.NNControlGaussianConditional(Sigma, Dx, Du)
+        control_func = lambda u: jnp.tanh(jnp.dot(jnp.ones((Dy * (Dx + 1), Du)), u.T)).T
+        cond = conditional.NNControlGaussianConditional(Sigma, Dx, Du, control_func)
         return cond
 
     @pytest.mark.parametrize(
@@ -365,7 +368,8 @@ class TestNNControlGaussianConditional:
         dim_y = jnp.arange(Dy)
         dim_x = jnp.arange(Dy, D)
         py = pxy.get_marginal(dim_y)
-        xy = pxy.sample(100000)[:, 0]
+        key = jax.random.PRNGKey(0)
+        xy = pxy.sample(key, 100000)[:, 0]
         x = xy[:, dim_x]
         y = xy[:, dim_y]
         r_sample = jnp.mean(
