@@ -17,7 +17,8 @@ import numpy as np
 from . import measure
 from .utils.linalg import invert_matrix, invert_diagonal
 
-from dataclasses import dataclass, field
+from .utils.dataclass import dataclass
+from dataclasses import field
 
 @dataclass(kw_only=True)
 class GaussianPDF(measure.GaussianMeasure):
@@ -39,7 +40,6 @@ class GaussianPDF(measure.GaussianMeasure):
     nu: jnp.ndarray = field(init=False)
     ln_beta: jnp.ndarray = field(init=False)
     lnZ: jnp.ndarray = field(default=None, init=False)
-    
     
     def __post_init__(self):
         if self.Lambda is None:
@@ -242,7 +242,16 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     
     def __post_init__(self):
         self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
-        return super().__post_init__()
+        if self.nu is None:
+            self.nu = jnp.zeros((self.R, self.D))
+        if self.ln_beta is None:
+            self.ln_beta = jnp.zeros((self.R))
+        self.Sigma = self.Sigma
+        self.ln_det_Lambda = self.ln_det_Lambda
+        self.ln_det_Sigma = self.ln_det_Sigma
+        self._prepare_integration()
+        self.normalize()
+        
 
     def slice(self, indices: jnp.ndarray) -> "GaussianDiagPDF":
         """Return an object with only the specified entries.

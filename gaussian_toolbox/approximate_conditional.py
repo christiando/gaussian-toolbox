@@ -5,7 +5,7 @@ from typing import Tuple
 from . import pdf, factor, measure, conditional
 from .utils.linalg import invert_matrix
 
-from dataclasses import dataclass, field
+from .utils.dataclass import dataclass
 
 @dataclass(kw_only=True)
 class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
@@ -285,7 +285,16 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         self,
 
     ):
-        super().__post_init__()
+        if self.b is None:
+            self.b = jnp.zeros((self.R, self.Dy))
+        if self.Sigma is None and self.Lambda is None:
+            raise RuntimeError("Either Sigma or Lambda need to be specified.")
+        elif self.Sigma is not None:
+            if self.Lambda is None or self.ln_det_Sigma is None:
+                self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
+        else:
+            self.Sigma, ln_det_Lambda = invert_matrix(self.Lambda)
+            self.ln_det_Sigma = -ln_det_Lambda
         self.update_phi()
         
     @property
@@ -476,7 +485,16 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         self,
 
     ):
-        super().__post_init__()
+        if self.b is None:
+            self.b = jnp.zeros((self.R, self.Dy))
+        if self.Sigma is None and self.Lambda is None:
+            raise RuntimeError("Either Sigma or Lambda need to be specified.")
+        elif self.Sigma is not None:
+            if self.Lambda is None or self.ln_det_Sigma is None:
+                self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
+        else:
+            self.Sigma, ln_det_Lambda = invert_matrix(self.Lambda)
+            self.ln_det_Sigma = -ln_det_Lambda
         self.w0 = self.W[:, 0]
         self.W = self.W[:, 1:]
         self.update_phi()

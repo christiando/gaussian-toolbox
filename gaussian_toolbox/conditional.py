@@ -17,7 +17,8 @@ from typing import Tuple
 from . import pdf, factor, measure
 from .utils.linalg import invert_matrix, invert_diagonal
 
-from dataclasses import dataclass, field
+from .utils.dataclass import dataclass
+from dataclasses import field
 
 @dataclass(kw_only=True)
 class ConditionalGaussianPDF:

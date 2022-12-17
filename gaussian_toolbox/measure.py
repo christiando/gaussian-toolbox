@@ -13,7 +13,7 @@ from . import factor
 from typing import Tuple
 from .utils.linalg import invert_matrix, invert_diagonal
 
-from dataclasses import dataclass, field
+from .utils.dataclass import dataclass
 
 @dataclass(kw_only=True)
 class GaussianMeasure(factor.ConjugateFactor):
@@ -50,7 +50,10 @@ class GaussianMeasure(factor.ConjugateFactor):
     ln_det_Sigma: jnp.ndarray = None
 
     def __post_init__(self):
-        super().__post_init__()
+        if self.nu is None:
+            self.nu = jnp.zeros((self.R, self.D))
+        if self.ln_beta is None:
+            self.ln_beta = jnp.zeros((self.R))
         self.Sigma = self.Sigma
         self.ln_det_Lambda = self.ln_det_Lambda
         self.ln_det_Sigma = self.ln_det_Sigma

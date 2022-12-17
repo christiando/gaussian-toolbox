@@ -10,7 +10,9 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from .utils import linalg
-from dataclasses import dataclass, field
+#from dataclasses import dataclass, field
+from .utils.dataclass import dataclass
+from dataclasses import field
 
 @dataclass(kw_only=True)
 class ConjugateFactor:
@@ -302,7 +304,10 @@ class OneRankFactor(ConjugateFactor):
         if self.g is None:
             self.g = jnp.ones(self.R)
         self.Lambda = self._get_Lambda()
-        super().__post_init__()
+        if self.nu is None:
+            self.nu = jnp.zeros((self.R, self.D))
+        if self.ln_beta is None:
+            self.ln_beta = jnp.zeros((self.R))
         
     @property
     def R(self):
@@ -595,7 +600,10 @@ class ConstantFactor(ConjugateFactor):
     def __post_init__(self):
         self.Lambda = jnp.zeros((self.R, self.D, self.D))
         self.nu = jnp.zeros((self.R, self.D))
-        return super().__post_init__()
+        if self.nu is None:
+            self.nu = jnp.zeros((self.R, self.D))
+        if self.ln_beta is None:
+            self.ln_beta = jnp.zeros((self.R))
     
     @property
     def D(self):
