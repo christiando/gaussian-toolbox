@@ -362,7 +362,7 @@ class ConditionalGaussianPDF:
         :return: Returns the integral with respect to density :math:`p(Y,X)`.
         :rtype: jnp.ndarray
         """
-        if self.R != 1:
+        if self.R != 1 and self.R != p_yx.R:
             raise NotImplementedError("Only implemented for R=1.")
         A = jnp.empty((self.R, self.Dy, self.Dy + self.Dx))
         A = A.at[:, :, : self.Dy].set(jnp.eye(self.Dy, self.Dy)[None])
@@ -551,6 +551,9 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
         self.ln_det_Lambda = -self.ln_det_Sigma
         self.Dy, self.Dx, self.Du = self.Sigma.shape[1], Dx, Du
+        dummy_input = jnp.zeros([1, Du])
+        dummy_output = control_func(dummy_input)
+        assert dummy_output.shape == (1, self.Dy * (self.Dx + 1))
         self.control_func = control_func
         
     def __call__(self, x: jnp.ndarray, u: jnp.ndarray, **kwargs) -> pdf.GaussianPDF:
