@@ -13,7 +13,9 @@ from . import factor
 from typing import Tuple
 from .utils.linalg import invert_matrix, invert_diagonal
 
+from dataclasses import dataclass, field
 
+@dataclass(kw_only=True)
 class GaussianMeasure(factor.ConjugateFactor):
     r"""A measure with a Gaussian form.
 
@@ -40,23 +42,24 @@ class GaussianMeasure(factor.ConjugateFactor):
     :param ln_det_Sigma: Log determinant of Sigma. Dimensions should be [R], defaults to None
     :type ln_det_Sigma: jnp.ndarray, optional
     """
+    Lambda: jnp.ndarray
+    nu: jnp.ndarray = None
+    ln_beta: jnp.ndarray = None
+    Sigma: jnp.ndarray = None
+    ln_det_Lambda: jnp.ndarray = None
+    ln_det_Sigma: jnp.ndarray = None
 
-    def __init__(
-        self,
-        Lambda: jnp.ndarray,
-        nu: jnp.ndarray = None,
-        ln_beta: jnp.ndarray = None,
-        Sigma: jnp.ndarray = None,
-        ln_det_Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
-    ):
-        super().__init__(Lambda, nu, ln_beta)
-        self.Sigma = Sigma
-        self.ln_det_Lambda = ln_det_Lambda
-        self.ln_det_Sigma = ln_det_Sigma
+    def __post_init__(self):
+        super().__post_init__()
+        self.Sigma = self.Sigma
+        self.ln_det_Lambda = self.ln_det_Lambda
+        self.ln_det_Sigma = self.ln_det_Sigma
         self.lnZ = None
         self.mu = None
-        self.integration_dict = {
+       
+    @property 
+    def integration_dict(self) -> dict:
+        return {
             "1": self.integral,
             "x": self.integrate_x,
             "(Ax+a)": self.integrate_general_linear,
@@ -86,7 +89,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         nu_new = jnp.take(self.nu, indices, axis=0)
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        new_measure = GaussianMeasure(Lambda_new, nu_new, ln_beta_new)
+        new_measure = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             new_measure.Sigma = jnp.take(self.Sigma, indices, axis=0)
             new_measure.ln_det_Sigma = jnp.take(self.ln_det_Sigma, indices, axis=0)
@@ -176,7 +179,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
         nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
         ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
-        new_measure = GaussianMeasure(Lambda_new, nu_new, ln_beta_new)
+        new_measure = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             new_measure._prepare_integration()
         return new_measure
@@ -1074,7 +1077,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         """
         return factor.intergate_log_factor(self)
 
-
+@dataclass(kw_only=True)
 class GaussianDiagMeasure(GaussianMeasure):
     r"""A measure with a Gaussian form.
 
@@ -1117,7 +1120,7 @@ class GaussianDiagMeasure(GaussianMeasure):
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         nu_new = jnp.take(self.nu, indices, axis=0)
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        new_measure = GaussianDiagMeasure(Lambda_new, nu_new, ln_beta_new)
+        new_measure = GaussianDiagMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             new_measure.Sigma = jnp.take(self.Sigma, indices, axis=0)
             new_measure.ln_det_Sigma = jnp.take(self.ln_det_Sigma, indices, axis=0)
@@ -1137,7 +1140,7 @@ class GaussianDiagMeasure(GaussianMeasure):
         Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
         nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
         ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
-        new_measure = GaussianDiagMeasure(Lambda_new, nu_new, ln_beta_new)
+        new_measure = GaussianDiagMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             new_measure._prepare_integration()
         return new_measure

@@ -10,8 +10,9 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from .utils import linalg
+from dataclasses import dataclass, field
 
-
+@dataclass(kw_only=True)
 class ConjugateFactor:
     r"""Object representing a factor which is conjugate to a Gaussian measure.
     
@@ -36,21 +37,23 @@ class ConjugateFactor:
         defaults to None
     :type ln_beta: jnp.ndarray, optional
     """
-
-    def __init__(
-        self, Lambda: jnp.ndarray, nu: jnp.ndarray = None, ln_beta: jnp.ndarray = None
-    ):
-        self.R, self.D = Lambda.shape[0], Lambda.shape[1]
-        self.Lambda = Lambda
-
-        if nu is None:
+    Lambda: jnp.ndarray
+    nu: jnp.ndarray = None
+    ln_beta: jnp.ndarray = None
+    
+    def __post_init__(self):
+        if self.nu is None:
             self.nu = jnp.zeros((self.R, self.D))
-        else:
-            self.nu = nu
-        if ln_beta is None:
+        if self.ln_beta is None:
             self.ln_beta = jnp.zeros((self.R))
-        else:
-            self.ln_beta = ln_beta
+
+    @property
+    def R(self):
+        return self.Lambda.shape[0]
+    
+    @property
+    def D(self):
+        return self.Lambda.shape[1]
 
     def __str__(self) -> str:
         return "Conjugate factor u(x)"
@@ -119,7 +122,7 @@ class ConjugateFactor:
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         nu_new = jnp.take(self.nu, indices, axis=0)
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        return ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
+        return ConjugateFactor(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
 
     def product(self) -> "ConjugateFactor":
         """Compute the product over all factors.
@@ -134,7 +137,7 @@ class ConjugateFactor:
         Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
         nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
         ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
-        return ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
+        return ConjugateFactor(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
 
     def _multiply_with_measure(
         self, measure: "GaussianMeasure", update_full: bool = False
@@ -254,21 +257,15 @@ class ConjugateFactor:
     def from_dict(cls, cls_dict: dict):
         return cls(**cls_dict)
 
-
+@dataclass(kw_only=True)
 class LowRankFactor(ConjugateFactor):
     # TODO implement low rank updates with Woodbury inversion.
-    def __init__(
-        self,
-        Lambda: jnp.ndarray = None,
-        nu: jnp.ndarray = None,
-        ln_beta: jnp.ndarray = None,
-    ):
-        """So far only place-holder.
-        """
-        super().__init__(Lambda, nu, ln_beta)
+    Lambda: jnp.array
+    nu: jnp.ndarray = None
+    ln_beta: jnp.ndarray = None
 
-
-class OneRankFactor(LowRankFactor):
+@dataclass(kw_only=True)
+class OneRankFactor(ConjugateFactor):
     r"""A low rank term, which can be multiplied with a Gaussian and the result is still a Gaussian.
 
     It has the functional form
@@ -292,23 +289,28 @@ class OneRankFactor(LowRankFactor):
         defaults to None
     :type ln_beta: jnp.ndarray, optional
     """
+    v: jnp.ndarray
+    g: jnp.ndarray = None
+    Lambda: jnp.ndarray = field(init=False)
+    nu: jnp.ndarray = None
+    ln_beta: jnp.ndarray = None
+    
 
-    def __init__(
-        self,
-        v: jnp.ndarray,
-        g: jnp.ndarray = None,
-        nu: jnp.ndarray = None,
-        ln_beta: jnp.ndarray = None,
-    ):
-        self.R, self.D = v.shape
-        self.v = v
-        if g is None:
+    def __post_init__(self):
+        if self.v is None:
+            raise AttributeError('v must be defined!')
+        if self.g is None:
             self.g = jnp.ones(self.R)
-        else:
-            self.g = g
-
-        Lambda = self._get_Lambda()
-        super().__init__(Lambda, nu, ln_beta)
+        self.Lambda = self._get_Lambda()
+        super().__post_init__()
+        
+    @property
+    def R(self):
+        return self.v.shape[0]
+        
+    @property
+    def D(self):
+        return self.v.shape[1]
 
     def slice(self, indices: jnp.ndarray) -> "OneRankFactor":
         """Return an object with only the specified entries.
@@ -322,7 +324,7 @@ class OneRankFactor(LowRankFactor):
         g_new = jnp.take(self.g, indices, axis=0)
         nu_new = jnp.take(self.nu, indices, axis=0)
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        return OneRankFactor(v_new, g_new, nu_new, ln_beta_new)
+        return OneRankFactor(v=v_new, g=g_new, nu=nu_new, ln_beta=ln_beta_new)
 
     def _get_Lambda(self) -> jnp.ndarray:
         r"""Compute the rank one matrix :math:`Lambda=g* vv^\top`
@@ -447,35 +449,24 @@ class OneRankFactor(LowRankFactor):
         }
         return factor_dict
 
-
+@dataclass(kw_only=True)
 class LinearFactor(ConjugateFactor):
-    def __init__(self, nu: jnp.ndarray, ln_beta: jnp.ndarray = None):
-        r"""A term, which can be multiplied with a Gaussian and the result is still a Gaussian.
-        
-        It has the functional form
-        
-        .. math::
-        
-            f(X) = \beta * exp(X^\top \nu),
-
-        D is the dimension, and R the number of Gaussians.
-
-        Note: :math:`\nu` should be specified!
-
-        :param nu: Information vector. Dimensions should be [R, D].
-        :type nu: jnp.ndarray
-        :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
-            defaults to None
-        :type ln_beta: jnp.ndarray, optional
-        """
-
-        self.R, self.D = nu.shape[0], nu.shape[1]
-        self.nu = nu
+    nu: jnp.ndarray
+    ln_beta: jnp.ndarray = None
+    Lambda: jnp.ndarray = field(init=False)
+    
+    def __post_init__(self):
         self.Lambda = jnp.zeros((self.R, self.D, self.D))
-        if ln_beta is None:
+        if self.ln_beta is None:
             self.ln_beta = jnp.zeros((self.R))
-        else:
-            self.ln_beta = ln_beta
+
+    @property
+    def R(self):
+        return self.nu.shape[0]
+    
+    @property
+    def D(self):
+        return self.nu.shape[1]
 
     def slice(self, indices: jnp.ndarray) -> "LinearFactor":
         """Return an object with only the specified entries.
@@ -487,7 +478,7 @@ class LinearFactor(ConjugateFactor):
         """
         nu_new = jnp.take(self.nu, indices, axis=0)
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        return LinearFactor(nu_new, ln_beta_new)
+        return LinearFactor(nu=nu_new, ln_beta=ln_beta_new)
 
     def _multiply_with_measure(
         self, measure: "GaussianMeasure", update_full=True
@@ -583,7 +574,7 @@ class LinearFactor(ConjugateFactor):
         }
         return factor_dict
 
-
+@dataclass(kw_only=True)
 class ConstantFactor(ConjugateFactor):
     """A term, which can be multiplied with a Gaussian and the result is still a Gaussian.
     
@@ -596,13 +587,23 @@ class ConstantFactor(ConjugateFactor):
     :param D: The dimension of the Gaussian.
     :type D: int
     """
-
-    def __init__(self, ln_beta: jnp.ndarray, D: int):
-        self.R, self.D = ln_beta.shape[0], D
-        Lambda = jnp.zeros((self.R, self.D, self.D))
-        nu = jnp.zeros((self.R, self.D))
-        ln_beta = ln_beta
-        super().__init__(Lambda, nu, ln_beta)
+    ln_beta: jnp.ndarray
+    num_dim: int
+    Lambda: jnp.ndarray = field(init=False)
+    nu: jnp.ndarray = field(init=False)
+    
+    def __post_init__(self):
+        self.Lambda = jnp.zeros((self.R, self.D, self.D))
+        self.nu = jnp.zeros((self.R, self.D))
+        return super().__post_init__()
+    
+    @property
+    def D(self):
+        return self.num_dim
+    
+    @property
+    def R(self):
+        return self.ln_beta.shape[0]
 
     def slice(self, indices: jnp.ndarray) -> "ConstantFactor":
         """Return an object with only the specified entries.
@@ -613,7 +614,7 @@ class ConstantFactor(ConjugateFactor):
         :rtype: ConstantFactor
         """
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        return ConstantFactor(ln_beta_new, self.D)
+        return ConstantFactor(ln_beta=ln_beta_new, num_dim=self.D)
 
     def _multiply_with_measure(
         self, measure: "GaussianMeasure", update_full=True

@@ -17,7 +17,9 @@ from typing import Tuple
 from . import pdf, factor, measure
 from .utils.linalg import invert_matrix, invert_diagonal
 
+from dataclasses import dataclass, field
 
+@dataclass(kw_only=True)
 class ConditionalGaussianPDF:
     """A conditional Gaussian density
 
@@ -40,35 +42,35 @@ class ConditionalGaussianPDF:
     :type ln_det_Sigma: jnp.ndarray, optional
     :raises RuntimeError: Raised if neiterh Sigma nor Lambda are provided
     """
-
-    def __init__(
-        self,
-        M: jnp.ndarray,
-        b: jnp.ndarray = None,
-        Sigma: jnp.ndarray = None,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
-    ):
-        self.R, self.Dy, self.Dx = M.shape
-
-        self.M = M
-        if b is None:
+    M: jnp.ndarray
+    b: jnp.ndarray = None
+    Sigma: jnp.ndarray = None
+    Lambda: jnp.ndarray = None
+    ln_det_Sigma: jnp.ndarray = None
+    
+    def __post_init__(self):
+        if self.b is None:
             self.b = jnp.zeros((self.R, self.Dy))
-        else:
-            self.b = b
-        if Sigma is None and Lambda is None:
+        if self.Sigma is None and self.Lambda is None:
             raise RuntimeError("Either Sigma or Lambda need to be specified.")
-        elif Sigma is not None:
-            self.Sigma = Sigma
-            if Lambda is None or ln_det_Sigma is None:
+        elif self.Sigma is not None:
+            if self.Lambda is None or self.ln_det_Sigma is None:
                 self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
-            else:
-                self.Lambda, self.ln_det_Sigma = Lambda, ln_det_Sigma
-            self.ln_det_Lambda = -self.ln_det_Sigma
         else:
-            self.Lambda = Lambda
-            self.Sigma, self.ln_det_Lambda = invert_matrix(self.Lambda)
-            self.ln_det_Sigma = -self.ln_det_Lambda
+            self.Sigma, ln_det_Lambda = invert_matrix(self.Lambda)
+            self.ln_det_Sigma = -ln_det_Lambda
+        
+    @property
+    def R(self):
+        return self.M.shape[0]
+    
+    @property
+    def Dy(self):
+        return self.M.shape[1]
+    
+    @property
+    def Dx(self):
+        return self.M.shape[2]
 
     def __str__(self) -> str:
         return "Conditional Gaussian density p(y|x)"
@@ -101,7 +103,7 @@ class ConditionalGaussianPDF:
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
         new_measure = ConditionalGaussianPDF(
-            M_new, b_new, Sigma_new, Lambda_new, ln_det_Sigma_new
+            M=M_new, b=b_new, Sigma=Sigma_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new
         )
         return new_measure
 
@@ -178,7 +180,7 @@ class ConditionalGaussianPDF:
         ln_beta_new = -0.5 * (
             yb_Lambda_yb + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma
         )
-        factor_new = factor.ConjugateFactor(Lambda_new, nu_new, ln_beta_new)
+        factor_new = factor.ConjugateFactor(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         return factor_new
 
     def affine_joint_transformation(
@@ -262,10 +264,10 @@ class ConditionalGaussianPDF:
             LSigmaL = jnp.tile(LSigmaL[:, None], (1, p_x.R)).reshape((R, p_x.D, p_x.D))
             delta_ln_det = jnp.linalg.slogdet(Lambda_x - LSigmaL)[1]
             ln_det_Sigma_xy = -(
-                jnp.tile(self.ln_det_Lambda[:, None], (1, p_x.R)).reshape((R,))
+                jnp.tile(-self.ln_det_Sigma[:, None], (1, p_x.R)).reshape((R,))
                 + delta_ln_det
             )
-        return pdf.GaussianPDF(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
+        return pdf.GaussianPDF(Sigma=Sigma_xy, mu=mu_xy, Lambda=Lambda_xy, ln_det_Sigma=ln_det_Sigma_xy)
 
     def affine_marginal_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
@@ -294,7 +296,7 @@ class ConditionalGaussianPDF:
         MSigma_x = jnp.einsum("abc,dce->adbe", self.M, p_x.Sigma)  # [R1,R,Dy,D]
         MSigmaM = jnp.einsum("abcd,aed->abce", MSigma_x, self.M)
         Sigma_y = (self.Sigma[:, None] + MSigmaM).reshape((R, self.Dy, self.Dy))
-        return pdf.GaussianPDF(Sigma_y, mu_y)
+        return pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y)
 
     def affine_conditional_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
@@ -342,11 +344,11 @@ class ConditionalGaussianPDF:
         b_x = b_x.reshape((R, p_x.D))
         M_x = M_x.reshape((R, p_x.D, self.Dy))
         return ConditionalGaussianPDF(
-            M_x,
-            b_x,
-            Sigma_x,
-            Lambda_x,
-            -ln_det_Lambda_x,
+            M=M_x,
+            b=b_x,
+            Sigma=Sigma_x,
+            Lambda=Lambda_x,
+            ln_det_Sigma=-ln_det_Lambda_x,
         )
 
     def integrate_log_conditional(self, p_yx: pdf.GaussianPDF, **kwargs) -> jnp.ndarray:
@@ -457,9 +459,8 @@ class ConditionalGaussianPDF:
             raise ValueError("Dimensions of the new Sigma don't match.")
         self.Sigma = Sigma_new
         self.Lambda, self.ln_det_Sigma = invert_matrix(Sigma_new)
-        self.ln_det_Lambda = -self.ln_det_Sigma
 
-
+@dataclass(kw_only=True)
 class ConditionalGaussianDiagPDF(ConditionalGaussianPDF):
     """A conditional Gaussian density
 
@@ -482,37 +483,20 @@ class ConditionalGaussianDiagPDF(ConditionalGaussianPDF):
     :type ln_det_Sigma: jnp.ndarray, optional
     :raises RuntimeError: Raised if neiterh Sigma nor Lambda are provided
     """
-
-    def __init__(
-        self,
-        M: jnp.ndarray,
-        b: jnp.ndarray = None,
-        Sigma: jnp.ndarray = None,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
-    ):
-        self.R, self.Dy, self.Dx = M.shape
-
-        self.M = M
-        if b is None:
+    
+    def __post_init__(self):
+        if self.b is None:
             self.b = jnp.zeros((self.R, self.Dy))
-        else:
-            self.b = b
-        if Sigma is None and Lambda is None:
+        if self.Sigma is None and self.Lambda is None:
             raise RuntimeError("Either Sigma or Lambda need to be specified.")
-        elif Sigma is not None:
-            self.Sigma = Sigma
-            if Lambda is None or ln_det_Sigma is None:
+        elif self.Sigma is not None:
+            if self.Lambda is None or self.ln_det_Sigma is None:
                 self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
-            else:
-                self.Lambda, self.ln_det_Sigma = Lambda, ln_det_Sigma
-            self.ln_det_Lambda = -self.ln_det_Sigma
         else:
-            self.Lambda = Lambda
-            self.Sigma, self.ln_det_Lambda = invert_diagonal(self.Lambda)
-            self.ln_det_Sigma = -self.ln_det_Lambda
+            self.Sigma, ln_det_Lambda = invert_diagonal(self.Lambda)
+            self.ln_det_Sigma = -ln_det_Lambda
 
-
+@dataclass(kw_only=True)
 class NNControlGaussianConditional(ConditionalGaussianPDF):
     """A conditional Gaussian density, where the transition model is determined through a (known) control variable u.
 
@@ -536,26 +520,39 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
     :type non_linearity: callable, optional
     :raises NotImplementedError: Raised when the leading dimension of Sigma is not 1.
     """
+    Sigma: jnp.ndarray
+    num_cond_dim: int
+    num_control_dim: int
+    control_func: callable
+    M: jnp.ndarray = field(init=False)
 
-    def __init__(
+    def __post_init__(
         self,
-        Sigma: jnp.ndarray,
-        Dx: int,
-        Du: int,
-        control_func: callable
+
     ):
-        self.Sigma = Sigma
-        self.R = Sigma.shape[0]
         if self.R != 1:
             raise NotImplementedError("So far only R=1 is supported.")
         self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
-        self.ln_det_Lambda = -self.ln_det_Sigma
-        self.Dy, self.Dx, self.Du = self.Sigma.shape[1], Dx, Du
-        dummy_input = jnp.zeros([1, Du])
-        dummy_output = control_func(dummy_input)
+        dummy_input = jnp.zeros([1, self.Du])
+        dummy_output = self.control_func(dummy_input)
         assert dummy_output.shape == (1, self.Dy * (self.Dx + 1))
-        self.control_func = control_func
         
+    @property
+    def R(self):
+        return self.Sigma.shape[0]
+    
+    @property
+    def Dy(self):
+        return self.Sigma.shape[1]
+    
+    @property
+    def Du(self):
+        return self.num_control_dim
+    
+    @property
+    def Dx(self):
+        return self.num_cond_dim
+    
     def __call__(self, x: jnp.ndarray, u: jnp.ndarray, **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :amt:`x`, i.e.
 
@@ -775,7 +772,7 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.integrate_log_conditional_y(phi_x)
 
-
+@dataclass(kw_only=True)
 class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     """A conditional Gaussian density
 
@@ -794,28 +791,38 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     :type ln_det_Sigma: jnp.ndarray, optional
     :raises RuntimeError: Raised if neiterh Sigma nor Lambda are provided
     """
+    Sigma: jnp.ndarray = None
+    Lambda: jnp.ndarray = None
+    ln_det_Sigma: jnp.ndarray = None
+    num_cond_dim: int = field(init=False)
+    num_control_dim: int = field(init=False)
+    M: jnp.ndarray = field(init=False)
+    b: jnp.ndarray = field(init=False)
 
-    def __init__(
+    def __post_init__(
         self,
-        Sigma: jnp.ndarray = None,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
     ):
-
-        if Sigma is None and Lambda is None:
+        if self.Sigma is None and self.Lambda is None:
             raise RuntimeError("Either Sigma or Lambda need to be specified.")
-        elif Sigma is not None:
-            self.Sigma = Sigma
-            if Lambda is None or ln_det_Sigma is None:
+        elif self.Sigma is not None:
+            if self.Lambda is None or self.ln_det_Sigma is None:
                 self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
-            else:
-                self.Lambda, self.ln_det_Sigma = Lambda, ln_det_Sigma
-            self.ln_det_Lambda = -self.ln_det_Sigma
         else:
-            self.Lambda = Lambda
-            self.Sigma, self.ln_det_Lambda = invert_matrix(self.Lambda)
-            self.ln_det_Sigma = -self.ln_det_Lambda
-        self.R, self.Dx, self.Dy = self.Sigma.shape
+            self.Sigma, ln_det_Lambda = invert_matrix(self.Lambda)
+            self.ln_det_Sigma = -ln_det_Lambda
+      
+    
+    @property
+    def R(self):
+        return self.Sigma.shape[0]
+    
+    @property
+    def Dx(self):
+        return self.Sigma.shape[1]
+    
+    @property
+    def Dy(self):
+        return self.Sigma.shape[1]
 
     def __str__(self) -> str:
         return "Conditional Gaussian density p(y|x)"
@@ -846,7 +853,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
         new_measure = ConditionalIdentityGaussianPDF(
-            Sigma_new, Lambda_new, ln_det_Sigma_new
+            Sigma=Sigma_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new
         )
         return new_measure
 
@@ -914,7 +921,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         ln_beta_new = -0.5 * (
             y_Lambda_y + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma
         )
-        factor_new = factor.ConjugateFactor(self.Lambda, nu_new, ln_beta_new)
+        factor_new = factor.ConjugateFactor(Lambda=self.Lambda, nu=nu_new, ln_beta=ln_beta_new)
         return factor_new
 
     def affine_joint_transformation(
@@ -990,10 +997,10 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
             )
             delta_ln_det = jnp.linalg.slogdet(Lambda_x - LSigmaL)[1]
             ln_det_Sigma_xy = -(
-                jnp.tile(self.ln_det_Lambda[:, None], (1, p_x.R)).reshape((R,))
+                jnp.tile(-self.ln_det_Sigma[:, None], (1, p_x.R)).reshape((R,))
                 + delta_ln_det
             )
-        return pdf.GaussianPDF(Sigma_xy, mu_xy, Lambda_xy, ln_det_Sigma_xy)
+        return pdf.GaussianPDF(Sigma=Sigma_xy, mu=mu_xy, Lambda=Lambda_xy, ln_det_Sigma=ln_det_Sigma_xy)
 
     def affine_marginal_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
@@ -1022,7 +1029,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         Sigma_y = (self.Sigma[:, None] + p_x.Sigma[:, None]).reshape(
             (R, self.Dy, self.Dy)
         )
-        return pdf.GaussianPDF(Sigma_y, mu_y)
+        return pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y)
 
     def affine_conditional_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
@@ -1067,11 +1074,11 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         b_x = b_x.reshape((R, p_x.D))
         M_x = M_x.reshape((R, p_x.D, self.Dy))
         return ConditionalGaussianPDF(
-            M_x,
-            b_x,
-            Sigma_x,
-            Lambda_x,
-            -ln_det_Lambda_x,
+            M=M_x,
+            b=b_x,
+            Sigma=Sigma_x,
+            Lambda=Lambda_x,
+            ln_det_Sigma=-ln_det_Lambda_x,
         )
 
     def integrate_log_conditional(self, p_yx: pdf.GaussianPDF, **kwargs) -> jnp.ndarray:
@@ -1174,9 +1181,8 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
             raise ValueError("Dimensions of the new Sigma don't match.")
         self.Sigma = Sigma_new
         self.Lambda, self.ln_det_Sigma = invert_matrix(Sigma_new)
-        self.ln_det_Lambda = -self.ln_det_Sigma
 
-
+@dataclass(kw_only=True)
 class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
     """A conditional Gaussian density
 
@@ -1196,27 +1202,17 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
     :raises RuntimeError: Raised if neiterh Sigma nor Lambda are provided
     """
 
-    def __init__(
+    def __post_init__(
         self,
-        Sigma: jnp.ndarray = None,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
     ):
-
-        if Sigma is None and Lambda is None:
+        if self.Sigma is None and self.Lambda is None:
             raise RuntimeError("Either Sigma or Lambda need to be specified.")
-        elif Sigma is not None:
-            self.Sigma = Sigma
-            if Lambda is None or ln_det_Sigma is None:
+        elif self.Sigma is not None:
+            if self.Lambda is None or self.ln_det_Sigma is None:
                 self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
-            else:
-                self.Lambda, self.ln_det_Sigma = Lambda, ln_det_Sigma
-            self.ln_det_Lambda = -self.ln_det_Sigma
         else:
-            self.Lambda = Lambda
-            self.Sigma, self.ln_det_Lambda = invert_diagonal(self.Lambda)
-            self.ln_det_Sigma = -self.ln_det_Lambda
-        self.R, self.Dx, self.Dy = self.Sigma.shape
+            self.Sigma, ln_det_Lambda = invert_diagonal(self.Lambda)
+            self.ln_det_Sigma = -ln_det_Lambda
 
     def __str__(self) -> str:
         return "Conditional Gaussian density p(y|x)"
@@ -1247,7 +1243,7 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
         new_measure = ConditionalIdentityGaussianPDF(
-            Sigma_new, Lambda_new, ln_det_Sigma_new
+            Sigma=Sigma_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new
         )
         return new_measure
 
@@ -1308,7 +1304,7 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
         ln_beta_new = -0.5 * (
             y_Lambda_y + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma
         )
-        factor_new = factor.ConjugateFactor(self.Lambda, nu_new, ln_beta_new)
+        factor_new = factor.ConjugateFactor(Lambda=self.Lambda, nu=nu_new, ln_beta=ln_beta_new)
         return factor_new
 
     def integrate_log_conditional(self, p_yx: pdf.GaussianPDF, **kwargs) -> jnp.ndarray:

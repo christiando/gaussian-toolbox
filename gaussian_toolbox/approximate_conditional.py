@@ -5,7 +5,9 @@ from typing import Tuple
 from . import pdf, factor, measure, conditional
 from .utils.linalg import invert_matrix
 
+from dataclasses import dataclass, field
 
+@dataclass(kw_only=True)
 class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     """ Base class for approximate conditional.
     """
@@ -191,6 +193,16 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
             M=M_new, b=b_new, Sigma=Sigma_new,
         )
         return cond_p_xy
+    
+    def integrate_log_conditional(
+        self, p_yx: measure.GaussianMeasure, **kwargs
+    ) -> jnp.ndarray:
+        raise NotImplementedError("Log integral not implemented!")
+
+    def integrate_log_conditional_y(
+        self, p_x: measure.GaussianMeasure, **kwargs
+    ) -> callable:
+        raise NotImplementedError("Log integral not implemented!")
 
     def affine_marginal_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
@@ -222,7 +234,7 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y,)
         return p_y
 
-
+@dataclass(kw_only=True)
 class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
     r"""A conditional Gaussian density, with a linear RBF mean (LRBFM) function,
 
@@ -261,23 +273,32 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
     :param ln_det_Sigma:  Log determinant of the covariance matrix. Dimensions should be [1], defaults to None
     :type ln_det_Sigma: jnp.ndarray, optional
     """
+    M: jnp.ndarray
+    b: jnp.ndarray
+    mu: jnp.ndarray
+    length_scale: jnp.ndarray
+    Sigma: jnp.ndarray = None
+    Lambda: jnp.ndarray = None
+    ln_det_Sigma: jnp.ndarray = None
 
-    def __init__(
+    def __post_init__(
         self,
-        M: jnp.ndarray,
-        b: jnp.ndarray,
-        mu: jnp.ndarray,
-        length_scale: jnp.ndarray,
-        Sigma: jnp.ndarray = None,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
+
     ):
-        super().__init__(M, b, Sigma, Lambda, ln_det_Sigma)
-        self.mu = mu
-        self.length_scale = length_scale
-        self.Dk, self.Dx = self.mu.shape
-        self.Dphi = self.Dk + self.Dx
+        super().__post_init__()
         self.update_phi()
+        
+    @property
+    def Dk(self):
+        return self.mu.shape[0]
+    
+    @property
+    def Dx(self):
+        return self.mu.shape[1]
+    
+    @property
+    def Dphi(self):
+        return self.Dk + self.Dx
 
     def update_phi(self):
         """ Set up the non-linear kernel function in :math:`\phi(x)`.
@@ -407,7 +428,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         )
         return log_expectation_y
 
-
+@dataclass(kw_only=True)
 class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
     r"""A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
 
@@ -444,22 +465,34 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
     :type ln_det_Sigma: jnp.ndarray, optional
     """
 
-    def __init__(
+    M: jnp.ndarray
+    b: jnp.ndarray
+    W: jnp.ndarray
+    Sigma: jnp.ndarray = None
+    Lambda: jnp.ndarray = None
+    ln_det_Sigma: jnp.ndarray = None
+    
+    def __post_init__(
         self,
-        M: jnp.ndarray,
-        b: jnp.ndarray,
-        W: jnp.ndarray,
-        Sigma: jnp.ndarray = None,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
+
     ):
-        super().__init__(M, b, Sigma, Lambda, ln_det_Sigma)
-        self.w0 = W[:, 0]
-        self.W = W[:, 1:]
-        self.Dx = self.W.shape[1]
-        self.Dk = self.W.shape[0]
-        self.Dphi = self.Dk + self.Dx
+        super().__post_init__()
+        self.w0 = self.W[:, 0]
+        self.W = self.W[:, 1:]
         self.update_phi()
+        
+    @property
+    def Dk(self):
+        return self.W.shape[0]
+    
+    @property
+    def Dx(self):
+        return self.W.shape[1]
+    
+    @property
+    def Dphi(self):
+        return self.Dk + self.Dx
+    
 
     def update_phi(self):
         """ Set up the non-linear kernel function in :math:`\phi(x)`.
@@ -589,7 +622,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         )
         return log_expectation_y
 
-
+@dataclass(kw_only=True)
 class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     """A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
 
@@ -622,27 +655,37 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     :type beta: jnp.ndarray
     :raises NotImplementedError: Only works with R==1.
     """
+    M: jnp.ndarray
+    b: jnp.ndarray
+    sigma_x: jnp.ndarray
+    U: jnp.ndarray
+    W: jnp.ndarray
+    beta: jnp.ndarray
 
-    def __init__(
+    def __post_init__(
         self,
-        M: jnp.ndarray,
-        b: jnp.ndarray,
-        sigma_x: jnp.ndarray,
-        U: jnp.ndarray,
-        W: jnp.ndarray,
-        beta: jnp.ndarray,
+
     ):
-        self.R, self.Dy, self.Dx = M.shape
         if self.R != 1:
             raise NotImplementedError("So far only R=1 is supported.")
-        self.Du = beta.shape[0]
-        self.M = M
-        self.b = b
-        self.U = U
-        self.W = W
-        self.beta = beta
-        self.sigma2_x = sigma_x ** 2
+        self.sigma2_x = self.sigma_x ** 2
         self._setup_noise_diagonal_functions()
+        
+    @property
+    def R(self):
+        return self.M.shape[0]
+    
+    @property
+    def Dy(self):
+        return self.M.shape[1]
+    
+    @property
+    def Dx(self):
+        return self.M.shape[2]
+    
+    @property
+    def Du(self):
+        return self.beta.shape[0]
 
     def _setup_noise_diagonal_functions(self):
         """Create the functions, that later need to be integrated over, i.e.
@@ -653,8 +696,8 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         """
         nu = self.W[:, 1:]
         ln_beta = self.W[:, 0]
-        self.exp_h_plus = factor.LinearFactor(nu, ln_beta)
-        self.exp_h_minus = factor.LinearFactor(-nu, -ln_beta)
+        self.exp_h_plus = factor.LinearFactor(nu=nu, ln_beta=ln_beta)
+        self.exp_h_minus = factor.LinearFactor(nu=-nu, ln_beta=-ln_beta)
 
     def get_conditional_cov(self, x: jnp.ndarray) -> jnp.ndarray:
         r"""Evaluate the covariance at a given :math:`X=x`, i.e.
@@ -848,14 +891,4 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y)
         return p_y
-
-    def integrate_log_conditional(
-        self, p_yx: measure.GaussianMeasure, **kwargs
-    ) -> jnp.ndarray:
-        raise NotImplementedError("Log integal not implemented!")
-
-    def integrate_log_conditional_y(
-        self, p_x: measure.GaussianMeasure, **kwargs
-    ) -> callable:
-        raise NotImplementedError("Log integal not implemented!")
 

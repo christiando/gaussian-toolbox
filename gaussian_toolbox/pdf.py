@@ -17,7 +17,9 @@ import numpy as np
 from . import measure
 from .utils.linalg import invert_matrix, invert_diagonal
 
+from dataclasses import dataclass, field
 
+@dataclass(kw_only=True)
 class GaussianPDF(measure.GaussianMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix.
 
@@ -30,24 +32,21 @@ class GaussianPDF(measure.GaussianMeasure):
     :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
     :type ln_det_Sigma: jnp.ndarray, optional
     """
-
-    def __init__(
-        self,
-        Sigma: jnp.ndarray,
-        mu: jnp.ndarray,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
-    ):
-        if Lambda is None:
-            Lambda, ln_det_Sigma = invert_matrix(Sigma)
-        elif ln_det_Sigma is None:
-            ln_det_Sigma = jnp.linalg.slogdet(Sigma)[1]
-        nu = jnp.einsum("abc,ab->ac", Lambda, mu)
-        super().__init__(Lambda=Lambda, nu=nu)
-        self.Sigma = Sigma
-        self.mu = mu
-        self.ln_det_Sigma = ln_det_Sigma
-        self.ln_det_Lambda = -ln_det_Sigma
+    Sigma: jnp.ndarray
+    mu: jnp.ndarray
+    Lambda: jnp.ndarray = None
+    ln_det_Sigma: jnp.ndarray = None
+    nu: jnp.ndarray = field(init=False)
+    ln_beta: jnp.ndarray = field(init=False)
+    lnZ: jnp.ndarray = field(default=None, init=False)
+    
+    
+    def __post_init__(self):
+        if self.Lambda is None:
+            self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
+        elif self.ln_det_Sigma is None:
+            self.ln_det_Sigma = jnp.linalg.slogdet(self.Sigma)[1]
+        self.nu = jnp.einsum("abc,ab->ac", self.Lambda, self.mu)
         self._prepare_integration()
         self.normalize()
 
@@ -83,7 +82,7 @@ class GaussianPDF(measure.GaussianMeasure):
         # Sigma_new = lax.dynamic_index_in_dim(self.Sigma, indices, axis=0)
         # mu_new = lax.dynamic_index_in_dim(self.mu, indices, axis=0)
         # ln_det_Sigma_new = lax.dynamic_index_in_dim(self.ln_det_Sigma, indices, axis=0)
-        new_measure = GaussianPDF(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new)
+        new_measure = GaussianPDF(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new)
         return new_measure
 
     def update(self, indices: jnp.ndarray, density: "GaussianPDF"):
@@ -98,7 +97,7 @@ class GaussianPDF(measure.GaussianMeasure):
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
         self.mu = self.mu.at[indices].set(density.mu)
         self.ln_det_Sigma = self.ln_det_Sigma.at[indices].set(density.ln_det_Sigma)
-        self.ln_det_Lambda = self.ln_det_Lambda.at[indices].set(density.ln_det_Lambda)
+        #self.ln_det_Lambda = self.ln_det_Lambda.at[indices].set(density.ln_det_Lambda)
         self.lnZ = self.lnZ.at[indices].set(density.lnZ)
         self.nu = self.nu.at[indices].set(density.nu)
         self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)
@@ -115,7 +114,7 @@ class GaussianPDF(measure.GaussianMeasure):
         Sigma_new = self.Sigma[idx]
         idx = jnp.ix_(jnp.arange(self.mu.shape[0]), dim_x)
         mu_new = self.mu[idx]
-        marginal_density = GaussianPDF(Sigma_new, mu_new)
+        marginal_density = GaussianPDF(Sigma=Sigma_new, mu=mu_new)
         return marginal_density
 
     def entropy(self) -> jnp.ndarray:
@@ -179,7 +178,7 @@ class GaussianPDF(measure.GaussianMeasure):
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
         return conditional.ConditionalGaussianPDF(
-            M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
+            M=M_x, b=b_x, Sigma=Sigma_x, Lambda=Lambda_x, ln_det_Sigma=-ln_det_Lambda_x
         )
 
     def condition_on_explicit(
@@ -201,7 +200,7 @@ class GaussianPDF(measure.GaussianMeasure):
         M_x = -jnp.einsum("abc,acd->abd", Sigma_x, self.Lambda[:, dim_x][:, :, dim_y])
         b_x = self.mu[:, dim_x] - jnp.einsum("abc,ac->ab", M_x, self.mu[:, dim_y])
         return conditional.ConditionalGaussianPDF(
-            M_x, b_x, Sigma_x, Lambda_x, -ln_det_Lambda_x
+            M=M_x, b=b_x, Sigma=Sigma_x, Lambda=Lambda_x, ln_det_Sigma=-ln_det_Lambda_x
         )
 
     def to_dict(self) -> dict:
@@ -218,7 +217,7 @@ class GaussianPDF(measure.GaussianMeasure):
         }
         return density_dict
 
-
+@dataclass(kw_only=True)
 class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix. 
     
@@ -233,18 +232,17 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     :param ln_det_Sigma: Log determinant of the covariance matrix. Dimensions should be [R], defaults to None
     :type ln_det_Sigma: jnp.ndarray, optional
     """
-
-    def __init__(
-        self,
-        Sigma: jnp.ndarray,
-        mu: jnp.ndarray,
-        Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
-    ):
-        Lambda, ln_det_Sigma = invert_diagonal(Sigma)
-        super().__init__(
-            Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma,
-        )
+    Sigma: jnp.ndarray
+    mu: jnp.ndarray
+    Lambda: jnp.ndarray = None
+    ln_det_Sigma: jnp.ndarray = None
+    nu: jnp.ndarray = field(init=False)
+    ln_beta: jnp.ndarray = field(init=False)
+    lnZ: jnp.ndarray = field(default=None, init=False)
+    
+    def __post_init__(self):
+        self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
+        return super().__post_init__()
 
     def slice(self, indices: jnp.ndarray) -> "GaussianDiagPDF":
         """Return an object with only the specified entries.
@@ -258,7 +256,7 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         mu_new = jnp.take(self.mu, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
-        new_measure = GaussianDiagPDF(Sigma_new, mu_new, Lambda_new, ln_det_Sigma_new,)
+        new_measure = GaussianDiagPDF(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new,)
         return new_measure
 
     def update(self, indices: jnp.ndarray, density: "GaussianDiagPDF"):
@@ -273,7 +271,7 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
         self.mu = self.mu.at[indices].set(density.mu)
         self.ln_det_Sigma = self.ln_det_Sigma.at[indices].set(density.ln_det_Sigma)
-        self.ln_det_Lambda = self.ln_det_Lambda.at[indices].set(density.ln_det_Lambda)
+        #self.ln_det_Lambda = self.ln_det_Lambda.at[indices].set(density.ln_det_Lambda)
         self.lnZ = self.lnZ.at[indices].set(density.lnZ)
         self.nu = self.nu.at[indices].set(density.nu)
         self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)
@@ -288,5 +286,5 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
         """
         Sigma_new = self.Sigma[:, dim_idx][:, :, dim_idx]
         mu_new = self.mu[:, dim_idx]
-        marginal_density = GaussianDiagPDF(Sigma_new, mu_new)
+        marginal_density = GaussianDiagPDF(Sigma=Sigma_new, mu=mu_new)
         return marginal_density
