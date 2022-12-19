@@ -92,7 +92,7 @@ class GP_Prior(objax.Module):
             M = M.reshape(1, N_star, N)
             b = mu_star - jnp.dot(M, self.mean(X))
 
-        return conditional.ConditionalGaussianPDF(M, b, Sigma_f, Lambda_f, ln_det_Sigma)
+        return conditional.ConditionalGaussianPDF(M=M, b=b, Sigma=Sigma_f, Lambda=Lambda_f, ln_det_Sigma=ln_det_Sigma)
 
 
 class SparseGP_Prior(GP_Prior):

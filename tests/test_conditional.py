@@ -189,6 +189,7 @@ class TestConditionalGaussianPDF:
         r_sample = jnp.mean(
             px_given_y.set_y(x).evaluate_ln(y, element_wise=True), axis=0
         )
+        print(x.shape)
         r_ana = px_given_y.integrate_log_conditional(pxy)
         r_ana_sample = jnp.mean(px_given_y.integrate_log_conditional_y(py)(x), axis=0)
         assert jnp.allclose(r_sample, r_ana, atol=1e-2, rtol=np.inf)

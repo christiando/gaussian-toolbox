@@ -381,7 +381,7 @@ class ConditionalGaussianPDF:
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, **kwargs) -> callable:
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: jnp.ndarray=None, **kwargs) -> callable:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -414,7 +414,10 @@ class ConditionalGaussianPDF:
             + jnp.einsum("ab,ab->a", y, linear_integral)
             + log_expectation_constant
         )
-        return log_expectation_y
+        if y == None:
+            return log_expectation_y
+        else:
+            return log_expectation_y(y)
 
     def conditional_entropy(self, p_x: pdf.GaussianPDF, **kwargs) -> jnp.ndarray:
         """Computes the conditional entropy
@@ -751,7 +754,7 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         return cond_gauss.integrate_log_conditional(phi_yx)
 
     def integrate_log_conditional_y(
-        self, phi_x: measure.GaussianMeasure, u: jnp.ndarray, **kwargs
+        self, phi_x: measure.GaussianMeasure, u: jnp.ndarray, y: jnp.ndarray=None, **kwargs
     ) -> callable:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
@@ -771,7 +774,7 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
             raise NotImplementedError("Only implemented for a single input.")
 
         cond_gauss = self.set_control_variable(u)
-        return cond_gauss.integrate_log_conditional_y(phi_x)
+        return cond_gauss.integrate_log_conditional_y(phi_x, y=y, **kwargs)
 
 @dataclass(kw_only=True)
 class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
@@ -1107,7 +1110,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, **kwargs) -> callable:
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: jnp.ndarray=None, **kwargs) -> callable:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -1136,7 +1139,10 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
             + jnp.einsum("ab,ab->a", y, linear_integral)
             + log_expectation_constant
         )
-        return log_expectation_y
+        if y == None:
+            return log_expectation_y
+        else:
+            return log_expectation_y(y)
 
     def conditional_entropy(self, p_x: pdf.GaussianPDF, **kwargs) -> jnp.ndarray:
         """Computes the conditional entropy
@@ -1333,7 +1339,7 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, **kwargs) -> callable:
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: jnp.ndarray=None, **kwargs) -> callable:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -1362,4 +1368,7 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
             + jnp.einsum("ab,ab->a", y, linear_integral)
             + log_expectation_constant
         )
-        return log_expectation_y
+        if y == None:
+            return log_expectation_y
+        else:
+            return log_expectation_y(y)

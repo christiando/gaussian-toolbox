@@ -6,6 +6,8 @@ from . import pdf, factor, measure, conditional
 from .utils.linalg import invert_matrix
 
 from .utils.dataclass import dataclass
+from jax import lax
+from jax import jit
 
 @dataclass(kw_only=True)
 class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
@@ -380,7 +382,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, **kwargs) -> callable:
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: jnp.ndarray=None, **kwargs) -> callable:
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -435,8 +437,10 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
             + jnp.einsum("ab,ab->a", y, linear_term)
             + constant_term
         )
-        return log_expectation_y
-
+        if y == None:
+            return log_expectation_y
+        else:
+            return log_expectation_y(y)
 @dataclass(kw_only=True)
 class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
     r"""A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
@@ -583,7 +587,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, **kwargs) -> callable:
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: jnp.ndarray=None, **kwargs) -> callable:
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -638,7 +642,10 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
             + jnp.einsum("ab,ab->a", y, linear_term)
             + constant_term
         )
-        return log_expectation_y
+        if y == None:
+            return log_expectation_y
+        else:
+            return log_expectation_y(y)
 
 @dataclass(kw_only=True)
 class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
@@ -910,3 +917,287 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y)
         return p_y
 
+
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: jnp.ndarray, **kwargs) -> callable:
+        r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
+
+        .. math::
+        
+            f(Y) = \int \log(p(Y|X))p(X){\rm d}X.
+    
+        :param p_x: Density over :math:`X`.
+        :type p_x: measure.GaussianPDF
+        :raises NotImplementedError: Only implemented for R=1.
+        :return: The integral as function of :math:`Y`.
+        :rtype: callable
+        """
+        vec = y - self.b
+        E_epsilon2 = jnp.sum(
+            p_x.integrate("(Ax+a)'(Bx+b)", A_mat=-self.M, a_vec=vec, B_mat=-self.M, b_vec=vec),
+            axis=0,
+        )
+        
+        def scan_body_function(carry, args_i):
+            W_i, u_i, beta_i = args_i
+            omega_star_i = lax.stop_gradient(self._get_omega_star_i(W_i, u_i, beta_i, p_x, y)[0])
+            uRu_i, log_lb_sum_i = self._get_lb_i(W_i, u_i, beta_i, omega_star_i, p_x, y)
+            result = (uRu_i, log_lb_sum_i)
+            return carry, result
+
+        _, result = lax.scan(scan_body_function, None, (self.W, self.U.T, self.beta))
+        uRu, log_lb_sum = result
+        
+        E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
+        E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
+        Qm = -0.5 * (E_epsilon2 - E_D_inv_epsilon2) / self.sigma_x**2
+        # determinant part
+        Qm = Qm - 0.5 * E_ln_sigma2_f + 0.5 * p_x.R * (self.Du - self.Dy) * jnp.log(self.sigma_x**2)
+
+    def _get_lb_i(self, W_i: jnp.ndarray, u_i: jnp.ndarray, beta_i: jnp.ndarray, omega_star: jnp.ndarray, p_x: pdf.GaussianPDF, y: jnp.ndarray):
+        # phi = pdf.GaussianPDF(**phi_dict)
+        # beta = self.beta[iu:iu + 1]
+        # Lower bound for E[ln (sigma_x^2 + f(h))]
+        R = p_x.R
+        w_i = W_i[1:].reshape((1, -1))
+        v = jnp.tile(w_i, (R, 1))
+        b_i = W_i[:1]
+        u_i = u_i.reshape((-1, 1))
+        uC = jnp.dot(u_i.T, -self.M[0])
+        uy_d = jnp.dot(u_i.T, (y - self.b[0]).T)
+        # Lower bound for E[ln (sigma_x^2 + f(h))]
+        omega_dagger = jnp.sqrt(
+            p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
+        )
+        g_omega = self.g(omega_star, beta_i)
+        nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
+        nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
+        ln_beta = (
+            -jnp.log(self.sigma_x**2 + self.f(omega_star, beta_i))
+            - 0.5 * g_omega * (b_i**2 - omega_star**2)
+            + jnp.log(beta_i)
+        )
+        ln_beta_plus = ln_beta + b_i
+        ln_beta_minus = ln_beta - b_i
+        # Create OneRankFactors
+        exp_factor_plus = factor.OneRankFactor(
+            v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus
+        )
+        exp_factor_minus = factor.OneRankFactor(
+            v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus
+        )
+        # Create the two measures
+        exp_phi_plus = p_x.hadamard(exp_factor_plus, update_full=True)
+        exp_phi_minus = p_x.hadamard(exp_factor_minus, update_full=True)
+        # Fourth order integrals E[h^2 (x-Cz-d)^2]
+        quart_int_plus = exp_phi_plus.integrate(
+            "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
+            A_mat=uC,
+            a_vec=uy_d.T,
+            B_mat=uC,
+            b_vec=uy_d.T,
+            C_mat=w_i,
+            c_vec=b_i,
+            D_mat=w_i,
+            d_vec=b_i,
+        )
+        quart_int_minus = exp_phi_minus.integrate(
+            "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
+            A_mat=uC,
+            a_vec=uy_d.T,
+            B_mat=uC,
+            b_vec=uy_d.T,
+            C_mat=w_i,
+            c_vec=b_i,
+            D_mat=w_i,
+            d_vec=b_i,
+        )
+        quart_int = quart_int_plus + quart_int_minus
+        # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
+        quad_int_plus = exp_phi_plus.integrate(
+            "(Ax+a)'(Bx+b)", A_mat=uC, a_vec=uy_d.T, B_mat=uC, b_vec=uy_d.T
+        )
+        quad_int_minus = exp_phi_minus.integrate(
+            "(Ax+a)'(Bx+b)", A_mat=uC, a_vec=uy_d.T, B_mat=uC, b_vec=uy_d.T
+        )
+        quad_int = quad_int_plus + quad_int_minus
+        omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
+        f_omega_dagger = self.f(omega_dagger, beta_i)
+        log_lb = jnp.log(self.sigma_x**2 + f_omega_dagger)
+        g_omega = self.g(omega_star, beta_i)
+        nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
+        nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
+        ln_beta = (
+            -jnp.log(self.sigma_x**2 + self.f(omega_star, beta_i))
+            - 0.5 * g_omega * (b_i**2 - omega_star**2)
+            + jnp.log(beta_i)
+        )
+        ln_beta_plus = ln_beta + b_i
+        ln_beta_minus = ln_beta - b_i
+        # Create OneRankFactors
+        exp_factor_plus = factor.OneRankFactor(
+            v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus
+        )
+        exp_factor_minus = factor.OneRankFactor(
+            v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus
+        )
+        # Create the two measures
+        exp_phi_plus = p_x.hadamard(exp_factor_plus, update_full=True)
+        exp_phi_minus = p_x.hadamard(exp_factor_minus, update_full=True)
+        mat1 = -self.M[0]
+        vec1 = y - self.b[0]
+        R_plus = exp_phi_plus.integrate(
+            "(Ax+a)(Bx+b)'", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
+        )
+        R_minus = exp_phi_minus.integrate(
+            "(Ax+a)(Bx+b)'", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
+        )
+        R = R_plus + R_minus
+        R = jnp.sum(R, axis=0)
+        # R = .5 * (R + R.T)
+        uRu = jnp.sum(u_i * jnp.dot(R, u_i))
+        log_lb_sum = jnp.sum(log_lb)
+        return uRu, log_lb_sum
+    
+    def _get_omega_star_i(self, W_i: jnp.ndarray, u_i: jnp.ndarray, beta_i: jnp.ndarray, p_x: pdf.GaussianPDF, y: jnp.ndarray, conv_crit=1e-3):
+        R = p_x.R
+        w_i = W_i[1:].reshape((1, -1))
+        v = jnp.tile(w_i, (R, 1))
+        b_i = W_i[:1]
+        u_i = u_i[:].reshape((-1, 1))
+        uM = jnp.dot(u_i.T, -self.M[0])
+        uy_b = jnp.dot(u_i.T, (y - self.b[0]).T)
+        # Lower bound for E[ln (sigma_x^2 + f(h))]
+        omega_dagger = jnp.sqrt(
+            p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
+        )
+        omega_star = omega_dagger
+        # omega_star = omega_star_init
+        omega_old = omega_dagger + 1
+
+        def body_fun(omegas):
+            omega_star, omega_old, num_iter = omegas
+            # From the lower bound term
+            g_omega = self.g(omega_star, beta_i)
+            nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
+            nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
+            ln_beta = (
+                -jnp.log(self.sigma_x**2 + self.f(omega_star, beta_i))
+                - 0.5 * g_omega * (b_i**2 - omega_star**2)
+                + jnp.log(beta_i)
+            )
+            ln_beta_plus = ln_beta + b_i
+            ln_beta_minus = ln_beta - b_i
+            # Create OneRankFactors
+            exp_factor_plus = factor.OneRankFactor(
+                v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus
+            )
+            exp_factor_minus = factor.OneRankFactor(
+                v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus
+            )
+            # Create the two measures
+            exp_phi_plus = p_x.hadamard(exp_factor_plus, update_full=True)
+            exp_phi_minus = p_x.hadamard(exp_factor_minus, update_full=True)
+            # Fourth order integrals E[h^2 (x-Cz-d)^2]
+            quart_int_plus = exp_phi_plus.integrate(
+                "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
+                A_mat=uM,
+                a_vec=uy_b.T,
+                B_mat=uM,
+                b_vec=uy_b.T,
+                C_mat=w_i,
+                c_vec=b_i,
+                D_mat=w_i,
+                d_vec=b_i,
+            )
+            quart_int_minus = exp_phi_minus.integrate(
+                "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
+                A_mat=uM,
+                a_vec=uy_b.T,
+                B_mat=uM,
+                b_vec=uy_b.T,
+                C_mat=w_i,
+                c_vec=b_i,
+                D_mat=w_i,
+                d_vec=b_i,
+            )
+            quart_int = quart_int_plus + quart_int_minus
+            # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
+            quad_int_plus = exp_phi_plus.integrate(
+                "(Ax+a)'(Bx+b)", A_mat=uM, a_vec=uy_b.T, B_mat=uM, b_vec=uy_b.T
+            )
+            quad_int_minus = exp_phi_minus.integrate(
+                "(Ax+a)'(Bx+b)", A_mat=uM, a_vec=uy_b.T, B_mat=uM, b_vec=uy_b.T
+            )
+            quad_int = quad_int_plus + quad_int_minus
+            omega_old = omega_star
+            omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
+            num_iter = num_iter + 1
+            return omega_star, omega_old, num_iter
+
+        def cond_fun(omegas):
+            omega_star, omega_old, num_iter = omegas
+            # return lax.pmax(jnp.amax(jnp.abs(omega_star - omega_old)), 'i') > conv_crit
+            return jnp.logical_and(
+                jnp.amax(jnp.amax(jnp.abs(omega_star - omega_old) / omega_star))
+                > conv_crit,
+                num_iter < 100,
+            )
+
+        num_iter = 0
+        init_val = (omega_star, omega_old, num_iter)
+        omega_star, omega_old, num_iter = lax.while_loop(cond_fun, body_fun, init_val)
+        indices_non_converged = (
+            jnp.abs(omega_star - omega_old) / omega_star
+        ) > conv_crit
+
+        return omega_star, indices_non_converged
+    
+    def f(self, h: jnp.ndarray, beta: float) -> jnp.ndarray:
+        """Compute the function
+
+        f(h) = 2 * beta * cosh(h)
+
+        :param h: Activation functions.
+        :type h: jnp.ndarray
+        :param beta: Scaling factor.
+        :type beta: float
+        :return: Evaluated functions.
+        :rtype:jnp.ndarray
+        """
+        return 2 * beta * jnp.cosh(h)
+
+    def f_prime(self, h: jnp.ndarray, beta: float) -> jnp.ndarray:
+        """Computes the derivative of f
+
+            f'(h) = 2 * beta * sinh(h)
+
+        :param h: Activation functions.
+        :type h: jnp.ndarray
+        :param beta: Scaling factor.
+        :type beta: float
+        :return: Evaluated derivative functions.
+        :rtype:jnp.ndarray
+        """
+        return 2 * beta * jnp.sinh(h)
+
+    def g(self, omega: jnp.ndarray, beta: float) -> jnp.ndarray:
+        r"""Computes the function
+
+            g(omega) = f'(omega) / (sigma_x^2 + f(omega)) / |omega|
+
+            for the variational bound
+
+        :param omega: Free variational parameter.
+        :type omega: jnp.ndarray
+        :param beta:  Scaling factor.
+        :type beta: jnp.ndarray
+        :param sigma_x: Noise parameter.
+        :type sigma_x: float
+        :return: Evaluated function.
+        :rtype: jnp.ndarray
+        """
+        return (
+            self.f_prime(omega, beta)
+            / (self.sigma_x**2 + self.f(omega, beta))
+            / jnp.abs(omega)
+        )
