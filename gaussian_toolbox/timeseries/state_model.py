@@ -128,7 +128,7 @@ class LinearStateModel(StateModel):
         self.Qz = noise_z ** 2 * jnp.eye(self.Dz)
         self.A, self.b = jnp.eye(self.Dz), jnp.zeros((self.Dz,))
         self.state_density = conditional.ConditionalGaussianPDF(
-            jnp.array([self.A]), jnp.array([self.b]), jnp.array([self.Qz])
+            M=jnp.array([self.A]), b=jnp.array([self.b]), Sigma=jnp.array([self.Qz])
         )
         self.Qz_inv, self.ln_det_Qz = (
             self.state_density.Lambda[0],
@@ -310,7 +310,7 @@ class LinearStateModel(StateModel):
         """ Update the state density.
         """
         self.state_density = conditional.ConditionalGaussianPDF(
-            jnp.array([self.A]), jnp.array([self.b]), jnp.array([self.Qz])
+            M=jnp.array([self.A]), b=jnp.array([self.b]), Sigma=jnp.array([self.Qz])
         )
         self.Qz_inv, self.ln_det_Qz = (
             self.state_density.Lambda[0],
@@ -332,7 +332,7 @@ class LinearStateModel(StateModel):
         Sigma0 = init_smooth_density.integrate(
             "(Ax+a)(Bx+b)'", A_mat=None, a_vec=-mu0[0], B_mat=None, b_vec=-mu0[0]
         )
-        opt_init_density = pdf.GaussianPDF(Sigma0, mu0)
+        opt_init_density = pdf.GaussianPDF(Sigma=Sigma0, mu=mu0)
         return opt_init_density
 
     def condition_on_past(self, z_old: jnp.ndarray, **kwargs) -> pdf.GaussianPDF:
