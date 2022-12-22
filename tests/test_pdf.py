@@ -27,13 +27,12 @@ class TestGaussianPDF:
     def create_instance(self, R, D):
         Sigma = self.get_pd_matrix(R, D)
         mu = objax.random.normal((R, D))
-        return pdf.GaussianPDF(Sigma, mu)
+        return pdf.GaussianPDF(Sigma=Sigma, mu=mu)
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
     def test_init(self, R, D):
         d = self.create_instance(R, D)
         assert d.Sigma.shape == (d.R, d.D, d.D)
-        assert jnp.allclose(d.ln_det_Lambda, -d.ln_det_Sigma)
         assert d.nu.shape == (d.R, d.D)
         assert d.ln_beta.shape == (d.R,)
         assert jnp.alltrue(d.is_normalized())
@@ -70,7 +69,6 @@ class TestGaussianPDF:
         assert jnp.allclose(d_new.mu, d.mu[idx])
         assert jnp.allclose(d_new.ln_beta, d.ln_beta[idx])
         assert jnp.allclose(d_new.ln_det_Sigma, d.ln_det_Sigma[idx])
-        assert jnp.allclose(d_new.ln_det_Lambda, d.ln_det_Lambda[idx])
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
     def test_update(self, R, D):
@@ -84,7 +82,6 @@ class TestGaussianPDF:
         assert jnp.allclose(d_update.mu, d.mu[idx])
         assert jnp.allclose(d_update.ln_beta, d.ln_beta[idx])
         assert jnp.allclose(d_update.ln_det_Sigma, d.ln_det_Sigma[idx])
-        assert jnp.allclose(d_update.ln_det_Lambda, d.ln_det_Lambda[idx])
 
     @pytest.mark.parametrize(
         "R, D, dim_x",
@@ -125,13 +122,13 @@ class TestGaussianPDF:
         assert jnp.allclose(cd.Lambda, d.Lambda[idx_x])
         assert jnp.allclose(cd.M, M_x)
         assert jnp.allclose(cd.b, b_x)
-        assert jnp.allclose(cd.ln_det_Lambda, ln_det_Lambda_x)
+        assert jnp.allclose(cd.ln_det_Sigma, -ln_det_Lambda_x)
 
         cd2 = d.condition_on_explicit(dim_y, dim_x)
         assert jnp.allclose(cd2.Lambda, d.Lambda[idx_x])
         assert jnp.allclose(cd2.M, M_x)
         assert jnp.allclose(cd2.b, b_x)
-        assert jnp.allclose(cd2.ln_det_Lambda, ln_det_Lambda_x)
+        assert jnp.allclose(cd2.ln_det_Sigma, -ln_det_Lambda_x)
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
     def test_to_dict(self, R, D):
@@ -165,4 +162,4 @@ class TestGaussianDiagPDF(TestGaussianPDF):
     def create_instance(self, R, D):
         Sigma = jnp.tile((objax.random.uniform((D, D)) * jnp.eye(D))[None], [R, 1, 1])
         mu = objax.random.normal((R, D))
-        return pdf.GaussianDiagPDF(Sigma, mu)
+        return pdf.GaussianDiagPDF(Sigma=Sigma, mu=mu)

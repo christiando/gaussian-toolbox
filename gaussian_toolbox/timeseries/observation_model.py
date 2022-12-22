@@ -167,7 +167,7 @@ class LinearObservationModel(ObservationModel):
         self.d = jnp.zeros(Dx)
         self.Qx = noise_x**2 * jnp.eye(self.Dx)
         self.observation_density = conditional.ConditionalGaussianPDF(
-            jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
+            M=jnp.array([self.C]), b=jnp.array([self.d]), Sigma=jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
             self.observation_density.Lambda[0],
@@ -201,7 +201,7 @@ class LinearObservationModel(ObservationModel):
         delta_X = X - jnp.dot(z_hat, self.C.T) - self.d
         self.Qx = jnp.dot(delta_X.T, delta_X)
         self.observation_density = conditional.ConditionalGaussianPDF(
-            jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
+            M=jnp.array([self.C]), b=jnp.array([self.d]), Sigma=jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
             self.observation_density.Lambda[0],
@@ -388,7 +388,7 @@ class LinearObservationModel(ObservationModel):
         self, smoothing_density: pdf.GaussianPDF, X: jnp.ndarray, **kwargs
     ) -> float:
         return jnp.sum(
-            self.observation_density.integrate_log_conditional_y(smoothing_density)(X)
+            self.observation_density.integrate_log_conditional_y(smoothing_density, y=X)
         )
 
     def update_hyperparameters(
@@ -462,7 +462,7 @@ class LinearObservationModel(ObservationModel):
     def update_observation_density(self):
         """Updates the emission density."""
         self.observation_density = conditional.ConditionalGaussianPDF(
-            jnp.array([self.C]), jnp.array([self.d]), jnp.array([self.Qx])
+            M=jnp.array([self.C]), b=jnp.array([self.d]), Sigma=jnp.array([self.Qx])
         )
         self.Qx_inv, self.ln_det_Qx = (
             self.observation_density.Lambda[0],
