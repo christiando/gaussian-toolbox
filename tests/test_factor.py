@@ -14,7 +14,7 @@ class TestConjugateFactor:
         Lambda = self.get_pd_matrix(R, D)
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return factor.ConjugateFactor(Lambda, nu, ln_beta)
+        return factor.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
@@ -36,21 +36,21 @@ class TestConjugateFactor:
         Lambda = self.get_pd_matrix(R, D)
         nu = None
         ln_beta = jnp.zeros(R)
-        f = self.test_class(Lambda, nu, ln_beta)
+        f = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         assert f.Lambda.shape == (f.R, f.D, f.D)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
         Lambda = self.get_pd_matrix(R, D)
         nu = jnp.zeros((R, D))
         ln_beta = None
-        f = self.test_class(Lambda, nu, ln_beta)
+        f = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         assert f.Lambda.shape == (f.R, f.D, f.D)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
         Lambda = self.get_pd_matrix(R, D)
         nu = None
         ln_beta = None
-        f = self.test_class(Lambda, nu, ln_beta)
+        f = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         assert f.Lambda.shape == (f.R, f.D, f.D)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
@@ -58,7 +58,7 @@ class TestConjugateFactor:
         nu = None
         ln_beta = None
         with pytest.raises(AttributeError):
-            f = self.test_class(Lambda, nu, ln_beta)
+            f = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize(
         "R, D, N", [(100, 5, 10), (1, 5, 10), (100, 1, 10), (5, 5, 1)]
@@ -135,7 +135,7 @@ class TestOneRankFactor(TestConjugateFactor):
         g = jnp.abs(objax.random.normal((R,)))
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return factor.OneRankFactor(v, g, nu, ln_beta)
+        return factor.OneRankFactor(v=v, g=g, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):
@@ -149,7 +149,7 @@ class TestOneRankFactor(TestConjugateFactor):
         g = None
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        f = self.test_class(v, g, nu, ln_beta)
+        f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
         assert f.g.shape == (f.R,)
         assert f.Lambda.shape == (f.R, f.D, f.D)
@@ -159,7 +159,7 @@ class TestOneRankFactor(TestConjugateFactor):
         g = jnp.abs(objax.random.normal((R,)))
         nu = None
         ln_beta = objax.random.normal((R,))
-        f = self.test_class(v, g, nu, ln_beta)
+        f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
         assert f.g.shape == (f.R,)
         assert f.nu.shape == (f.R, f.D)
@@ -168,7 +168,7 @@ class TestOneRankFactor(TestConjugateFactor):
         g = jnp.abs(objax.random.normal((R,)))
         nu = objax.random.normal((R, D))
         ln_beta = None
-        f = self.test_class(v, g, nu, ln_beta)
+        f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
         assert f.g.shape == (f.R,)
         assert f.Lambda.shape == (f.R, f.D, f.D)
@@ -178,7 +178,7 @@ class TestOneRankFactor(TestConjugateFactor):
         g = jnp.abs(objax.random.normal((R,)))
         nu = None
         ln_beta = None
-        f = self.test_class(v, g, nu, ln_beta)
+        f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
         assert f.g.shape == (f.R,)
         assert f.Lambda.shape == (f.R, f.D, f.D)
@@ -188,7 +188,7 @@ class TestOneRankFactor(TestConjugateFactor):
         nu = None
         ln_beta = None
         with pytest.raises(AttributeError):
-            f = self.test_class(v, g, nu, ln_beta)
+            f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize(
         "R, D, N", [(100, 5, 10), (1, 5, 10), (100, 1, 10), (100, 5, 1)]
@@ -257,7 +257,7 @@ class TestLinearFactor(TestConjugateFactor):
     def create_instance(self, R, D):
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return factor.LinearFactor(nu, ln_beta)
+        return factor.LinearFactor(nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):
@@ -267,14 +267,14 @@ class TestLinearFactor(TestConjugateFactor):
         assert f.ln_beta.shape == (f.R,)
         nu = jnp.zeros((R, D))
         ln_beta = None
-        f = self.test_class(nu, ln_beta)
+        f = self.test_class(nu=nu, ln_beta=ln_beta)
         assert f.Lambda.shape == (f.R, f.D, f.D)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
         nu = None
         ln_beta = None
         with pytest.raises(AttributeError):
-            f = self.test_class(nu, ln_beta)
+            f = self.test_class(nu=nu, ln_beta=ln_beta)
 
 
 class TestConstantFactor(TestConjugateFactor):
@@ -284,7 +284,7 @@ class TestConstantFactor(TestConjugateFactor):
     @classmethod
     def create_instance(self, R, D):
         ln_beta = objax.random.normal((R,))
-        return factor.ConstantFactor(ln_beta, D)
+        return factor.ConstantFactor(ln_beta=ln_beta, num_dim=D)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):

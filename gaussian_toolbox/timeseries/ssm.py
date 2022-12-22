@@ -105,7 +105,7 @@ class StateSpaceModel(objax.Module):
         Lambda = jnp.tile(jnp.eye(D)[None], (T, 1, 1))
         mu = jnp.zeros((T, D))
         ln_det_Sigma = D * jnp.log(jnp.ones(T))
-        return pdf.GaussianPDF(Sigma, mu, Lambda, ln_det_Sigma)
+        return pdf.GaussianPDF(Sigma=Sigma, mu=mu, Lambda=Lambda, ln_det_Sigma=ln_det_Sigma)
 
     def fit(self):
         """Fits the expectation-maximization algorithm.
@@ -583,10 +583,10 @@ class StateSpaceModel(objax.Module):
                 mu_unobserved[t - 1, jnp.isnan(X[t - 1])] = mu_ux
                 std_unobserved[t - 1, jnp.isnan(X[t - 1])] = std_ux
             filter_density = pdf.GaussianPDF(
-                jnp.asarray(Sigma_f),
-                jnp.asarray(mu_f),
-                jnp.asarray(Lambda_f),
-                jnp.asarray(ln_det_Sigma_f),
+                Sigma=jnp.asarray(Sigma_f),
+                mu=jnp.asarray(mu_f),
+                Lambda=jnp.asarray(Lambda_f),
+                ln_det_Sigma=jnp.asarray(ln_det_Sigma_f),
             )
         if not smoothed:
             return filter_density, mu_unobserved, std_unobserved

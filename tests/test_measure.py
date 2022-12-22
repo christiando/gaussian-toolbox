@@ -30,11 +30,10 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = self.get_pd_matrix(R, D)
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return measure.GaussianMeasure(Lambda, nu, ln_beta)
+        return measure.GaussianMeasure(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
     def test_init(self, R, D):
-
         m = self.create_instance(R, D)
         assert m.Lambda.shape == (m.R, m.D, m.D)
         assert m.Sigma == None
@@ -46,7 +45,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = self.get_pd_matrix(R, D)
         nu = None
         ln_beta = jnp.zeros(R)
-        m = self.test_class(Lambda, nu, ln_beta)
+        m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         assert m.Lambda.shape == (m.R, m.D, m.D)
         assert m.nu.shape == (m.R, m.D)
         assert m.ln_beta.shape == (m.R,)
@@ -57,7 +56,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = self.get_pd_matrix(R, D)
         nu = jnp.zeros((R, D))
         ln_beta = None
-        m = self.test_class(Lambda, nu, ln_beta)
+        m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         assert m.Lambda.shape == (m.R, m.D, m.D)
         assert m.nu.shape == (m.R, m.D)
         assert m.ln_beta.shape == (m.R,)
@@ -68,7 +67,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = self.get_pd_matrix(R, D)
         nu = None
         ln_beta = None
-        m = self.test_class(Lambda, nu, ln_beta)
+        m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         assert m.Lambda.shape == (m.R, m.D, m.D)
         assert m.nu.shape == (m.R, m.D)
         assert m.ln_beta.shape == (m.R,)
@@ -80,7 +79,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         nu = None
         ln_beta = None
         with pytest.raises(AttributeError):
-            m = self.test_class(Lambda, nu, ln_beta)
+            m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize(
         "R, D, idx",
@@ -130,7 +129,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = Lambda.at[:].set(jnp.eye(D) * np.random.rand(R)[:, None, None])
         nu = jnp.zeros((R, D))
         ln_beta = jnp.zeros(R)
-        m = self.test_class(Lambda, nu, ln_beta)
+        m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         m.compute_lnZ()
         A = Lambda
         L = jsc.linalg.cho_factor(A)
@@ -266,7 +265,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:, :, None])
         nu = jnp.array(np.random.randn(R, D))
         ln_beta = jnp.zeros(R)
-        m = self.test_class(Lambda, nu, ln_beta)
+        m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         Sigma_diag = 1.0 / jnp.diagonal(Lambda, axis1=1, axis2=2)
         mu = Sigma_diag * nu
         normalization = jnp.exp(
@@ -289,7 +288,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:, :, None])
         nu = jnp.array(np.random.randn(R, D))
         ln_beta = jnp.zeros(R)
-        m = self.test_class(Lambda, nu, ln_beta)
+        m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         Sigma_diag = 1.0 / jnp.diagonal(Lambda, axis1=1, axis2=2)
         mu = Sigma_diag * nu
         normalization = jnp.exp(
@@ -311,7 +310,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:, :, None])
         nu = jnp.array(np.random.randn(R, D))
         ln_beta = jnp.zeros(R)
-        m = self.test_class(Lambda, nu, ln_beta)
+        m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         Sigma_diag = 1.0 / jnp.diagonal(Lambda, axis1=1, axis2=2)
         mu = Sigma_diag * nu
         normalization = jnp.exp(
@@ -333,7 +332,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:, :, None])
         nu = jnp.array(np.random.randn(R, D))
         ln_beta = jnp.zeros(R)
-        m = self.test_class(Lambda, nu, ln_beta)
+        m = self.test_class(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
         Sigma_diag = 1.0 / jnp.diagonal(Lambda, axis1=1, axis2=2)
         mu = Sigma_diag * nu
         normalization = jnp.exp(
@@ -540,7 +539,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         Lambda_u = Lambda_u.at[:].set(jnp.eye(D) * (np.random.rand(R, D))[:, :, None])
         nu_u = jnp.array(1e-4 * np.random.randn(R, D))
         ln_beta_u = jnp.array(np.random.randn(R))
-        u = factor.ConjugateFactor(Lambda_u, nu_u, ln_beta_u)
+        u = factor.ConjugateFactor(Lambda=Lambda_u, nu=nu_u, ln_beta=ln_beta_u)
         r_ana = m.integrate("log u(x)", factor=u)
         if D == 1:
             for r in range(R):
@@ -586,4 +585,4 @@ class TestGaussianDiagMeasure(TestGaussianMeasure):
         )
         nu = objax.random.normal((R, D))
         ln_beta = objax.random.normal((R,))
-        return measure.GaussianDiagMeasure(Lambda, nu, ln_beta)
+        return measure.GaussianDiagMeasure(Lambda=Lambda, nu=nu, ln_beta=ln_beta)

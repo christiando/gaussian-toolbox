@@ -10,10 +10,13 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from . import factor
-from typing import Tuple
+from typing import Tuple, Dict
+from jaxtyping import Array, Float, Int, Bool
 from .utils.linalg import invert_matrix, invert_diagonal
 
+from .utils.dataclass import dataclass
 
+@dataclass(kw_only=True)
 class GaussianMeasure(factor.ConjugateFactor):
     r"""A measure with a Gaussian form.
 
@@ -23,40 +26,34 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     D is the dimension, and R the number of Gaussians. 
 
-    :param Lambda: Information (precision) matrix of the Gaussian distributions. Needs to be postive definite. 
-        Dimensions should be [R, D, D].
-    :type Lambda: jnp.ndarray
-    :param nu: Information vector of a Gaussian distribution. If None all zeros. Dimensions should be [R, D], 
-        defaults to None
-    :type nu: jnp.ndarray, optional
-    :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
-        defaults to None
-    :type ln_beta: jnp.ndarray, optional
+    :param Lambda: Information (precision) matrix of the Gaussian distributions. Needs to be positive definite.
+    :param nu: Information vector of a Gaussian distribution. If None all zeros.
+    :param ln_beta: The log constant factor of the factor. If None all zeros.
     :param Sigma: Covariance matrix of the Gaussian distributions. Needs to be positive definite. 
-        Dimensions should be [R, D, D], defaults to None
-    :type Sigma: jnp.ndarray, optional
-    :param ln_det_Lambda: Log determinant of Lambda. Dimensions should be [R], defaults to None
-    :type ln_det_Lambda: jnp.ndarray, optional
-    :param ln_det_Sigma: Log determinant of Sigma. Dimensions should be [R], defaults to None
-    :type ln_det_Sigma: jnp.ndarray, optional
+    :param ln_det_Lambda: Log determinant of Lambda. 
+    :param ln_det_Sigma: Log determinant of Sigma. 
     """
+    Lambda: Float[Array, "R D D"]
+    nu: Float[Array, "R D"] = None
+    ln_beta: Float[Array, "R"] = None
+    Sigma: Float[Array, "R D D"] = None
+    ln_det_Lambda: Float[Array, "R"] = None
+    ln_det_Sigma: Float[Array, "R"] = None
 
-    def __init__(
-        self,
-        Lambda: jnp.ndarray,
-        nu: jnp.ndarray = None,
-        ln_beta: jnp.ndarray = None,
-        Sigma: jnp.ndarray = None,
-        ln_det_Lambda: jnp.ndarray = None,
-        ln_det_Sigma: jnp.ndarray = None,
-    ):
-        super().__init__(Lambda, nu, ln_beta)
-        self.Sigma = Sigma
-        self.ln_det_Lambda = ln_det_Lambda
-        self.ln_det_Sigma = ln_det_Sigma
+    def __post_init__(self):
+        if self.nu is None:
+            self.nu = jnp.zeros((self.R, self.D))
+        if self.ln_beta is None:
+            self.ln_beta = jnp.zeros((self.R))
+        self.Sigma = self.Sigma
+        self.ln_det_Lambda = self.ln_det_Lambda
+        self.ln_det_Sigma = self.ln_det_Sigma
         self.lnZ = None
         self.mu = None
-        self.integration_dict = {
+       
+    @property 
+    def integration_dict(self) -> Dict:
+        return {
             "1": self.integral,
             "x": self.integrate_x,
             "(Ax+a)": self.integrate_general_linear,
@@ -75,18 +72,16 @@ class GaussianMeasure(factor.ConjugateFactor):
     def __str__(self) -> str:
         return "Gaussian measure phi(x)"
 
-    def slice(self, indices: jnp.ndarray) -> "GaussianMeasure":
+    def slice(self, indices: Int[Array, "R_new"]) -> "GaussianMeasure":
         """Return an object with only the specified entries.
 
         :param indices: The entries that should be contained in the returned object.
-        :type indices: jnp.ndarray
         :return: The resulting Gaussian measure.
-        :rtype: GaussianMeasure
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         nu_new = jnp.take(self.nu, indices, axis=0)
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        new_measure = GaussianMeasure(Lambda_new, nu_new, ln_beta_new)
+        new_measure = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             new_measure.Sigma = jnp.take(self.Sigma, indices, axis=0)
             new_measure.ln_det_Sigma = jnp.take(self.ln_det_Sigma, indices, axis=0)
@@ -125,9 +120,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
-        :type factor: factor.ConjugateFactor
         :return: Returns the resulting GaussianMeasure.
-        :rtype: GaussianMeasure
         """
         return self.multiply(factor)
 
@@ -139,9 +132,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
-        :type factor: factor.ConjugateFactor
         :return: Resulting GaussianMeasure.
-        :rtype: GaussianMeasure
         """
         new_measure_dict = factor._multiply_with_measure(self, update_full=update_full)
         return GaussianMeasure(**new_measure_dict)
@@ -154,11 +145,8 @@ class GaussianMeasure(factor.ConjugateFactor):
         Returns :math:`f(X) * u(X)`.
 
         :param factor: The conjugate factor the measure is multiplied with.
-        :type factor: factor.ConjugateFactor
-        :param update_full: Whether also the covariance and the log determinants of the new Gaussian measure should be computed. , defaults to False
-        :type update_full: bool, optional
+        :param update_full: Whether also the covariance and the log determinants of the new Gaussian measure should be computed.
         :return: Resulting GaussianMeasure.
-        :rtype: GaussianMeasure
         """
         new_measure_dict = factor._hadamard_with_measure(self, update_full=update_full)
         return GaussianMeasure(**new_measure_dict)
@@ -171,77 +159,69 @@ class GaussianMeasure(factor.ConjugateFactor):
             v(X) = \prod_i u_i(X)
 
         :return: Factor of all factor.
-        :rtype: GaussianMeasure
         """
         Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
         nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
         ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
-        new_measure = GaussianMeasure(Lambda_new, nu_new, ln_beta_new)
+        new_measure = GaussianMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             new_measure._prepare_integration()
         return new_measure
 
-    def integrate(self, expr: str = "1", **kwargs) -> jnp.ndarray:
+    def integrate(self, expr: str = "1", **kwargs) -> Float[Array, "R ..."]:
         r""" Integrate the indicated expression with respect to the Gaussian measure.
         
         E.g. expr="(Ax+a)" means that :math:`\int (AX + a)u(X){\rm d}X` is computed, and :math:`A` and a can be provided.
 
-        :param expr: Indicates the expression that should be integrated. Check measure's integration dict, 
-            defaults to "1"
-        :type expr: str, optional
+        :param expr: Indicates the expression that should be integrated. Check measure's integration dict.
         :return: The integral result.
-        :rtype: jnp.ndarray
         """
         return self.integration_dict[expr](**kwargs)
 
-    def log_integral_light(self) -> jnp.ndarray:
+    def log_integral_light(self) -> Float[Array, "R"]:
         r"""Compute the log integral of the exponential term.
 
         .. math::
         
             \log \int u(X) {\rm d}X.
 
-        :return: Log integral. Dimensions are [R].
-        :rtype: jnp.ndarray
+        :return: Log integral.
         """
         if self.lnZ is None:
             self.compute_lnZ()
         return self.lnZ + self.ln_beta
 
-    def log_integral(self) -> jnp.ndarray:
+    def log_integral(self) -> Float[Array, "R"]:
         r"""Compute the log integral of the exponential term.
 
         .. math::
         
             \log \int u(X) {\rm d}X.
 
-        :return: Log integral. Dimensions are [R].
-        :rtype: jnp.ndarray
+        :return: Log integral.
         """
         self._prepare_integration()
         return self.lnZ + self.ln_beta
 
-    def integral_light(self) -> jnp.ndarray:
+    def integral_light(self) -> Float[Array, "R"]:
         r""" Compute the log integral of the exponential term.
         
         .. math::
 
             \int u(X) dX.
 
-        :return:  Integral. Dimensions are [R].jnp.ndarray [R]
-        :rtype: jnp.ndarray
+        :return:  Integral.
         """
         return jnp.exp(self.log_integral_light())
 
-    def integral(self) -> jnp.ndarray:
+    def integral(self) -> Float[Array, "R"]:
         r""" Compute the log integral of the exponential term.
 
         .. math::
         
             \int u(X) {\rm d}X.
 
-        :return:  Integral. Dimensions are [R].jnp.ndarray [R]
-        :rtype: jnp.ndarray
+        :return:  Integral.
         """
         return jnp.exp(self.log_integral())
 
@@ -255,11 +235,10 @@ class GaussianMeasure(factor.ConjugateFactor):
         self.compute_lnZ()
         self.ln_beta = -self.lnZ
 
-    def is_normalized(self) -> jnp.ndarray:
+    def is_normalized(self) -> Bool[Array, "R"]:
         """Check whether measure is normalized
 
         :return: Boolean area indicating which measure is normalized.
-        :rtype: jnp.ndarray
         """
         return jnp.equal(self.lnZ, -self.ln_beta)
 
@@ -274,7 +253,6 @@ class GaussianMeasure(factor.ConjugateFactor):
         """Return the corresponing normalised density object.
 
         :return: Corresponding density object.
-        :rtype: GaussianPDF
         """
         from . import pdf
 
@@ -287,16 +265,13 @@ class GaussianMeasure(factor.ConjugateFactor):
         )
 
     def _get_default(
-        self, mat: jnp.array = None, vec: jnp.array = None
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        self, mat: Float[Array, "*a b c"] = None, vec: Float[Array, "*a b c"] = None
+    ) -> Tuple[Float[Array, "a b c"], Float[Array, "a b c"]]:
         """Make matrices and vectors right dimensions for integration.
 
-        :param mat: Matrix or matrices, 2D or 3D. If None, it returns identity, defaults to None
-        :type mat: jnp.array, optional
-        :param vec: Vector or vectors, 1D or 2D. If None returns 0s. , defaults to None
-        :type vec: jnp.array, optional
+        :param mat: Matrix or matrices, 2D or 3D. If None, it returns identity.
+        :param vec: Vector or vectors, 1D or 2D. If None returns zeros.
         :return: Returns matrix/matrices and vectors with dimensionality ready for integration.
-        :rtype: Tuple[jnp.ndarray, jnp.ndarray]
         """
         if mat is None:
             mat = jnp.eye(self.D)
@@ -314,15 +289,14 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     # Linear integals
 
-    def _expectation_x(self) -> jnp.ndarray:
+    def _expectation_x(self) -> Float[Array, "R D"]:
         r""" Compute the expectation.
         
         .. math::
 
             int X {\rm d}u(X) / \int {\rm d}u(X)
 
-        :return: The solved intergal. Dimension is [R, D].
-        :rtype: jnp.ndarray
+        :return: The solved intergal.
         """
         return self.mu
 
@@ -333,15 +307,14 @@ class GaussianMeasure(factor.ConjugateFactor):
 
             \int X {\rm d}u(X)
 
-        :return: The solved intergal. Dimension is [R, D].
-        :rtype: jnp.ndarray
+        :return: The solved intergal.
         """
         constant = self.integral()
         return jnp.einsum("a,ab->ab", constant, self._expectation_x())
 
     def _expectation_general_linear(
-        self, A_mat: jnp.ndarray, a_vec: jnp.ndarray
-    ) -> jnp.ndarray:
+        self, A_mat: Float[Array, "#R K D"], a_vec: Float[Array, "#R K"]
+    ) -> Float[Array, "R K"]:
         r"""Compute the linear expectation.
         
         .. math::
@@ -350,18 +323,15 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D]
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, K]
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix.
+        :param a_vec: Real valued vector. 
+        :return: The solved intergal.
         """
         return jnp.einsum("abc,ac->ab", A_mat, self.mu) + a_vec
 
     def integrate_general_linear(
-        self, A_mat: jnp.ndarray = None, a_vec: jnp.ndarray = None
-    ) -> jnp.ndarray:
+        self, A_mat: Float[Array, "*R K D"] = None, a_vec: Float[Array, "*R K"] = None
+    ) -> Float[Array, "R K"]:
         r"""Compute the linear expectation.
 
         .. math::
@@ -370,13 +340,9 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. If None, it is assumed identity. Dimensions should be  [K,D] or [R,K,D], 
-            defaults to None
-        :type A_mat: jnp.ndarray, optional
-        :param a_vec: Real valued vector. Dimensions should be [K] or [R,K], defaults to None
-        :type a_vec: jnp.ndarray, optional
-        :return: The solved intergal. Dimensions are [R, K]
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. If None, it is assumed identity.
+        :param a_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         constant = self.integral()
@@ -386,38 +352,36 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     # Quadratic integrals
 
-    def _expectation_xxT(self) -> jnp.ndarray:
+    def _expectation_xxT(self) -> Float[Array, "R D D"]:
         r"""Compute the expectation.
         
         .. math::
 
             \int XX^\top {\rm d}u(X) / \int {\rm d}u(X)
 
-        :return: The solved intergal. Dimensions are [R, D, D]
-        :rtype: jnp.ndarray
+        :return: The solved intergal. 
         """
         return self.Sigma + jnp.einsum("ab,ac->acb", self.mu, self.mu)
 
-    def integrate_xxT(self) -> jnp.ndarray:
+    def integrate_xxT(self) -> Float[Array, "R D D"]:
         r"""Compute the integral
         
         .. math::
         
             \int XX^\top {\rm d}u(X)
             
-        :return:  The solved intergal. Dimensions are [R, D, D]
-        :rtype: jnp.ndarray
+        :return:  The solved intergal. 
         """
         constant = self.integral()
         return jnp.einsum("a,abc->abc", constant, self._expectation_xxT())
 
     def _expectation_general_quadratic_inner(
         self,
-        A_mat: jnp.ndarray,
-        a_vec: jnp.ndarray,
-        B_mat: jnp.ndarray,
-        b_vec: jnp.ndarray,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "#R K D"],
+        a_vec: Float[Array, "#R K"],
+        B_mat: Float[Array, "#R K D"],
+        b_vec: Float[Array, "#R K"],
+    ) -> Float[Array, "R"]:
         r"""Computes the quartic expectation.
 
         .. math::
@@ -426,16 +390,11 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D]
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type b_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :return: The solved intergal.
         """
         AB = jnp.einsum("abc,abd->acd", A_mat, B_mat)
         ABSigma_trace = self.get_trace(jnp.einsum("cab,cbd->cad", AB, self.Sigma))
@@ -450,27 +409,22 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def integrate_general_quadratic_inner(
         self,
-        A_mat: jnp.ndarray = None,
-        a_vec: jnp.ndarray = None,
-        B_mat: jnp.ndarray = None,
-        b_vec: jnp.ndarray = None,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "*R K D"] = None,
+        a_vec: Float[Array, "*R K"] = None,
+        B_mat: Float[Array, "*R K D"] = None,
+        b_vec: Float[Array, "*R K"] = None,
+    ) -> Float[Array, "R"]:
         r""" Compute the quadratic expectation.
 
         int (AX+a)'(BX+b) {\rm d}\phi(X),
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D]
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type b_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -481,11 +435,11 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def _expectation_general_quadratic_outer(
         self,
-        A_mat: jnp.ndarray,
-        a_vec: jnp.ndarray,
-        B_mat: jnp.ndarray,
-        b_vec: jnp.ndarray,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "#R K D"],
+        a_vec: Float[Array, "#R K"],
+        B_mat: Float[Array, "#R L D"],
+        b_vec: Float[Array, "#R L"],
+    ) -> Float[Array, "R K L"]:
         r"""Compute the quadratic expectation.
 
         .. math::
@@ -494,16 +448,11 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D]
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type b_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, K, L].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :return: The solved intergal.
         """
         Exx = self._expectation_xxT()
         AxxB = jnp.einsum("cab,cbd->cad", A_mat, jnp.einsum("abc,adc->abd", Exx, B_mat))
@@ -515,11 +464,11 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def integrate_general_quadratic_outer(
         self,
-        A_mat: jnp.ndarray = None,
-        a_vec: jnp.ndarray = None,
-        B_mat: jnp.ndarray = None,
-        b_vec: jnp.ndarray = None,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "*R K D"] = None,
+        a_vec: Float[Array, "*R K"] = None,
+        B_mat: Float[Array, "*R L D"] = None,
+        b_vec: Float[Array, "*R L"] = None,
+    ) -> Float[Array, "R K L"]:
         r""" Compute the quadratic expectation.
         
         .. math::
@@ -528,16 +477,11 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D]
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type b_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, K, L].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -550,7 +494,7 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     # Cubic integrals
 
-    def _expectation_xbxx(self, b_vec: jnp.ndarray) -> jnp.ndarray:
+    def _expectation_xbxx(self, b_vec: Float[Array, "#R D"]) -> Float[Array, "R D D"]:
         r""" Compute the cubic expectation.
 
         .. math::
@@ -560,12 +504,9 @@ class GaussianMeasure(factor.ConjugateFactor):
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
 
-        :param b_vec: Real avlued vector. Dimensions should be [1, D] or [R, D].
-        :type b_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, D, D]
-        :rtype: jnp.ndarray
+        :param b_vec: Real avlued vector. 
+        :return: The solved intergal. 
         """
-        constant = self.integral()
         Exx = self._expectation_xxT()
         mub_outer = jnp.einsum("ab,ac->abc", self.mu, b_vec)
         mbExx = jnp.einsum("abc,acd->abd", mub_outer, Exx)
@@ -573,11 +514,11 @@ class GaussianMeasure(factor.ConjugateFactor):
         bmSigma = jnp.einsum("a,abc->abc", bmu_inner, self.Sigma)
         bmu_outer = jnp.einsum("ab,ac->abc", b_vec, self.mu)
         Sigmabm = jnp.einsum("abd,ade->abe", self.Sigma, bmu_outer)
-        return mbExx + bmSigma + Sigmabm
+        return (mbExx + bmSigma + Sigmabm)
 
     def _expectation_cubic_outer(
-        self, A_mat: jnp.ndarray, a_vec: jnp.ndarray
-    ) -> jnp.ndarray:
+        self, A_mat: Float[Array, "#R 1 D"], a_vec: Float[Array, "#R 1"]
+    ) -> Float[Array, "R D D"]:
         r""" Compute the cubic expectation.
 
         .. math::
@@ -586,12 +527,9 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. If None, it is assumed identity. Dimensions should be [1,1,D] or [R,1,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. If None, it is assumed zeros. Dimensions should be [1,1] or [R,1].
-        :type a_vec: jnp.ndarray
-        :return: Solved integral. Dimensions are [R, D, D].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. If None, it is assumed identity. 
+        :param a_vec: Real valued vector. If None, it is assumed zeros. 
+        :return: Solved integral. 
         """
         # xAxx
         xAxx = self._expectation_xbxx(b_vec=A_mat)
@@ -599,20 +537,17 @@ class GaussianMeasure(factor.ConjugateFactor):
         return xAxx + axx
 
     def integrate_cubic_outer(
-        self, A_mat: jnp.ndarray = None, a_vec: jnp.ndarray = None
-    ) -> jnp.ndarray:
+        self, A_mat: Float[Array, "*R 1 D"] = None, a_vec: Float[Array, "*R 1"] = None
+    ) -> Float[Array, "R D D"]:
         r"""Compute the cubic integration.
 
         .. math::
         
             \int X(A^\top X + a)X^\top {\rm d}u(X).
 
-        :param A_mat: Real valued matrix. If None, it is assumed identity. Dimensions should be [1,D] or [R,1,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. If None, it is assumed zeros. Dimensions should be [1] or [R,1].
-        :type a_vec: jnp.ndarray
-        :return: Solved integral. Dimensions are [R, D, D].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. If None, it is assumed identity. 
+        :param a_vec: Real valued vector. If None, it is assumed zeros. 
+        :return: Solved integral. 
         """
         if A_mat is None:
             A_mat = jnp.ones((1, self.D))
@@ -627,17 +562,15 @@ class GaussianMeasure(factor.ConjugateFactor):
             A_mat=A_mat[:, 0], a_vec=a_vec[:, 0]
         )
 
-    def integrate_xbxx(self, b_vec: jnp.ndarray) -> jnp.ndarray:
+    def integrate_xbxx(self, b_vec: Float[Array, "*R"]) -> Float[Array, "R D D"]:
         r"""Compute the cubic integral.
 
         .. math::
         
             \int Xb^\top XX^\top {\rm d}u(X)
 
-        :param b_vec: Real valued vector. Dimensions should be  [D,] or [1, D,].
-        :type b_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, D, D].
-        :rtype: jnp.ndarray
+        :param b_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         constant = self.integral()
         if b_vec is None:
@@ -648,13 +581,13 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def _expectation_general_cubic_inner(
         self,
-        A_mat: jnp.ndarray,
-        a_vec: jnp.ndarray,
-        B_mat: jnp.ndarray,
-        b_vec: jnp.ndarray,
-        C_mat: jnp.ndarray,
-        c_vec: jnp.ndarray,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "#R K D"],
+        a_vec: Float[Array, "#R K"],
+        B_mat: Float[Array, "#R L D"],
+        b_vec: Float[Array, "#R L"],
+        C_mat: Float[Array, "#R L D"],
+        c_vec: Float[Array, "#R L"],
+    ) -> Float[Array, "R K"]:
         r"""Compute the quartic expectation.
 
         .. math::
@@ -663,20 +596,13 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D].
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [1,L] or [R,L].
-        :type b_vec: jnp.ndarray
-        :param C_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D].
-        :type C_mat: jnp.ndarray
-        :param c_vec: Real valued vector. Dimensions should be [1,L] or [R,L].
-        :type c_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, K].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix.
+        :param a_vec: Real valued vector.
+        :param B_mat: Real valued matrix.
+        :param b_vec: Real valued vector.
+        :param C_mat: Real valued matrix.
+        :param c_vec: Real valued vector.
+        :return: The solved intergal. 
         """
         Amu_a = jnp.einsum("cab,cb-> ca", A_mat, self.mu) + a_vec
         Bmu_b = jnp.einsum("cab,cb-> ca", B_mat, self.mu) + b_vec
@@ -696,33 +622,26 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def integrate_general_cubic_inner(
         self,
-        A_mat: jnp.ndarray = None,
-        a_vec: jnp.ndarray = None,
-        B_mat: jnp.ndarray = None,
-        b_vec: jnp.ndarray = None,
-        C_mat: jnp.ndarray = None,
-        c_vec: jnp.ndarray = None,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "*R K D"] = None,
+        a_vec: Float[Array, "*R K"] = None,
+        B_mat: Float[Array, "*R L D"] = None,
+        b_vec: Float[Array, "*R L"] = None,
+        C_mat: Float[Array, "*R L D"] = None,
+        c_vec: Float[Array, "*R L"] = None,
+    ) -> Float[Array, "R K"]:
         r"""Compute the quadratic integration.
 
         .. math::
         
             \int (AX+a)(BX+b)^\top(CX+c)  {\rm d}u(X).
 
-        :param A_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [L,D] or [R,L,D].
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [L] or [R,L].
-        :type b_vec: jnp.ndarray
-        :param C_mat: Real valued matrix. Dimensions should be [L,D] or [R,L,D].
-        :type C_mat: jnp.ndarray
-        :param c_vec: Real valued vector. Dimensions should be [L] or [R,L].
-        :type c_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, K].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :param C_mat: Real valued matrix. 
+        :param c_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -734,13 +653,13 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def _expectation_general_cubic_outer(
         self,
-        A_mat: jnp.ndarray,
-        a_vec: jnp.ndarray,
-        B_mat: jnp.ndarray,
-        b_vec: jnp.ndarray,
-        C_mat: jnp.ndarray,
-        c_vec: jnp.ndarray,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "#R K D"],
+        a_vec: Float[Array, "#R K"],
+        B_mat: Float[Array, "#R K D"],
+        b_vec: Float[Array, "#R K"],
+        C_mat: Float[Array, "#R L D"],
+        c_vec: Float[Array, "#R L"],
+    ) -> Float[Array, "R L"]:
         r"""Compute the cubic expectation.
 
         .. math::
@@ -751,20 +670,13 @@ class GaussianMeasure(factor.ConjugateFactor):
         
         # REMARK: Does the same thing as inner transposed.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [1,L] or [R,K].
-        :type b_vec: jnp.ndarray
-        :param C_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D].
-        :type C_mat: jnp.ndarray
-        :param c_vec: Real valued vector. Dimensions should be [1,L] or [R,L].
-        :type c_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, L].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :param C_mat: Real valued matrix. 
+        :param c_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         Amu_a = jnp.einsum("cab,cb-> ca", A_mat, self.mu) + a_vec
         Bmu_b = jnp.einsum("cab,cb-> ca", B_mat, self.mu) + b_vec
@@ -789,33 +701,26 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def integrate_general_cubic_outer(
         self,
-        A_mat: jnp.ndarray = None,
-        a_vec: jnp.ndarray = None,
-        B_mat: jnp.ndarray = None,
-        b_vec: jnp.ndarray = None,
-        C_mat: jnp.ndarray = None,
-        c_vec: jnp.ndarray = None,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "*R K D"] = None,
+        a_vec: Float[Array, "*R K"] = None,
+        B_mat: Float[Array, "*R K D"] = None,
+        b_vec: Float[Array, "*R K"] = None,
+        C_mat: Float[Array, "*R L D"] = None,
+        c_vec: Float[Array, "*R L"] = None,
+    ) -> Float[Array, "R L"]:
         r""" Compute the quadratic integration
         
         .. math::
 
            \int (AX+a)^\top(Bx+b)(Cx+c)^\top {\rm d}u(X),
 
-        :param A_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [L] or [R,K].
-        :type b_vec: jnp.ndarray
-        :param C_mat: Real valued matrix. Dimensions should be [L,D] or [R,L,D].
-        :type C_mat: jnp.ndarray
-        :param c_vec: Real valued vector. Dimensions should be [L] or [R,L].
-        :type c_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, L].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :param C_mat: Real valued matrix. 
+        :param c_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -829,15 +734,15 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def _expectation_general_quartic_outer(
         self,
-        A_mat: jnp.ndarray,
-        a_vec: jnp.ndarray,
-        B_mat: jnp.ndarray,
-        b_vec: jnp.ndarray,
-        C_mat: jnp.ndarray,
-        c_vec: jnp.ndarray,
-        D_mat: jnp.ndarray,
-        d_vec: jnp.ndarray,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "#R K D"],
+        a_vec: Float[Array, "#R K"],
+        B_mat: Float[Array, "#R L D"],
+        b_vec: Float[Array, "#R L"],
+        C_mat: Float[Array, "#R L D"],
+        c_vec: Float[Array, "#R L"],
+        D_mat: Float[Array, "#R M D"],
+        d_vec: Float[Array, "#R M"],
+    ) -> Float[Array, "R K M"]:
         r"""Compute the quartic expectation
         
         .. math::
@@ -846,24 +751,15 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D].
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [1,L] or [R,L].
-        :type b_vec: jnp.ndarray
-        :param C_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D].
-        :type C_mat: jnp.ndarray
-        :param c_vec: Real valued vector. Dimensions should be [1,L] or [R,L].
-        :type c_vec: jnp.ndarray
-        :param D_mat: Real valued matrix. Dimensions should be [1,M,D] or [R,M,D].
-        :type D_mat: jnp.ndarray
-        :param d_vec: Real valued vector. Dimensions should be [1,M] or [R,M].
-        :type d_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, K, M].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :param C_mat: Real valued matrix. 
+        :param c_vec: Real valued vector. 
+        :param D_mat: Real valued matrix. 
+        :param d_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         Amu_a = jnp.einsum("cab,cb-> ca", A_mat, self.mu) + a_vec
         Bmu_b = jnp.einsum("cab,cb-> ca", B_mat, self.mu) + b_vec
@@ -901,39 +797,30 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def integrate_general_quartic_outer(
         self,
-        A_mat: jnp.ndarray = None,
-        a_vec: jnp.ndarray = None,
-        B_mat: jnp.ndarray = None,
-        b_vec: jnp.ndarray = None,
-        C_mat: jnp.ndarray = None,
-        c_vec: jnp.ndarray = None,
-        D_mat: jnp.ndarray = None,
-        d_vec: jnp.ndarray = None,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "*R K D"] = None,
+        a_vec: Float[Array, "*R K"] = None,
+        B_mat: Float[Array, "*R L D"] = None,
+        b_vec: Float[Array, "*R L"] = None,
+        C_mat: Float[Array, "*R L D"] = None,
+        c_vec: Float[Array, "*R L"] = None,
+        D_mat: Float[Array, "*R M D"] = None,
+        d_vec: Float[Array, "*R M"] = None,
+    ) -> Float[Array, "R K M"]:
         r""" Compute the quartic integral.
         
         .. math::
 
             \int (AX+a)(BX+b)^\top(CX+c)(DX+d)^\top {\rm d}u(X).
 
-        :param A_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [L,D] or [R,L,D].
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [L] or [R,L].
-        :type b_vec: jnp.ndarray
-        :param C_mat: Real valued matrix. Dimensions should be [L,D] or [R,L,D].
-        :type C_mat: jnp.ndarray
-        :param c_vec: Real valued vector. Dimensions should be [L] or [R,L].
-        :type c_vec: jnp.ndarray
-        :param D_mat: Real valued matrix. Dimensions should be [M,D] or [R,M,D].
-        :type D_mat: jnp.ndarray
-        :param d_vec: Real valued vector. Dimensions should be [M] or [R,M].
-        :type d_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R, K, M].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :param C_mat: Real valued matrix. 
+        :param c_vec: Real valued vector. 
+        :param D_mat: Real valued matrix. 
+        :param d_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -946,15 +833,15 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def _expectation_general_quartic_inner(
         self,
-        A_mat: jnp.ndarray,
-        a_vec: jnp.ndarray,
-        B_mat: jnp.ndarray,
-        b_vec: jnp.ndarray,
-        C_mat: jnp.ndarray,
-        c_vec: jnp.ndarray,
-        D_mat: jnp.ndarray,
-        d_vec: jnp.ndarray,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "#R K D"],
+        a_vec: Float[Array, "#R K"],
+        B_mat: Float[Array, "#R K D"],
+        b_vec: Float[Array, "#R K"],
+        C_mat: Float[Array, "#R L D"],
+        c_vec: Float[Array, "#R L"],
+        D_mat: Float[Array, "#R L D"],
+        d_vec: Float[Array, "#R L"],
+    ) -> Float[Array, "R"]:
         r"""Compute the quartic expectation.
 
         .. math::
@@ -963,24 +850,15 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
 
-        :param A_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [1,K,D] or [R,K,D].
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [1,K] or [R,K].
-        :type b_vec: jnp.ndarray
-        :param C_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D].
-        :type C_mat: jnp.ndarray
-        :param c_vec: Real valued vector. Dimensions should be [1,L] or [R,L].
-        :type c_vec: jnp.ndarray
-        :param D_mat: Real valued matrix. Dimensions should be [1,L,D] or [R,L,D].
-        :type D_mat: jnp.ndarray
-        :param d_vec: Real valued vector. Dimensions should be [1,L] or [R,L].
-        :type d_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :param C_mat: Real valued matrix. 
+        :param c_vec: Real valued vector. 
+        :param D_mat: Real valued matrix. 
+        :param d_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
         Amu_a = jnp.einsum("cab,cb-> ca", A_mat, self.mu) + a_vec
         Bmu_b = jnp.einsum("cab,cb-> ca", B_mat, self.mu) + b_vec
@@ -1020,39 +898,30 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     def integrate_general_quartic_inner(
         self,
-        A_mat: jnp.ndarray = None,
-        a_vec: jnp.ndarray = None,
-        B_mat: jnp.ndarray = None,
-        b_vec: jnp.ndarray = None,
-        C_mat: jnp.ndarray = None,
-        c_vec: jnp.ndarray = None,
-        D_mat: jnp.ndarray = None,
-        d_vec: jnp.ndarray = None,
-    ) -> jnp.ndarray:
+        A_mat: Float[Array, "*R K D"] = None,
+        a_vec: Float[Array, "*R K"] = None,
+        B_mat: Float[Array, "*R K D"] = None,
+        b_vec: Float[Array, "*R K"] = None,
+        C_mat: Float[Array, "*R L D"] = None,
+        c_vec: Float[Array, "*R L"] = None,
+        D_mat: Float[Array, "*R L D"] = None,
+        d_vec: Float[Array, "*R L"] = None,
+    ) -> Float[Array, "R"]:
         r""" Compute the quartic integral.
         
         .. math::
 
             \int (AX+a)(BX+b)'(CX+c)(DX+d)' {\rm d}u(X).
 
-        :param A_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
-        :type A_mat: jnp.ndarray
-        :param a_vec: Real valued vector. Dimensions should be [K] or [R,K].
-        :type a_vec: jnp.ndarray
-        :param B_mat: Real valued matrix. Dimensions should be [K,D] or [R,K,D].
-        :type B_mat: jnp.ndarray
-        :param b_vec: Real valued vector. Dimensions should be [K] or [R,K].
-        :type b_vec: jnp.ndarray
-        :param C_mat: Real valued matrix. Dimensions should be [L,D] or [R,L,D].
-        :type C_mat: jnp.ndarray
-        :param c_vec: Real valued vector. Dimensions should be [L] or [R,L].
-        :type c_vec: jnp.ndarray
-        :param D_mat: Real valued matrix. Dimensions should be [L,D] or [R,L,D].
-        :type D_mat: jnp.ndarray
-        :param d_vec: Real valued vector. Dimensions should be [L] or [R,L].
-        :type d_vec: jnp.ndarray
-        :return: The solved intergal. Dimensions are [R].
-        :rtype: jnp.ndarray
+        :param A_mat: Real valued matrix. 
+        :param a_vec: Real valued vector. 
+        :param B_mat: Real valued matrix. 
+        :param b_vec: Real valued vector. 
+        :param C_mat: Real valued matrix. 
+        :param c_vec: Real valued vector. 
+        :param D_mat: Real valued matrix. 
+        :param d_vec: Real valued vector. 
+        :return: The solved intergal. 
         """
 
         A_mat, a_vec = self._get_default(A_mat, a_vec)
@@ -1064,17 +933,15 @@ class GaussianMeasure(factor.ConjugateFactor):
             A_mat, a_vec, B_mat, b_vec, C_mat, c_vec, D_mat, d_vec
         )
 
-    def integrate_log_factor(self, factor: factor.ConjugateFactor) -> jnp.array:
+    def integrate_log_factor(self, factor: factor.ConjugateFactor) -> Float[Array, "R"]:
         """Integrates over a log factor.
 
         :param factor: The factor, which will be intergrated.
-        :type factor: factor.ConjugateFactor
         :return: The integral
-        :rtype: jnp.array
         """
         return factor.intergate_log_factor(self)
 
-
+@dataclass(kw_only=True)
 class GaussianDiagMeasure(GaussianMeasure):
     r"""A measure with a Gaussian form.
 
@@ -1084,40 +951,28 @@ class GaussianDiagMeasure(GaussianMeasure):
 \
     D is the dimension, and R the number of Gaussians. 
 
-    :param Lambda: Information (precision) matrix of the Gaussian distributions. Needs to be postive definite and diagonal.
-        Dimensions should be [R, D, D].
-    :type Lambda: jnp.ndarray
-    :param nu: Information vector of a Gaussian distribution. If None all zeros. Dimensions should be [R, D], 
-        defaults to None
-    :type nu: jnp.ndarray, optional
-    :param ln_beta: The log constant factor of the factor. If None all zeros. Dimensions should be [R], 
-        defaults to None
-    :type ln_beta: jnp.ndarray, optional
-    :param Sigma: Covariance matrix of the Gaussian distributions. Needs to be positive definite. 
-        Dimensions should be [R, D, D], defaults to None
-    :type Sigma: jnp.ndarray, optional
-    :param ln_det_Lambda: Log determinant of Lambda. Dimensions should be [R], defaults to None
-    :type ln_det_Lambda: jnp.ndarray, optional
-    :param ln_det_Sigma: Log determinant of Sigma. Dimensions should be [R], defaults to None
-    :type ln_det_Sigma: jnp.ndarray, optional
+    :param Lambda: Information (precision) matrix of the Gaussian distributions. Needs to be positive definite and diagonal.
+    :param nu: Information vector of a Gaussian distribution. If None all zeros. 
+    :param ln_beta: The log constant factor of the factor. If None all zeros.
+    :param Sigma: Covariance matrix of the Gaussian distributions. Needs to be positive definite.
+    :param ln_det_Lambda: Log determinant of Lambda. 
+    :param ln_det_Sigma: Log determinant of Sigma. 
     """
 
     def invert_lambda(self):
         self.Sigma, self.ln_det_Lambda = invert_diagonal(self.Lambda)
         self.ln_det_Sigma = -self.ln_det_Lambda
 
-    def slice(self, indices: jnp.ndarray) -> "GaussianDiagMeasure":
+    def slice(self, indices: Int[Array, "R_new"]) -> "GaussianDiagMeasure":
         """Return an object with only the specified entries.
 
         :param indices: The entries that should be contained in the returned object.
-        :type indices: jnp.ndarray
         :return: The resulting Gaussian diagonal measure.
-        :rtype: GaussianDiagMeasure
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         nu_new = jnp.take(self.nu, indices, axis=0)
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        new_measure = GaussianDiagMeasure(Lambda_new, nu_new, ln_beta_new)
+        new_measure = GaussianDiagMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             new_measure.Sigma = jnp.take(self.Sigma, indices, axis=0)
             new_measure.ln_det_Sigma = jnp.take(self.ln_det_Sigma, indices, axis=0)
@@ -1132,12 +987,11 @@ class GaussianDiagMeasure(GaussianMeasure):
             v(X) = \prod_i u_i(X)
 
         :return: Factor of all factor.
-        :rtype: GaussianDiagMeasure
         """
         Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
         nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
         ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
-        new_measure = GaussianDiagMeasure(Lambda_new, nu_new, ln_beta_new)
+        new_measure = GaussianDiagMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
         if self.Sigma is not None:
             new_measure._prepare_integration()
         return new_measure
