@@ -343,7 +343,6 @@ class ConditionalGaussianPDF:
         :return: Returns the integral with respect to density :math:`p(Y,X)`.
         """
         if self.R != 1 and self.R != p_yx.R:
-        if self.R != 1 and self.R != p_yx.R:
             raise NotImplementedError("Only implemented for R=1.")
         A = jnp.empty((self.R, self.Dy, self.Dy + self.Dx))
         A = A.at[:, :, : self.Dy].set(jnp.eye(self.Dy, self.Dy)[None])
