@@ -699,10 +699,10 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         :param x: Instances, the :math:`\mu` should be conditioned on.
         :return: Conditional covariance.
         """
-        D_x = self.beta[None, :, None] * (self.exp_h_plus(x) + self.exp_h_minus(x))
+        D_x = self.beta[None] * (self.exp_h_plus(x) + self.exp_h_minus(x)).T
         Sigma_0 = self.sigma2_x * jnp.eye(self.Dy)
         Sigma_y_x = Sigma_0[None] + jnp.einsum(
-            "ab,cb->ac", jnp.einsum("ab,cb->ca", self.U, D_x), self.U
+            "ab,cb->abc", jnp.einsum("ab,cb->ca", self.U, D_x), self.U
         )
         return Sigma_y_x
 
@@ -875,43 +875,39 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         :return: The integral evaluated for of :math:`Y=y`.
         """
         vec = y - self.b
-        E_epsilon2 = jnp.sum(
-            p_x.integrate("(Ax+a)'(Bx+b)", A_mat=-self.M, a_vec=vec, B_mat=-self.M, b_vec=vec),
-            axis=0,
-        )
+        E_epsilon2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=-self.M, a_vec=vec, B_mat=-self.M, b_vec=vec)
         
         def scan_body_function(carry, args_i):
             W_i, u_i, beta_i = args_i
-            omega_star_i = lax.stop_gradient(self._get_omega_star_i(W_i, u_i, beta_i, p_x, y)[0])
-            uRu_i, log_lb_sum_i = self._get_lb_i(W_i, u_i, beta_i, omega_star_i, p_x, y)
+            omega_star_i, omega_dagger_i, _ = lax.stop_gradient(self._get_omega_star_i(W_i, u_i, beta_i, p_x, y))
+            uRu_i, log_lb_sum_i = self._get_lb_i(W_i, u_i, beta_i, omega_star_i, omega_dagger_i, p_x, y)
             result = (uRu_i, log_lb_sum_i)
             return carry, result
 
         _, result = lax.scan(scan_body_function, None, (self.W, self.U.T, self.beta))
         uRu, log_lb_sum = result
-        
         E_D_inv_epsilon2 = jnp.sum(uRu, axis=0)
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
         log_int_y = -0.5 * (E_epsilon2 - E_D_inv_epsilon2) / self.sigma_x**2
         # determinant part
-        log_int_y = log_int_y - 0.5 * E_ln_sigma2_f + 0.5 * p_x.R * (self.Du - self.Dy) * jnp.log(self.sigma_x**2)
+        log_int_y = log_int_y - 0.5 * E_ln_sigma2_f + 0.5 * (self.Du - self.Dy) * jnp.log(self.sigma_x**2) - .5 * self.Dy * jnp.log(2. * jnp.pi)
         return log_int_y
 
-    def _get_lb_i(self, W_i: Float[Array, "Dx+1"], u_i: Float[Array, "Dy"], beta_i: Float[Array, "1"], omega_star: Float[Array, "N"], p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"]) -> Tuple[Float[Array, "N"], Float[Array, "N"]]:
+    def _get_lb_i(self, W_i: Float[Array, "Dx+1"], u_i: Float[Array, "Dy"], beta_i: Float[Array, "1"], omega_star: Float[Array, "N"], omega_dagger, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"]) -> Tuple[Float[Array, "N"], Float[Array, "N"]]:
         # phi = pdf.GaussianPDF(**phi_dict)
         # beta = self.beta[iu:iu + 1]
         # Lower bound for E[ln (sigma_x^2 + f(h))]
         R = p_x.R
         w_i = W_i[1:].reshape((1, -1))
-        v = jnp.tile(w_i, (R, 1))
+        v =  jnp.tile(w_i, (R, 1))
         b_i = W_i[:1]
         u_i = u_i.reshape((-1, 1))
-        uC = jnp.dot(u_i.T, -self.M[0])
-        uy_d = jnp.dot(u_i.T, (y - self.b[0]).T)
+        #uC = jnp.dot(u_i.T, -self.M[0])
+        #uy_d = jnp.dot(u_i.T, (y - self.b[0]).T)
         # Lower bound for E[ln (sigma_x^2 + f(h))]
-        omega_dagger = jnp.sqrt(
-            p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
-        )
+        
+        Eh2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
+        """
         g_omega = self.g(omega_star, beta_i)
         nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
@@ -965,8 +961,10 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         )
         quad_int = quad_int_plus + quad_int_minus
         omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
+        """
         f_omega_dagger = self.f(omega_dagger, beta_i)
-        log_lb = jnp.log(self.sigma_x**2 + f_omega_dagger)
+        g_omega_dagger = self.g(omega_dagger, beta_i)
+        log_lb = jnp.log(self.sigma_x**2 + f_omega_dagger) + .5 * g_omega_dagger * (Eh2 - omega_dagger ** 2)
         g_omega = self.g(omega_star, beta_i)
         nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
@@ -996,10 +994,10 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             "(Ax+a)(Bx+b)'", A_mat=mat1, a_vec=vec1, B_mat=mat1, b_vec=vec1
         )
         R = R_plus + R_minus
-        R = jnp.sum(R, axis=0)
-        # R = .5 * (R + R.T)
-        uRu = jnp.sum(u_i * jnp.dot(R, u_i))
-        log_lb_sum = jnp.sum(log_lb)
+        R = R
+        #R = .5 * (R + R.T)
+        uRu = jnp.sum(u_i.T * jnp.einsum('abc, cb -> ab', R, u_i), axis=1)
+        log_lb_sum = log_lb
         return uRu, log_lb_sum
     
     def _get_omega_star_i(self, W_i: Float[Array, "Dy+1"], u_i: Float[Array, "Dy"], beta_i: Float[Array, "1"], p_x: pdf.GaussianPDF, y: Float[Array, "N"], conv_crit: float=1e-3) -> Tuple[Float[Array, "N"], Int[Array, "_"]]:
@@ -1011,9 +1009,9 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         uM = jnp.dot(u_i.T, -self.M[0])
         uy_b = jnp.dot(u_i.T, (y - self.b[0]).T)
         # Lower bound for E[ln (sigma_x^2 + f(h))]
-        #omega_dagger = jnp.sqrt(
-        #    p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
-        #)
+        omega_dagger = jnp.sqrt(
+            p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
+        )
         omega_star = 1e-15 * jnp.ones(R)
         # omega_star = omega_star_init
         omega_old = 10 * jnp.ones(R)
@@ -1094,7 +1092,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             jnp.abs(omega_star - omega_old) / omega_star
         ) > conv_crit
 
-        return omega_star, indices_non_converged
+        return omega_star, omega_dagger, indices_non_converged
     
     def f(self, h: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         """Compute the function

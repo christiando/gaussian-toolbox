@@ -145,8 +145,8 @@ def minimize(
     """
     # Use tree flatten and unflatten to convert params x0 from PyTrees to flat arrays
     x0_flat, unravel = ravel_pytree(x0)
-
     # Wrap the objective function to consume flat _original_
+    fun = jit(fun)
     # numpy arrays and produce scalar outputs.
     def fun_wrapper(x_flat, *args):
         x = unravel(x_flat)
@@ -179,7 +179,9 @@ def minimize(
         tol=tol,
         options=options,
     )
-
+    fun._clear_cache()
+    jac._clear_cache()
+    fun_wrapper
     # pack the output back into a PyTree
     results["x"] = unravel(results["x"])
     return results
