@@ -3,6 +3,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 from gaussian_toolbox.gaussian_process import kernel, prior, likelihood, model
 from jax import numpy as jnp
+from jax import config
+
+config.update("jax_enable_x64", True)
 
 np.random.seed(1)
 

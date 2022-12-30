@@ -184,16 +184,6 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         )
         return cond_p_xy
     
-    def integrate_log_conditional(
-        self, p_yx: measure.GaussianMeasure, **kwargs
-    ) -> jnp.ndarray:
-        raise NotImplementedError("Log integral not implemented!")
-
-    def integrate_log_conditional_y(
-        self, p_x: measure.GaussianMeasure, **kwargs
-    ) -> callable:
-        raise NotImplementedError("Log integral not implemented!")
-
     def affine_marginal_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
     ) -> pdf.GaussianPDF:
@@ -221,6 +211,16 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y,)
         return p_y
+    
+    def integrate_log_conditional(
+        self, p_yx: measure.GaussianMeasure, **kwargs
+    ) -> jnp.ndarray:
+        raise NotImplementedError("Log integral not implemented!")
+
+    def integrate_log_conditional_y(
+        self, p_x: measure.GaussianMeasure, **kwargs
+    ) -> callable:
+        raise NotImplementedError("Log integral not implemented!")
 
 @dataclass(kw_only=True)
 class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
@@ -686,7 +686,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         self.exp_h_plus = factor.LinearFactor(nu=nu, ln_beta=ln_beta)
         self.exp_h_minus = factor.LinearFactor(nu=-nu, ln_beta=-ln_beta)
 
-    def get_conditional_cov(self, x: Float[Array, "N Dx"]) -> Float[Array, "N Dy Dy"]:
+    def get_conditional_cov(self, x: Float[Array, "N Dx"], invert: bool=False) -> Union[Float[Array, "N Dy Dy"], Tuple[Float[Array, "N Dy Dy"], Float[Array, "N Dy Dy"], Float[Array, "N"]]]:
         r"""Evaluate the covariance at a given :math:`X=x`, i.e.
 
         .. math::
@@ -701,10 +701,21 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         """
         D_x = self.beta[None] * (self.exp_h_plus(x) + self.exp_h_minus(x)).T
         Sigma_0 = self.sigma2_x * jnp.eye(self.Dy)
+        print(D_x.shape, self.U.shape)
         Sigma_y_x = Sigma_0[None] + jnp.einsum(
-            "ab,cb->abc", jnp.einsum("ab,cb->ca", self.U, D_x), self.U
+            "adb,cb->acd", jnp.einsum("ab,cb->cab", self.U, D_x), self.U
         )
-        return Sigma_y_x
+        if invert:
+            G_x = D_x / (self.sigma2_x + D_x)
+            print(G_x.shape, self.U.shape)
+            Sigma_y_x_inv = jnp.eye(self.Dy)[None] - jnp.einsum(
+            "adb,cb->acd", jnp.einsum("ab,cb->cab", self.U, G_x), self.U
+        )
+            Sigma_y_x_inv /= self.sigma2_x
+            ln_det_Sigma_y_x = (self.Dy - self.Du) * jnp.log(self.sigma2_x) + jnp.sum(jnp.log(self.sigma2_x + D_x), axis=1)
+            return Sigma_y_x, Sigma_y_x_inv, ln_det_Sigma_y_x
+        else:
+            return Sigma_y_x
 
     def condition_on_x(self, x: Float[Array, "N Dx"], **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`X=x`.
@@ -714,8 +725,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
-        Sigma_new = self.get_conditional_cov(x)
-        return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new)
+        Sigma_new, Lambda_new, ln_det_Sigma_new = self.get_conditional_cov(x, invert=True)
+        #Sigma_new = .5 * (Sigma_new + jnp.swapaxes(Sigma_new, -2, -1))
+        return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new)
+        #Sigma_new = self.get_conditional_cov(x)
+        #return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new)
 
     def set_y(self, y: Float[Array, "R Dy"], **kwargs):
         """Not valid function for this model class.
@@ -741,9 +755,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             + p_x.multiply(self.exp_h_minus).integrate()
         )
         D_int = self.beta[None] * D_int.reshape((p_x.R, self.Du))
-        return self.sigma2_x * jnp.eye(self.Dy)[None] + jnp.einsum(
+        Sigma_int = self.sigma2_x * jnp.eye(self.Dy)[None] + jnp.einsum(
             "abc,dc->abd", self.U[None] * D_int[:, None], self.U
         )
+        Sigma_int = .5 * (Sigma_int + jnp.swapaxes(Sigma_int, -2, -1))
+        return Sigma_int
 
     def get_expected_moments(
         self, p_x: pdf.GaussianPDF
