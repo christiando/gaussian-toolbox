@@ -119,7 +119,7 @@ class TestHCCovGaussianConditional:
         Q, _ = np.linalg.qr(rand_mat)
         U = jnp.array(Q[:, : Du])
         # self.U = jnp.eye(Dx)[:, :Du]
-        W = np.random.randn(Du, Dx + 1)
+        W = 1e-1 * np.random.randn(Du, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
         beta = .5**2 * jnp.ones(Du)
@@ -132,8 +132,8 @@ class TestHCCovGaussianConditional:
             W=W,
             beta=beta,
         )
-        mu_x = 0 * objax.random.normal((R, Dx))
-        Sigma_x = 10 * self.get_pd_matrix(R, Dx)#jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        mu_x = objax.random.normal((R, Dx))
+        Sigma_x = self.get_pd_matrix(R, Dx)#jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
     
@@ -150,7 +150,7 @@ class TestHCCovGaussianConditional:
         return psd_mat
     
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du", [(1, 5, 2, 2), (1, 10, 3, 1), (1, 2, 5, 5),],
+        "R, Dx, Dy, Du", [(1, 5, 2, 2), (1, 10, 3, 1), (1, 2, 5, 2),],
     )
     def test_affine_tranformations(self, R, Dx, Dy, Du):
         cond, p_X = self.create_instance(R, Dx, Dy, Du)
@@ -177,6 +177,6 @@ class TestHCCovGaussianConditional:
         cond, p_X = self.create_instance(R, Dx, Dy, Du)
         integral_lb = cond.integrate_log_conditional_y(p_X, y=y)
         key = jax.random.PRNGKey(42)
-        X_sample = p_X.sample(key, 10000)
+        X_sample = p_X.sample(key, 100000)
         integral_sample = jnp.mean(cond(X_sample[:,0]).evaluate_ln(y), axis=0)
-        assert jnp.all(integral_lb <= integral_sample)
+        assert jnp.all(integral_lb <= integral_sample + 1e-1)
