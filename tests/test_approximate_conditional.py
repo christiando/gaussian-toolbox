@@ -12,7 +12,6 @@ from jax import config
 import jax
 
 config.update("jax_enable_x64", True)
-config.update("jax_debug_nans", True)
 import numpy as np
 import objax
 
