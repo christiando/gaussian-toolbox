@@ -132,7 +132,7 @@ class TestHCCovGaussianConditional:
             beta=beta,
         )
         mu_x = objax.random.normal((R, Dx))
-        Sigma_x = self.get_pd_matrix(R, Dx)#jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        Sigma_x = 10 * self.get_pd_matrix(R, Dx)#jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
     
