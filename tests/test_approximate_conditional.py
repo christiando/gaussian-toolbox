@@ -177,5 +177,6 @@ class TestHCCovGaussianConditional:
         integral_lb = cond.integrate_log_conditional_y(p_X, y=y)
         key = jax.random.PRNGKey(42)
         X_sample = p_X.sample(key, 100000)
-        integral_sample = jnp.mean(cond(X_sample[:,0]).evaluate_ln(y), axis=0)
-        assert jnp.all(integral_lb <= integral_sample + 1e-1)
+        integral_sample_mean = jnp.mean(cond(X_sample[:,0]).evaluate_ln(y), axis=0)
+        integral_sample_std= jnp.std(cond(X_sample[:,0]).evaluate_ln(y), axis=0)
+        assert jnp.all(integral_lb <= integral_sample_mean + 1e-2 * integral_sample_std)
