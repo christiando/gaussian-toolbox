@@ -228,7 +228,7 @@ class TestConditionalGaussianPDF:
         assert jnp.allclose(px_given_y.Sigma, Sigma_new)
         assert jnp.allclose(px_given_y.Lambda, Lambda_new)
         assert jnp.allclose(px_given_y.ln_det_Sigma, ln_det_Sigma)
-
+       
 
 class TestNNControlGaussianConditional:
     @staticmethod
@@ -502,8 +502,15 @@ class TestConditionalIdentityGaussianPDF:
         pxy1 = px_given_y1.affine_joint_transformation(py)
         pxy2 = px_given_y2.affine_joint_transformation(py)
         r1 = px_given_y1.integrate_log_conditional(pxy1)
-        r2 = px_given_y1.integrate_log_conditional(pxy2)
+        r2 = px_given_y2.integrate_log_conditional(pxy2)
+        px = px_given_y1.affine_marginal_transformation(py)
+        key = jax.random.PRNGKey(0)
+        y = py.sample(key, 1)[0]
+        r_ana1_y = px_given_y1.integrate_log_conditional_y(px, y=y)
+        r_ana2_y = px_given_y2.integrate_log_conditional_y(px, y=y)
         assert jnp.allclose(r1, r2)
+        assert jnp.allclose(r_ana1_y, r_ana2_y, atol=1e-2, rtol=np.inf)
+        
 
     @pytest.mark.parametrize(
         "R, D",
@@ -535,6 +542,25 @@ class TestConditionalIdentityGaussianPDF:
         assert jnp.allclose(px_given_y1.Sigma, px_given_y2.Sigma)
         assert jnp.allclose(px_given_y1.Lambda, px_given_y2.Lambda)
         assert jnp.allclose(px_given_y1.ln_det_Sigma, px_given_y2.ln_det_Sigma)
+        
+        
+    
+    @pytest.mark.parametrize(
+        "R, D, idx",
+        [
+            (10, 1, jnp.array([1,4,9])),
+            (10, 2, jnp.array([1,4,5])),
+            (10, 10, jnp.array([1,4,-1])),
+        ],
+    )
+    def test_update_Sigma(self, R, D, idx):
+        px_given_y1, px_given_y2, py = self.create_instance(R, D)
+        px_given_y2_sliced = px_given_y2.slice(idx)
+        assert jnp.allclose(px_given_y2_sliced.Sigma, px_given_y2.Sigma[idx]) 
+        assert jnp.allclose(px_given_y2_sliced.Lambda, px_given_y2.Lambda[idx]) 
+        assert jnp.allclose(px_given_y2_sliced.ln_det_Sigma, px_given_y2.ln_det_Sigma[idx]) 
+    
+
 
 
 class TestConditionalIdentityDiagGaussianPDF(TestConditionalIdentityGaussianPDF):
@@ -552,6 +578,27 @@ class TestConditionalIdentityDiagGaussianPDF(TestConditionalIdentityGaussianPDF)
         return px_given_y1, px_given_y2, py
 
     @staticmethod
-    def get_diagonal_mat(R, D, eigen_mu=1):
+    def get_diagonal_mat(R, D):
         diag_mat = jnp.tile(jnp.diag(objax.random.uniform((D,)))[None], (R, 1, 1))
         return diag_mat
+    
+    
+class TestclassConditionalGaussianDiagPDF(TestConditionalIdentityGaussianPDF):
+    @classmethod
+    def create_instance(self, R, D):
+        Sigma_y = self.get_pd_matrix(R, D)
+        mu = objax.random.normal((R, D))
+        py = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu)
+        Sigma_xy = self.get_diagonal_mat(R, D)
+        M = objax.random.normal((R, D, D))
+        b = objax.random.normal((R, D))
+        px_given_y1 = conditional.ConditionalGaussianPDF(M=M, b=b, Sigma=Sigma_xy)
+        px_given_y2 = conditional.ConditionalGaussianDiagPDF(M=M, b=b, Sigma=Sigma_xy)
+        # py = pxy.get_marginal(dim_y)
+        return px_given_y1, px_given_y2, py
+    
+    @staticmethod
+    def get_diagonal_mat(R, D):
+        diag_mat = jnp.tile(jnp.diag(objax.random.uniform((D,)))[None], (R, 1, 1))
+        return diag_mat
+    
