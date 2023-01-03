@@ -265,7 +265,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         )
 
     def _get_default(
-        self, mat: Float[Array, "*a b c"] = None, vec: Float[Array, "*a b c"] = None
+        self, mat: Float[Array, "*a b c"] = None, vec: Float[Array, "*a b"] = None
     ) -> Tuple[Float[Array, "a b c"], Float[Array, "a b c"]]:
         """Make matrices and vectors right dimensions for integration.
 
@@ -276,7 +276,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         if mat is None:
             mat = jnp.eye(self.D)
         if vec is None:
-            vec = jnp.zeros(self.D)
+            vec = jnp.zeros(mat.shape[-2])
 
         if vec.ndim == 1:
             if mat.ndim == 2:
