@@ -1008,7 +1008,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
             raise NotImplementedError("Only implemented for R=1.")
         A = jnp.empty((self.R, self.Dy, self.Dy + self.Dx))
         A = A.at[:, :, : self.Dy].set(jnp.eye(self.Dy, self.Dy)[None])
-        A = A.at[:, :, self.Dy :].set(jnp.eye(self.Dy, self.Dy)[None])
+        A = A.at[:, :, self.Dy :].set(-jnp.eye(self.Dy, self.Dy)[None])
         A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
         quadratic_integral = p_yx.integrate("(Ax+a)'(Bx+b)", A_mat=A, B_mat=A_tilde)
         log_expectation = -0.5 * (
@@ -1214,7 +1214,7 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
             raise NotImplementedError("Only implemented for R=1.")
         A = jnp.empty((self.R, self.Dy, self.Dy + self.Dx))
         A = A.at[:, :, : self.Dy].set(jnp.eye(self.Dy, self.Dy)[None])
-        A = A.at[:, :, self.Dy :].set(jnp.eye(self.Dy, self.Dy)[None])
+        A = A.at[:, :, self.Dy :].set(-jnp.eye(self.Dy, self.Dy)[None])
         A_tilde = jnp.einsum("abc,acd->abd", self.Lambda, A)
         quadratic_integral = p_yx.integrate("(Ax+a)'(Bx+b)", A_mat=A, B_mat=A_tilde)
         log_expectation = -0.5 * (
