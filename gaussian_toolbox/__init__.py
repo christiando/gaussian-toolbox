@@ -1,4 +1,4 @@
-from . import factor, measure, pdf, conditional, approximate_conditional, timeseries
+from . import factor, measure, pdf, conditional, approximate_conditional
 
 __all__ = [
     "factor",
@@ -6,6 +6,5 @@ __all__ = [
     "pdf",
     "conditional",
     "approximate_conditional",
-    "timeseries",
 ]
 
