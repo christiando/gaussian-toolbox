@@ -7,3 +7,4 @@ sphinx_rtd_theme
 pandoc
 ipython 
 ipykernel
+scikit-learn
