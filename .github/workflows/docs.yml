@@ -15,7 +15,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements_docs.txt
-          pip install ipython ipykernel
           pip install -e .
       - name: Sphinx build
         run: |
