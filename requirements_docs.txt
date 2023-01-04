@@ -9,4 +9,4 @@ ipython
 ipykernel
 scikit-learn
 tqdm
-haiku
+-U dm-haiku
