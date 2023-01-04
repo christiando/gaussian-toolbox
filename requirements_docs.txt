@@ -4,3 +4,9 @@ httplib2
 myst_parser
 nbsphinx
 sphinx_rtd_theme
+pandoc
+ipython 
+ipykernel
+scikit-learn
+tqdm
+git+https://github.com/deepmind/dm-haiku
