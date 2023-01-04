@@ -9,4 +9,4 @@ ipython
 ipykernel
 scikit-learn
 tqdm
-dm-haiku
+git+https://github.com/deepmind/dm-haiku
