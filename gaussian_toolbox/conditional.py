@@ -535,13 +535,13 @@ class ConditionalGaussianDiagPDF(ConditionalGaussianPDF):
 class NNControlGaussianConditional(ConditionalGaussianPDF):
     """A conditional Gaussian density, where the transition model is determined through a (known) control variable u.
 
-        .. math::
+    .. math::
 
-            p(Y|X, u) = N(\mu(X|u), \Sigma)
+        p(Y|X, u) = N(\mu(X|u), \Sigma)
 
-        with the conditional mean function ::math:`\mu(X|u) = M(u) X + b(u)`,
+    with the conditional mean function ::math:`\mu(X|u) = M(u) X + b(u)`,
 
-        where :math:`M(u)` and :math:`b(u)` come from the same neural network.
+    where :math:`M(u)` and :math:`b(u)` come from the same neural network.
 
     Args:
         Sigma: Covariance matrix,

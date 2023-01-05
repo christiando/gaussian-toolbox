@@ -67,21 +67,21 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         Returns:
             Returns the expected mean and covariance.
         """
-        #### E[f(x)] ####
-        # E[x] [R, Dx]
+        #### \mathbb{E}[f(x)] ####
+        # \mathbb{E}[x] [R, Dx]
         Ex = p_x.integrate("x")
-        # E[k(x)] [R, Dphi - Dx]
+        # \mathbb{E}[k(x)] [R, Dphi - Dx]
         p_k = p_x.multiply(self.k_func, update_full=True)
         Ekx = p_k.integrate().reshape((p_x.R, self.Dphi - self.Dx))
-        # E[f(x)]
+        # \mathbb{E}[f(x)]
         Ef = jnp.concatenate([Ex, Ekx], axis=1)
 
-        #### E[f(x)f(x)'] ####
-        # Linear terms E[xx']
+        #### \mathbb{E}[f(x)f(x)'] ####
+        # Linear terms \mathbb{E}[xx']
         Exx = p_x.integrate("xx'")
-        # Cross terms E[x k(x)']
+        # Cross terms \mathbb{E}[x k(x)']
         Ekx = p_k.integrate("x").reshape((p_x.R, self.Dk, self.Dx))
-        # kernel terms E[k(x)k(x)']
+        # kernel terms \mathbb{E}[k(x)k(x)']
         Ekk = (
             p_k.multiply(self.k_func, update_full=True)
             .integrate()
@@ -209,24 +209,27 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     ) -> pdf.GaussianPDF:
         r"""Get an approximation of the marginal density
 
-                .. math::
+        .. math::
 
            p(Y)\aprox N(\mu_Y,\Sigma_y),
 
-                The mean is given by
+        The mean is given by
 
-                .. math::
+        .. math::
 
            \mu_Y = \mathbb{E}[\mu_Y(X)].
 
-                The covariance is given by
+        The covariance is given by
 
-                .. math::
+        .. math::
 
-           \Sigma_Y = E[YY^\top] - \mu_Y\mu_Y^\top.
+           \Sigma_Y = \mathbb{E}[YY^\top] - \mu_Y\mu_Y^\top.
 
-                :param p_x: The density which we average over.
-                :return: The joint distribution p(y).
+        Args:
+            p_x: The density which we average over.
+            
+        Returns:
+            The joint distribution p(y).
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y,)
@@ -234,7 +237,7 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     
     def integrate_log_conditional(
         self, p_yx: measure.GaussianMeasure, **kwargs
-    ) -> jnp.ndarray:
+    ) -> Float[Array, "R"]:
         raise NotImplementedError("Log integral not implemented!")
 
     def integrate_log_conditional_y(
@@ -680,9 +683,9 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
 
     .. math::
 
-        \Sigma_y(x) = \sigma_x^2 I + \sum_i U_i D_i(x) U_i^\\top,
+        \Sigma_y(x) = \sigma_x^2 I + \sum_i U_i D_i(x) U_i^\top,
 
-    and :math:`D_i(x) = 2 * \\beta_i * \cosh(h_i(x))` and :math:`h_i(x) = w_i^\\top x + b_i`.
+    and :math:`D_i(x) = 2 * \beta_i * \cosh(h_i(x))` and :math:`h_i(x) = w_i^\top x + b_i`.
 
     Note, that the affine transformations will be approximated via moment matching.
 
@@ -736,11 +739,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         return self.beta.shape[0]
 
     def _setup_noise_diagonal_functions(self):
-        """Create the functions, that later need to be integrated over, i.e.
+        r"""Create the functions, that later need to be integrated over, i.e.
 
         .. math::
 
-            \exp(h_i(z)) \\text{ and } \exp(-h_i(z))
+            \exp(h_i(z)) \text{ and } \exp(-h_i(z))
         """
         nu = self.W[:, 1:]
         ln_beta = self.W[:, 0]
@@ -781,7 +784,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             return Sigma_y_x
 
     def condition_on_x(self, x: Float[Array, "N Dx"], **kwargs) -> pdf.GaussianPDF:
-        """Get Gaussian Density conditioned on :math:`X=x`.
+        r"""Get Gaussian Density conditioned on :math:`X=x`.
 
         Args:
             x: Instances, the mu and Sigma should be conditioned on.
@@ -798,7 +801,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         #return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new)
 
     def set_y(self, y: Float[Array, "R Dy"], **kwargs):
-        """Not valid function for this model class.
+        r"""Not valid function for this model class.
 
         Args:
             y: Data for :math:`Y`, where the rth entry is associated
@@ -838,11 +841,15 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def get_expected_moments(
         self, p_x: pdf.GaussianPDF
     ) -> Tuple[Float[Array, "R Dy"], Float[Array, "1 Dy Dy"]]:
-        """Compute the expected mean and covariance
+        r"""Compute the expected mean and covariance
 
-        mu_y = E[y] = M E[x] + b
+        .. math::
+            
+            \mu_y = \mathbb{E}[y] = M \mathbb{E}[x] + b
 
-        Sigma_y = E[yy'] - mu_y mu_y' = sigma_x^2 I + \sum_i U_i E[D_i(x)] U_i' + E[mu(x)mu(x)'] - mu_y mu_y'
+        .. math::
+            
+            \Sigma_y = \mathbb{E}[yy'] - \mu_y \mu_y^\top = \sigma_x^2 I + \sum_i U_i \mathbb{E}[D_i(x)] U_i^\top + \mathbb{E}[\mu(x)\mu(x)^\top] - \mu_y \mu_y^\top
 
         Args:
             p_x: The density which we average over.
@@ -859,7 +866,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         return mu_y, Sigma_y
 
     def get_expected_cross_terms(self, p_x: pdf.GaussianPDF) -> Float[Array, "R Dx Dy"]:
-        """Compute E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M x + b)x' p(x) dx
+        r"""Compute :math:`\mathbb{E}[yx^\top] = \int\int yx^\top p(y|x)p(x) {\rm d}y{\rm d}x = \int (M x + b)x^\top p(x) {\rm d}x`.
 
         Args:
             p_x: The density which we average over.
@@ -875,24 +882,32 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def affine_joint_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
     ) -> pdf.GaussianPDF:
-        """Get an approximation of the joint density
+        r"""Get an approximation of the joint density
+        
+        .. math::
 
-            p(x,y) ~= N(mu_{xy},Sigma_{xy}),
+            p(x,y) ~= {\cal N}(\mu_{xy},\Sigma_{xy}),
 
         The mean is given by
+        
+        .. math::
 
-            mu_{xy} = (mu_x, mu_y)'
+            \mu_{xy} = (\mu_x, \mu_y)^\top
 
-        with mu_y = E[mu_y(x)]. The covariance is given by
+        with :math:`\mu_y = \mathbb{E}[\mu_y(x)]`. The covariance is given by
 
-            Sigma_{xy} = (Sigma_x            E[xy'] - mu_xmu_y'
-                          E[yx'] - mu_ymu_x' E[yy'] - mu_ymu_y').
+        .. math::
+        
+            \Sigma_{xy} = \begin{pmatrix}
+                            \Sigma_x & \mathbb{E}[xy^\top] - \mu_x\mu_y^\top \\
+                            \mathbb{E}[yx^\top] - \mu_y\mu_x^\top & \mathbb{E}[yy^\top] - \mu_y\mu_y^\top
+                        \end{pmatrix}.
 
         Args:
             p_x: The density which we average over.
 
         Returns:
-            Joint distribution of p(x,y).
+            Joint distribution of :math:`p(x,y)`.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
@@ -1005,7 +1020,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def _get_lb_i(self, W_i: Float[Array, "Dx+1"], u_i: Float[Array, "Dy"], beta_i: Float[Array, "1"], omega_star: Float[Array, "N"], omega_dagger, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"]) -> Tuple[Float[Array, "N"], Float[Array, "N"]]:
         # phi = pdf.GaussianPDF(**phi_dict)
         # beta = self.beta[iu:iu + 1]
-        # Lower bound for E[ln (sigma_x^2 + f(h))]
+        # Lower bound for \mathbb{E}[ln (sigma_x^2 + f(h))]
         R = p_x.R
         w_i = W_i[1:].reshape((1, -1))
         v =  jnp.tile(w_i, (R, 1))
@@ -1013,7 +1028,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         u_i = u_i.reshape((-1, 1))
         #uC = jnp.dot(u_i.T, -self.M[0])
         #uy_d = jnp.dot(u_i.T, (y - self.b[0]).T)
-        # Lower bound for E[ln (sigma_x^2 + f(h))]
+        # Lower bound for \mathbb{E}[ln (sigma_x^2 + f(h))]
         
         Eh2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
         f_omega_dagger = self.f(omega_dagger, beta_i)
@@ -1062,7 +1077,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         u_i = u_i[:].reshape((-1, 1))
         uM = jnp.dot(u_i.T, -self.M[0])
         uy_b = jnp.dot(u_i.T, (y - self.b[0]).T)
-        # Lower bound for E[ln (sigma_x^2 + f(h))]
+        # Lower bound for \mathbb{E}[ln (sigma_x^2 + f(h))]
         omega_dagger = jnp.sqrt(
             p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
         )
@@ -1093,7 +1108,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             # Create the two measures
             exp_phi_plus = p_x.hadamard(exp_factor_plus, update_full=True)
             exp_phi_minus = p_x.hadamard(exp_factor_minus, update_full=True)
-            # Fourth order integrals E[h^2 (x-Cz-d)^2]
+            # Fourth order integrals \mathbb{E}[h^2 (x-Cz-d)^2]
             quart_int_plus = exp_phi_plus.integrate(
                 "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
                 A_mat=uM,
@@ -1117,7 +1132,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
                 d_vec=b_i,
             )
             quart_int = quart_int_plus + quart_int_minus
-            # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
+            # Second order integrals \mathbb{E}[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
             quad_int_plus = exp_phi_plus.integrate(
                 "(Ax+a)'(Bx+b)", A_mat=uM, a_vec=uy_b.T, B_mat=uM, b_vec=uy_b.T
             )
@@ -1151,7 +1166,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def f(self, h: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         """Compute the function
 
-        ..math::
+        .. math::
 
         f(h) = 2 * \beta * \cosh(h)
 
@@ -1167,7 +1182,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def f_prime(self, h: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         """Computes the derivative of f
         
-        ..math::
+        .. math::
 
             f^\prime(h) = 2 * \beta * \sinh(h)
 
@@ -1183,7 +1198,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def g(self, omega: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         r"""Computes the function
 
-        ..math::
+        .. math::
         
             g(\omega) = f'(\omega) / (sigma_x^2 + f(\omega)) / |\omega|
 
