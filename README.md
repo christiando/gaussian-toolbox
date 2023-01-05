@@ -5,6 +5,10 @@
 
 The main motivation of this library is to make Gaussian manipulations as easy as possible. For this certain [object classes](/docs/source/notebooks/gaussian_objects.ipynb) are defined, which can be manipulated in the following way. The basic code tries to follow roughly this The code roughly follows this [note](http://users.isy.liu.se/en/rt/schon/Publications/SchonL2011.pdf).
 
+[**Basic Usage**](#basics) | [**Install guide**](#installation) | [**Citing**](#citation) | [**Documentation**]()
+
+# Basics
+
 ## Elementary Gaussian manipulation
 
 Here, just the some important operations are shown and how they can be performed in `GT`. For the following example assume, that 
@@ -37,7 +41,7 @@ phi_X = f_X * p_X
 ```
 
 `phi_X` is the resulting object, which can be used for further operations. It's as simple as that.
-### Intergation
+### Integration
 
 Some times we would like to integrate certain functions with respect to a Gaussian density. For example, we want to calculate
 
@@ -73,11 +77,12 @@ Other operations that are provided are conditioning, marginalizing, getting the 
 # And much more
 
 Based upon these operations and extensions thereof, basic models (e.g. [linear regression](/docs/source/notebooks/linear_regression.ipynb)), but also more complex models (e.g. for [time-series](/docs/source/notebooks/timeseries.ipynb)) can be implemented.
-Furthermore, the `GT` is written completely with [JAX](https://github.com/google/jax/tree/main/docs) and [OBJAX](https://github.com/google/objax), and hence combining Gaussian manipulations with neural networks has never been easier.
+Furthermore, the `GT` is written completely with [JAX](https://github.com/google/jax/tree/main/docs), such that your code can run on GPU/TPU, can be just-in-time compiled, vectorized etc. Furthermore, it can be easily combined with other libraries like [optax](https://github.com/deepmind/optax) and [haiku](https://github.com/deepmind/dm-haiku). Combining Gaussian manipulations with neural networks has never been easier.
 
-Got interested? What can you do with it.
+Got interested? What can you do with it?
 # Installation
 
+`GT` requires `python>=3.10`.
 Clone the repository into a directory and go into the folder. Just do the following
 
 ```bash
@@ -92,4 +97,18 @@ git clone https://github.com/christiando/gaussian-toolbox.git
 cd gaussian-toolbox/
 pip install -r requirements.txt
 pip install -e .
+```
+
+# Citation
+
+To cite this repository:
+
+```
+@software{gt2023github,
+  author = {Christian Donner},
+  title = {{Gaussian Toolbox}: A Python package for Gaussian algebra},
+  url = {http://github.com/christiando/gaussian-toolbox},
+  version = {0.0.1},
+  year = {2023},
+}
 ```
