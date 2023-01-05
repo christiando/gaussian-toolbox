@@ -14,8 +14,8 @@ jobs:
         run: |
           sudo apt install pandoc
           python -m pip install --upgrade pip
+          pip install sphinx recommonmark httplib2 myst_parser nbsphinx sphinx_rtd_theme pandoc ipython ipykernel
           pip install -r requirements.txt
-          pip install -r requirements_docs.txt
           pip install -e .
       - name: Sphinx build
         run: |
