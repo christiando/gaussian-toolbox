@@ -49,10 +49,10 @@ extensions = [
 ]
 
 autodoc_default_options = {
-    'members': 'var1, var2',
-    'member-order': 'bysource',
-    'undoc-members': True,
-    'exclude-members': '__weakref__, to_tuple, from_tuple, replace'
+    "members": "var1, var2",
+    "member-order": "bysource",
+    "undoc-members": True,
+    "exclude-members": "__weakref__, to_tuple, from_tuple, replace",
 }
 
 
@@ -100,6 +100,8 @@ html_theme_options = {
     "collapse_navigation": True,
     "navigation_depth": 2,
     "logo_only": True,
+    "repository_url": "https://github.com/christiando/gaussian-toolbox",
+    "use_repository_button": True,
 }
 
 html_logo = "gt_logo.png"

@@ -13,10 +13,6 @@ class TestGaussianPDF:
 
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
-        # Q = jnp.array(np.random.randn(R, D, D))
-        # eig_vals = jnp.abs(eigen_mu + jnp.array(np.random.randn(R, D)))
-        # psd_mat = jnp.einsum("abc,abd->acd", Q * eig_vals[:, :, None], Q)
-        # psd_mat = 0.5 * (psd_mat + jnp.swapaxes(psd_mat, -1, -2))
         A = jnp.array(np.random.rand(R, D, D))
         psd_mat = jnp.einsum("abc,abd->acd", A, A)
         psd_mat += jnp.eye(D)[None]

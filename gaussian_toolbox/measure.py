@@ -329,7 +329,7 @@ class GaussianMeasure(factor.ConjugateFactor):
            int X {\rm d}u(X) / \int {\rm d}u(X)
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         return self.mu
 
@@ -341,7 +341,7 @@ class GaussianMeasure(factor.ConjugateFactor):
            \int X {\rm d}u(X)
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         constant = self.integral()
         return jnp.einsum("a,ab->ab", constant, self._expectation_x())
@@ -362,7 +362,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             a_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         return jnp.einsum("abc,ac->ab", A_mat, self.mu) + a_vec
 
@@ -382,7 +382,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             a_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         constant = self.integral()
@@ -400,7 +400,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             \int XX^\top {\rm d}u(X) / \int {\rm d}u(X)
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         return self.Sigma + jnp.einsum("ab,ac->acb", self.mu, self.mu)
 
@@ -412,7 +412,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             \int XX^\top {\rm d}u(X)
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         constant = self.integral()
         return jnp.einsum("a,abc->abc", constant, self._expectation_xxT())
@@ -439,7 +439,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             b_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         AB = jnp.einsum("abc,abd->acd", A_mat, B_mat)
         ABSigma_trace = self.get_trace(jnp.einsum("cab,cbd->cad", AB, self.Sigma))
@@ -474,7 +474,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             b_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -505,7 +505,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             b_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         Exx = self._expectation_xxT()
         AxxB = jnp.einsum("cab,cbd->cad", A_mat, jnp.einsum("abc,adc->abd", Exx, B_mat))
@@ -537,7 +537,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             b_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -563,7 +563,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             b_vec: Real avlued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         Exx = self._expectation_xxT()
         mub_outer = jnp.einsum("ab,ac->abc", self.mu, b_vec)
@@ -637,7 +637,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             b_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         constant = self.integral()
         if b_vec is None:
@@ -672,7 +672,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             c_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         Amu_a = jnp.einsum("cab,cb-> ca", A_mat, self.mu) + a_vec
         Bmu_b = jnp.einsum("cab,cb-> ca", B_mat, self.mu) + b_vec
@@ -714,7 +714,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             c_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -752,7 +752,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             c_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         Amu_a = jnp.einsum("cab,cb-> ca", A_mat, self.mu) + a_vec
         Bmu_b = jnp.einsum("cab,cb-> ca", B_mat, self.mu) + b_vec
@@ -799,7 +799,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             c_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -841,7 +841,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             d_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         Amu_a = jnp.einsum("cab,cb-> ca", A_mat, self.mu) + a_vec
         Bmu_b = jnp.einsum("cab,cb-> ca", B_mat, self.mu) + b_vec
@@ -905,7 +905,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             d_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
         B_mat, b_vec = self._get_default(B_mat, b_vec)
@@ -946,7 +946,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             d_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
         Amu_a = jnp.einsum("cab,cb-> ca", A_mat, self.mu) + a_vec
         Bmu_b = jnp.einsum("cab,cb-> ca", B_mat, self.mu) + b_vec
@@ -1012,7 +1012,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             d_vec: Real valued vector.
 
         Returns:
-            The solved intergal.
+            The solved integral.
         """
 
         A_mat, a_vec = self._get_default(A_mat, a_vec)
@@ -1028,12 +1028,12 @@ class GaussianMeasure(factor.ConjugateFactor):
         """Integrates over a log factor.
 
         Args:
-            factor: The factor, which will be intergrated.
+            factor: The factor, which will be integrated.
 
         Returns:
             The integral
         """
-        return factor.intergate_log_factor(self)
+        return factor.integrate_log_factor(self)
 
 
 @dataclass(kw_only=True)
