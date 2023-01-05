@@ -21,6 +21,7 @@ from .utils.linalg import invert_matrix, invert_diagonal
 from .utils.dataclass import dataclass
 from dataclasses import field
 
+
 @dataclass(kw_only=True)
 class ConditionalGaussianPDF:
     """A conditional Gaussian density
@@ -41,12 +42,13 @@ class ConditionalGaussianPDF:
     Raises:
         RuntimeError: Raised if neither Sigma nor Lambda are provided.
     """
+
     M: Float[Array, "R Dy Dx"]
     b: Float[Array, "R Dy"] = None
     Sigma: Float[Array, "R Dy Dy"] = None
     Lambda: Float[Array, "R Dy Dy"] = None
     ln_det_Sigma: Float[Array, "R"] = None
-    
+
     def __post_init__(self):
         if self.b is None:
             self.b = jnp.zeros((self.R, self.Dy))
@@ -58,17 +60,17 @@ class ConditionalGaussianPDF:
         else:
             self.Sigma, ln_det_Lambda = invert_matrix(self.Lambda)
             self.ln_det_Sigma = -ln_det_Lambda
-        
+
     @property
     def R(self) -> int:
         """Number of conditionals (leading dimension)."""
         return self.M.shape[0]
-    
+
     @property
     def Dy(self) -> int:
         r"""Dimensionality of :math:`Y`."""
         return self.M.shape[1]
-    
+
     @property
     def Dx(self) -> int:
         r"""Dimensionality of :math:`X`."""
@@ -108,7 +110,11 @@ class ConditionalGaussianPDF:
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
         new_measure = ConditionalGaussianPDF(
-            M=M_new, b=b_new, Sigma=Sigma_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new
+            M=M_new,
+            b=b_new,
+            Sigma=Sigma_new,
+            Lambda=Lambda_new,
+            ln_det_Sigma=ln_det_Sigma_new,
         )
         return new_measure
 
@@ -189,7 +195,9 @@ class ConditionalGaussianPDF:
         ln_beta_new = -0.5 * (
             yb_Lambda_yb + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma
         )
-        factor_new = factor.ConjugateFactor(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        factor_new = factor.ConjugateFactor(
+            Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new
+        )
         return factor_new
 
     def affine_joint_transformation(
@@ -280,7 +288,9 @@ class ConditionalGaussianPDF:
                 jnp.tile(-self.ln_det_Sigma[:, None], (1, p_x.R)).reshape((R,))
                 + delta_ln_det
             )
-        return pdf.GaussianPDF(Sigma=Sigma_xy, mu=mu_xy, Lambda=Lambda_xy, ln_det_Sigma=ln_det_Sigma_xy)
+        return pdf.GaussianPDF(
+            Sigma=Sigma_xy, mu=mu_xy, Lambda=Lambda_xy, ln_det_Sigma=ln_det_Sigma_xy
+        )
 
     def affine_marginal_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
@@ -372,7 +382,9 @@ class ConditionalGaussianPDF:
             ln_det_Sigma=-ln_det_Lambda_x,
         )
 
-    def integrate_log_conditional(self, p_yx: pdf.GaussianPDF, **kwargs) -> Float[Array, "R"]:
+    def integrate_log_conditional(
+        self, p_yx: pdf.GaussianPDF, **kwargs
+    ) -> Float[Array, "R"]:
         """Integrates over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
 
         .. math::
@@ -405,7 +417,9 @@ class ConditionalGaussianPDF:
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"]=None, **kwargs) -> Union[callable, Float[Array, "R"]]:
+    def integrate_log_conditional_y(
+        self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"] = None, **kwargs
+    ) -> Union[callable, Float[Array, "R"]]:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -496,6 +510,7 @@ class ConditionalGaussianPDF:
         self.Sigma = Sigma_new
         self.Lambda, self.ln_det_Sigma = invert_matrix(Sigma_new)
 
+
 @dataclass(kw_only=True)
 class ConditionalGaussianDiagPDF(ConditionalGaussianPDF):
     """A conditional Gaussian density
@@ -518,7 +533,7 @@ class ConditionalGaussianDiagPDF(ConditionalGaussianPDF):
     Raises:
         RuntimeError: Raised if neither Sigma nor Lambda are provided
     """
-    
+
     def __post_init__(self):
         if self.b is None:
             self.b = jnp.zeros((self.R, self.Dy))
@@ -530,6 +545,7 @@ class ConditionalGaussianDiagPDF(ConditionalGaussianPDF):
         else:
             self.Sigma, ln_det_Lambda = invert_diagonal(self.Lambda)
             self.ln_det_Sigma = -ln_det_Lambda
+
 
 @dataclass(kw_only=True)
 class NNControlGaussianConditional(ConditionalGaussianPDF):
@@ -553,6 +569,7 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         NotImplementedError: Raised when the leading dimension of Sigma
             is not 1.
     """
+
     Sigma: Float[Array, "1 Dy Dy"]
     num_cond_dim: int
     num_control_dim: int
@@ -561,7 +578,6 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
     def __post_init__(
         self,
-
     ):
         if self.R != 1:
             raise NotImplementedError("So far only R=1 is supported.")
@@ -569,28 +585,30 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         dummy_input = jnp.zeros([1, self.Du])
         dummy_output = self.control_func(dummy_input)
         assert dummy_output.shape == (1, self.Dy * (self.Dx + 1))
-        
+
     @property
     def R(self) -> int:
         """Number of conditionals (leading dimension)."""
         return self.Sigma.shape[0]
-    
+
     @property
     def Dy(self) -> int:
         r"""Dimensionality of :math:`Y`."""
         return self.Sigma.shape[1]
-    
+
     @property
     def Du(self) -> int:
         r"""Dimensionality of control parameter $U$."""
         return self.num_control_dim
-    
+
     @property
     def Dx(self) -> int:
         r"""Dimensionality of :math:`X`."""
         return self.num_cond_dim
-    
-    def __call__(self, x: Float[Array, "N Dx"], u: Float[Array, "1 Du"], **kwargs) -> pdf.GaussianPDF:
+
+    def __call__(
+        self, x: Float[Array, "N Dx"], u: Float[Array, "1 Du"], **kwargs
+    ) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :amt:`x`, i.e.
 
         .. math::
@@ -605,7 +623,9 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         """
         return self.condition_on_x_u(x, u)
 
-    def get_M_b(self, u: Float[Array, "R Du"]) -> Tuple[Float[Array, "R Dy Dx"], Float[Array, "R Dy"]]:
+    def get_M_b(
+        self, u: Float[Array, "R Du"]
+    ) -> Tuple[Float[Array, "R Dy Dx"], Float[Array, "R Dy"]]:
         """Construct :math:`M(u)` and :math:`b(u)` from the output.
 
         Args:
@@ -643,7 +663,9 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
             ln_det_Sigma=jnp.tile(self.ln_det_Sigma, (R,)),
         )
 
-    def get_conditional_mu(self, x: Float[Array, "N Dx"], u: Float[Array, "R Du"], **kwargs) -> Float[Array, "R N Dy"]:
+    def get_conditional_mu(
+        self, x: Float[Array, "N Dx"], u: Float[Array, "R Du"], **kwargs
+    ) -> Float[Array, "R N Dy"]:
         """Compute the conditional mean given an :math:`x` and an :math:`u`,
 
         .. math::
@@ -660,7 +682,9 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.get_conditional_mu(x)
 
-    def condition_on_x_u(self, x: Float[Array, "N Dx"], u: Float[Array, "R Du"], **kwargs) -> pdf.GaussianPDF:
+    def condition_on_x_u(
+        self, x: Float[Array, "N Dx"], u: Float[Array, "R Du"], **kwargs
+    ) -> pdf.GaussianPDF:
         """Return the Gaussian density
 
         .. math::
@@ -677,7 +701,9 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.condition_on_x(x)
 
-    def set_y(self, y: Float[Array, "R Dy"], u: Float[Array, "R Du"], **kwargs) -> factor.ConjugateFactor:
+    def set_y(
+        self, y: Float[Array, "R Dy"], u: Float[Array, "R Du"], **kwargs
+    ) -> factor.ConjugateFactor:
         """Set an instance of Y and U and returns
 
         .. math:
@@ -793,7 +819,11 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         return cond_gauss.integrate_log_conditional(phi_yx)
 
     def integrate_log_conditional_y(
-        self, phi_x: measure.GaussianMeasure, u: Float[Array, "1 Du"], y: Float[Array, "N Dy"]=None, **kwargs
+        self,
+        phi_x: measure.GaussianMeasure,
+        u: Float[Array, "1 Du"],
+        y: Float[Array, "N Dy"] = None,
+        **kwargs
     ) -> Union[callable, Float[Array, "N"]]:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
@@ -818,6 +848,7 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.integrate_log_conditional_y(phi_x, y=y, **kwargs)
 
+
 @dataclass(kw_only=True)
 class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     """A conditional Gaussian density
@@ -836,6 +867,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     Raises:
         RuntimeError: Raised if neither Sigma nor Lambda are provided
     """
+
     Sigma: Float[Array, "R Dy Dy"] = None
     Lambda: Float[Array, "R Dy Dy"] = None
     ln_det_Sigma: Float[Array, "R"] = None
@@ -855,18 +887,17 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         else:
             self.Sigma, ln_det_Lambda = invert_matrix(self.Lambda)
             self.ln_det_Sigma = -ln_det_Lambda
-      
-    
+
     @property
     def R(self) -> int:
         """Number of conditionals (leading dimension)."""
         return self.Sigma.shape[0]
-    
+
     @property
     def Dx(self) -> int:
         r"""Dimensionality of :math:`X`."""
         return self.Sigma.shape[1]
-    
+
     @property
     def Dy(self) -> int:
         r"""Dimensionality of :math:`Y`."""
@@ -890,7 +921,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         """
         return self.condition_on_x(x)
 
-    def slice(self, indices: Int[Array, "R_new"] ) -> "ConditionalGaussianPDF":
+    def slice(self, indices: Int[Array, "R_new"]) -> "ConditionalGaussianPDF":
         """Return the conditional with only the specified entries.
 
         Args:
@@ -909,7 +940,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         )
         return new_measure
 
-    def get_conditional_mu(self, x: Float[Array, "R Dx"] , **kwargs) -> jnp.ndarray:
+    def get_conditional_mu(self, x: Float[Array, "R Dx"], **kwargs) -> jnp.ndarray:
         """Compute the conditional :math:`\mu` function :math:`\mu(X=x) = M x + b`.
 
         Args:
@@ -921,7 +952,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         mu_y = jnp.tile(x[None], (self.R, 1, 1))
         return mu_y
 
-    def condition_on_x(self, x: Float[Array, "R Dx"] , **kwargs) -> pdf.GaussianPDF:
+    def condition_on_x(self, x: Float[Array, "R Dx"], **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`x`.
 
         Args:
@@ -948,7 +979,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
             ln_det_Sigma=ln_det_Sigma_new,
         )
 
-    def set_y(self, y: Float[Array, "R Dy"] , **kwargs) -> factor.ConjugateFactor:
+    def set_y(self, y: Float[Array, "R Dy"], **kwargs) -> factor.ConjugateFactor:
         """Set a specific value for :math:`y` in :math:`p(Y=y|X)` and returns the corresponding conjugate factor.
 
         Args:
@@ -977,7 +1008,9 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         ln_beta_new = -0.5 * (
             y_Lambda_y + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma
         )
-        factor_new = factor.ConjugateFactor(Lambda=self.Lambda, nu=nu_new, ln_beta=ln_beta_new)
+        factor_new = factor.ConjugateFactor(
+            Lambda=self.Lambda, nu=nu_new, ln_beta=ln_beta_new
+        )
         return factor_new
 
     def affine_joint_transformation(
@@ -1060,7 +1093,9 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
                 jnp.tile(-self.ln_det_Sigma[:, None], (1, p_x.R)).reshape((R,))
                 + delta_ln_det
             )
-        return pdf.GaussianPDF(Sigma=Sigma_xy, mu=mu_xy, Lambda=Lambda_xy, ln_det_Sigma=ln_det_Sigma_xy)
+        return pdf.GaussianPDF(
+            Sigma=Sigma_xy, mu=mu_xy, Lambda=Lambda_xy, ln_det_Sigma=ln_det_Sigma_xy
+        )
 
     def affine_marginal_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
@@ -1149,7 +1184,9 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
             ln_det_Sigma=-ln_det_Lambda_x,
         )
 
-    def integrate_log_conditional(self, p_yx: pdf.GaussianPDF, **kwargs) -> Float[Array, "R"] :
+    def integrate_log_conditional(
+        self, p_yx: pdf.GaussianPDF, **kwargs
+    ) -> Float[Array, "R"]:
         """Integrates over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
 
         .. math::
@@ -1178,7 +1215,9 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: Float[Array, "R Dy"] =None, **kwargs) -> Union[callable, Float[Array, "R"]]:
+    def integrate_log_conditional_y(
+        self, p_x: pdf.GaussianPDF, y: Float[Array, "R Dy"] = None, **kwargs
+    ) -> Union[callable, Float[Array, "R"]]:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -1216,7 +1255,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         else:
             return log_expectation_y(y)
 
-    def conditional_entropy(self, p_x: pdf.GaussianPDF, **kwargs) -> Float[Array, "R"] :
+    def conditional_entropy(self, p_x: pdf.GaussianPDF, **kwargs) -> Float[Array, "R"]:
         """Computes the conditional entropy
 
         .. math::
@@ -1233,7 +1272,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         cond_entropy = p_xy.entropy() - p_x.entropy()
         return cond_entropy
 
-    def mutual_information(self, p_x: pdf.GaussianPDF, **kwargs) -> Float[Array, "R"] :
+    def mutual_information(self, p_x: pdf.GaussianPDF, **kwargs) -> Float[Array, "R"]:
         """Computes the mutual information
 
         .. math::
@@ -1251,7 +1290,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         mutual_info = cond_entropy - p_y.entropy()
         return mutual_info
 
-    def update_Sigma(self, Sigma_new: Float[Array, "R Dy Dy"] ):
+    def update_Sigma(self, Sigma_new: Float[Array, "R Dy Dy"]):
         """Updates the covariance matrix :math:`\Sigma`.
 
         Args:
@@ -1265,6 +1304,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
             raise ValueError("Dimensions of the new Sigma don't match.")
         self.Sigma = Sigma_new
         self.Lambda, self.ln_det_Sigma = invert_matrix(Sigma_new)
+
 
 @dataclass(kw_only=True)
 class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
@@ -1315,7 +1355,7 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
         """
         return self.condition_on_x(x)
 
-    def slice(self, indices: Int[Array, "R_new"] ) -> "ConditionalGaussianPDF":
+    def slice(self, indices: Int[Array, "R_new"]) -> "ConditionalGaussianPDF":
         """Return the conditional with only the specified entries.
 
         Args:
@@ -1333,7 +1373,9 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
         )
         return new_measure
 
-    def get_conditional_mu(self, x: Float[Array, "N Dx"] , **kwargs) -> Float[Array, "R N Dy"] :
+    def get_conditional_mu(
+        self, x: Float[Array, "N Dx"], **kwargs
+    ) -> Float[Array, "R N Dy"]:
         """Compute the conditional :math:`\mu` function :math:`\mu(X=x) = M x + b`.
 
         Args:
@@ -1345,7 +1387,7 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
         mu_y = jnp.tile(x[None], (self.R, 1, 1))
         return mu_y
 
-    def condition_on_x(self, x: Float[Array, "N Dx"] , **kwargs) -> pdf.GaussianPDF:
+    def condition_on_x(self, x: Float[Array, "N Dx"], **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`x`.
 
         Args:
@@ -1372,7 +1414,7 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
             ln_det_Sigma=ln_det_Sigma_new,
         )
 
-    def set_y(self, y: Float[Array, "R Dy"] , **kwargs) -> factor.ConjugateFactor:
+    def set_y(self, y: Float[Array, "R Dy"], **kwargs) -> factor.ConjugateFactor:
         """Set a specific value for :math:`y` in :math:`p(Y=y|X)` and returns the corresponding conjugate factor.
 
         Args:
@@ -1394,10 +1436,14 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
         ln_beta_new = -0.5 * (
             y_Lambda_y + self.Dx * jnp.log(2 * jnp.pi) + self.ln_det_Sigma
         )
-        factor_new = factor.ConjugateFactor(Lambda=self.Lambda, nu=nu_new, ln_beta=ln_beta_new)
+        factor_new = factor.ConjugateFactor(
+            Lambda=self.Lambda, nu=nu_new, ln_beta=ln_beta_new
+        )
         return factor_new
 
-    def integrate_log_conditional(self, p_yx: pdf.GaussianPDF, **kwargs) -> Float[Array, "R"]:
+    def integrate_log_conditional(
+        self, p_yx: pdf.GaussianPDF, **kwargs
+    ) -> Float[Array, "R"]:
         """Integrates over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
 
         .. math::
@@ -1426,7 +1472,9 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: Float[Array, "R Dy"] =None, **kwargs) -> Union[callable, Float[Array, "R"] ]:
+    def integrate_log_conditional_y(
+        self, p_x: pdf.GaussianPDF, y: Float[Array, "R Dy"] = None, **kwargs
+    ) -> Union[callable, Float[Array, "R"]]:
         """Computes the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::

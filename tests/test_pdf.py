@@ -72,7 +72,11 @@ class TestGaussianPDF:
     def test_update(self, R, D):
         d = self.create_instance(R, D)
         d_update = self.create_instance(1, D)
-        idx = jnp.array([0,])
+        idx = jnp.array(
+            [
+                0,
+            ]
+        )
         d.update(idx, d_update)
         assert jnp.allclose(d_update.Lambda, d.Lambda[idx])
         assert jnp.allclose(d_update.nu, d.nu[idx])
@@ -136,7 +140,11 @@ class TestGaussianPDF:
         assert jnp.allclose(d_dict["mu"], d.mu)
         assert jnp.allclose(d_dict["Lambda"], d.Lambda)
         Lambda, ln_det_Sigma = linalg.invert_matrix(d.Sigma)
-        assert jnp.allclose(d_dict["ln_det_Sigma"], ln_det_Sigma, atol=1e-6,)
+        assert jnp.allclose(
+            d_dict["ln_det_Sigma"],
+            ln_det_Sigma,
+            atol=1e-6,
+        )
 
     @pytest.mark.parametrize("R, D", [(1, 5), (1, 5), (1, 1)])
     def test_entropy(self, R, D):
@@ -158,6 +166,8 @@ class TestGaussianDiagPDF(TestGaussianPDF):
         self.test_class = pdf.GaussianDiagPDF
 
     def create_instance(self, R, D):
-        Sigma = jnp.tile((jnp.array(np.random.rand(D, D)) * jnp.eye(D))[None], [R, 1, 1])
+        Sigma = jnp.tile(
+            (jnp.array(np.random.rand(D, D)) * jnp.eye(D))[None], [R, 1, 1]
+        )
         mu = jnp.array(np.random.randn(R, D))
         return pdf.GaussianDiagPDF(Sigma=Sigma, mu=mu)

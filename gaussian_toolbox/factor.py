@@ -10,22 +10,24 @@ __author__ = "Christian Donner"
 
 from jax import numpy as jnp
 from .utils import linalg
-#from dataclasses import dataclass, field
+
+# from dataclasses import dataclass, field
 from .utils.dataclass import dataclass
 from dataclasses import field
 from typing import Union, Dict
 from jaxtyping import Array, Float, Int
+
 
 @dataclass(kw_only=True)
 class ConjugateFactor:
     r"""Object representing a factor which is conjugate to a Gaussian measure.
     A general term, which can be multiplied with a Gaussian and the result is still a Gaussian,
     i.e. has the functional form
-    
+
     .. math::
-    
+
         f(X) = \beta \exp\left(- \frac{1}{2} X^\top\Lambda X + X^\top\nu\right),
-        
+
     D is the dimension, and R the number of Gaussians.
     Note: At least :math:`\Lambda` or :math:`\nu` should be specified!
 
@@ -40,7 +42,7 @@ class ConjugateFactor:
     Lambda: Float[Array, "R D D"]
     nu: Float[Array, "R D"] = None
     ln_beta: Float[Array, "R"] = None
-    
+
     def __post_init__(self):
         if self.nu is None:
             self.nu = jnp.zeros((self.R, self.D))
@@ -51,7 +53,7 @@ class ConjugateFactor:
     def R(self) -> int:
         """Number of factors (leading dimension)."""
         return self.Lambda.shape[0]
-    
+
     @property
     def D(self) -> int:
         r"""Dimensionality of :math:`X`."""
@@ -60,7 +62,9 @@ class ConjugateFactor:
     def __str__(self) -> str:
         return "Conjugate factor u(x)"
 
-    def __call__(self, x: Float[Array, "N D"], element_wise: bool = False) -> Union[Float[Array, "N D"], Float[Array, "N"]]:
+    def __call__(
+        self, x: Float[Array, "N D"], element_wise: bool = False
+    ) -> Union[Float[Array, "N D"], Float[Array, "N"]]:
         """Evaluate the exponential term at :math:`X=x`.
 
         Args:
@@ -72,7 +76,9 @@ class ConjugateFactor:
         """
         return self.evaluate(x, element_wise)
 
-    def evaluate_ln(self, x: Float[Array, "N D"], element_wise: bool = False) -> Union[Float[Array, "R N"], Float[Array, "R"]]:
+    def evaluate_ln(
+        self, x: Float[Array, "N D"], element_wise: bool = False
+    ) -> Union[Float[Array, "R N"], Float[Array, "R"]]:
         r"""Evaluate the log-exponential term at :math:`X=x`.
 
         Args:
@@ -102,7 +108,9 @@ class ConjugateFactor:
             x_nu = jnp.dot(x, self.nu.T).T
             return -0.5 * x_Lambda_x + x_nu + self.ln_beta[:, None]
 
-    def evaluate(self, x: Float[Array, "N D"], element_wise: bool = False) -> Union[Float[Array, "R N"], Float[Array, "R"]]:
+    def evaluate(
+        self, x: Float[Array, "N D"], element_wise: bool = False
+    ) -> Union[Float[Array, "R N"], Float[Array, "R"]]:
         r"""Evaluate the exponential term at :math:`X=x`.
 
         Args:
@@ -250,21 +258,16 @@ class ConjugateFactor:
             Returns the trace of all matrices.
         """
         return jnp.sum(A.diagonal(axis1=-1, axis2=-2), axis=1)
-    
-    
+
     def to_dict(self) -> Dict:
         """Write Factor into dict.
 
         Returns:
             Dictionary with relevant parameters.
         """
-        factor_dict = {
-            "Lambda": self.Lambda,
-            "nu": self.nu,
-            "ln_beta": self.ln_beta
-        }
+        factor_dict = {"Lambda": self.Lambda, "nu": self.nu, "ln_beta": self.ln_beta}
         return factor_dict
-    
+
     @classmethod
     def from_dict(cls, cls_dict: dict) -> "ConjugateFactor":
         """Creates class from dictionary
@@ -277,12 +280,14 @@ class ConjugateFactor:
         """
         return cls(**cls_dict)
 
+
 @dataclass(kw_only=True)
 class LowRankFactor(ConjugateFactor):
     # TODO implement low rank updates with Woodbury inversion.
     Lambda: Float[Array, "R D D"]
     nu: Float[Array, "R D"] = None
     ln_beta: Float[Array, "R"] = None
+
 
 @dataclass(kw_only=True)
 class OneRankFactor(ConjugateFactor):
@@ -311,11 +316,10 @@ class OneRankFactor(ConjugateFactor):
     Lambda: Float[Array, "R D D"] = field(init=False)
     nu: Float[Array, "R D"] = None
     ln_beta: Float[Array, "R"] = None
-    
 
     def __post_init__(self):
         if self.v is None:
-            raise AttributeError('v must be defined!')
+            raise AttributeError("v must be defined!")
         if self.g is None:
             self.g = jnp.ones(self.R)
         self.Lambda = self._get_Lambda()
@@ -323,12 +327,12 @@ class OneRankFactor(ConjugateFactor):
             self.nu = jnp.zeros((self.R, self.D))
         if self.ln_beta is None:
             self.ln_beta = jnp.zeros((self.R))
-        
+
     @property
     def R(self) -> int:
         """Number of factors (leading dimension)."""
         return self.v.shape[0]
-        
+
     @property
     def D(self) -> int:
         r"""Dimensionality of :math:`X`."""
@@ -416,7 +420,7 @@ class OneRankFactor(ConjugateFactor):
         return new_density_dict
 
     def _hadamard_with_measure(
-        self, measure: "GaussianMeasure", update_full: bool=True
+        self, measure: "GaussianMeasure", update_full: bool = True
     ) -> Dict:
         r"""Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
 
@@ -460,20 +464,16 @@ class OneRankFactor(ConjugateFactor):
                 }
             )
         return new_density_dict
-    
+
     def to_dict(self) -> Dict:
         """Write Factor into dict.
 
         Returns:
             Dictionary with relevant parameters.
         """
-        factor_dict = {
-            "v": self.v,
-            "g": self.g,
-            "nu": self.nu,
-            "ln_beta": self.ln_beta
-        }
+        factor_dict = {"v": self.v, "g": self.g, "nu": self.nu, "ln_beta": self.ln_beta}
         return factor_dict
+
 
 @dataclass(kw_only=True)
 class LinearFactor(ConjugateFactor):
@@ -500,7 +500,7 @@ class LinearFactor(ConjugateFactor):
     nu: Float[Array, "R D"]
     ln_beta: Float[Array, "R"] = None
     Lambda: Float[Array, "R D D"] = field(init=False)
-    
+
     def __post_init__(self):
         self.Lambda = jnp.zeros((self.R, self.D, self.D))
         if self.ln_beta is None:
@@ -510,7 +510,7 @@ class LinearFactor(ConjugateFactor):
     def R(self) -> int:
         """Number of factors (leading dimension)."""
         return self.nu.shape[0]
-    
+
     @property
     def D(self) -> int:
         r"""Dimensionality of :math:`X`."""
@@ -531,7 +531,7 @@ class LinearFactor(ConjugateFactor):
         return LinearFactor(nu=nu_new, ln_beta=ln_beta_new)
 
     def _multiply_with_measure(
-        self, measure: "GaussianMeasure", update_full: bool=True
+        self, measure: "GaussianMeasure", update_full: bool = True
     ) -> Dict:
         """Compute the product between the current factor and a Gaussian measure :math:`u(X)`.
 
@@ -578,16 +578,16 @@ class LinearFactor(ConjugateFactor):
         return new_density_dict
 
     def _hadamard_with_measure(
-        self, measure: "GaussianMeasure", update_full: bool=True
+        self, measure: "GaussianMeasure", update_full: bool = True
     ) -> Dict:
         r"""Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
 
-                Returns :math:`f(X) * u(X)`. For the linear term, we do not need to update the covariances.
+             Returns :math:`f(X) * u(X)`. For the linear term, we do not need to update the covariances.
 
-                :param measure: The gaussian measure the factor is multiplied with.
-                :param update_full: Whether also the covariance and the log determinants of the new Gaussian measure should be
-           computed.
-                :return: Returns the resulting dictionary to create GaussianMeasure.
+             :param measure: The gaussian measure the factor is multiplied with.
+             :param update_full: Whether also the covariance and the log determinants of the new Gaussian measure should be
+        computed.
+             :return: Returns the resulting dictionary to create GaussianMeasure.
         """
         Lambda_new = measure.Lambda
         nu_new = measure.nu + self.nu
@@ -609,18 +609,16 @@ class LinearFactor(ConjugateFactor):
                 }
             )
         return new_density_dict
-    
+
     def to_dict(self) -> Dict:
         """Write Factor into dict.
 
         Returns:
             Dictionary with relevant parameters.
         """
-        factor_dict = {
-            "nu": self.nu,
-            "ln_beta": self.ln_beta
-        }
+        factor_dict = {"nu": self.nu, "ln_beta": self.ln_beta}
         return factor_dict
+
 
 @dataclass(kw_only=True)
 class ConstantFactor(ConjugateFactor):
@@ -640,7 +638,7 @@ class ConstantFactor(ConjugateFactor):
     num_dim: int
     Lambda: Float[Array, "R D D"] = field(init=False)
     nu: Float[Array, "R D"] = field(init=False)
-    
+
     def __post_init__(self):
         self.Lambda = jnp.zeros((self.R, self.D, self.D))
         self.nu = jnp.zeros((self.R, self.D))
@@ -648,12 +646,12 @@ class ConstantFactor(ConjugateFactor):
             self.nu = jnp.zeros((self.R, self.D))
         if self.ln_beta is None:
             self.ln_beta = jnp.zeros((self.R))
-    
+
     @property
     def D(self) -> int:
         r"""Dimensionality of :math:`X`."""
         return self.num_dim
-    
+
     @property
     def R(self) -> int:
         """Number of factors (leading dimension)."""
@@ -673,7 +671,7 @@ class ConstantFactor(ConjugateFactor):
         return ConstantFactor(ln_beta=ln_beta_new, num_dim=self.D)
 
     def _multiply_with_measure(
-        self, measure: "GaussianMeasure", update_full: bool=True
+        self, measure: "GaussianMeasure", update_full: bool = True
     ) -> Dict:
         """Compute the product between the current factor and a Gaussian measure :math:`u(X)`.
 
@@ -720,7 +718,7 @@ class ConstantFactor(ConjugateFactor):
         return new_density_dict
 
     def _hadamard_with_measure(
-        self, measure: "GaussianMeasure", update_full: bool=True
+        self, measure: "GaussianMeasure", update_full: bool = True
     ) -> dict:
         """Computes the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`
 
@@ -729,7 +727,7 @@ class ConstantFactor(ConjugateFactor):
         Args:
             measure: The gaussian measure the factor is multiplied with.
             update_full: Whether also the covariance and the log determinants of the new Gaussian measure should be computed.
-            
+
         Returns:
             Returns the resulting dictionary to create GaussianMeasure.
         """
@@ -753,16 +751,12 @@ class ConstantFactor(ConjugateFactor):
                 }
             )
         return new_density_dict
-    
+
     def to_dict(self) -> Dict:
         """Write Factor into dict.
 
         Returns:
             Dictionary with relevant parameters.
         """
-        factor_dict = {
-            "ln_beta": self.ln_beta,
-            "D": self.D
-        }
+        factor_dict = {"ln_beta": self.ln_beta, "D": self.D}
         return factor_dict
-

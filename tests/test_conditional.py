@@ -9,6 +9,7 @@ import jax
 config.update("jax_enable_x64", True)
 import numpy as np
 
+
 class TestConditionalGaussianPDF:
     @classmethod
     def create_instance(self, R, D, dim_y):
@@ -226,7 +227,7 @@ class TestConditionalGaussianPDF:
         assert jnp.allclose(px_given_y.Sigma, Sigma_new)
         assert jnp.allclose(px_given_y.Lambda, Lambda_new)
         assert jnp.allclose(px_given_y.ln_det_Sigma, ln_det_Sigma)
-       
+
 
 class TestNNControlGaussianConditional:
     @staticmethod
@@ -244,7 +245,9 @@ class TestNNControlGaussianConditional:
     def create_instance(self, R, Dx, Dy, Du):
         Sigma = self.get_pd_matrix(R, Dy)
         control_func = lambda u: jnp.tanh(jnp.dot(jnp.ones((Dy * (Dx + 1), Du)), u.T)).T
-        cond = conditional.NNControlGaussianConditional(Sigma=Sigma, num_cond_dim=Dx, num_control_dim=Du, control_func=control_func)
+        cond = conditional.NNControlGaussianConditional(
+            Sigma=Sigma, num_cond_dim=Dx, num_control_dim=Du, control_func=control_func
+        )
         return cond
 
     @pytest.mark.parametrize(
@@ -373,6 +376,7 @@ class TestNNControlGaussianConditional:
         r_ana_sample = jnp.mean(cond_u.integrate_log_conditional_y(px, u=u)(y), axis=0)
         assert jnp.allclose(r_sample, r_ana, atol=1e-2, rtol=np.inf)
         assert jnp.allclose(r_sample, r_ana_sample, atol=1e-2, rtol=np.inf)
+
 
 class TestConditionalIdentityGaussianPDF:
     @classmethod
@@ -508,7 +512,6 @@ class TestConditionalIdentityGaussianPDF:
         r_ana2_y = px_given_y2.integrate_log_conditional_y(px, y=y)
         assert jnp.allclose(r1, r2)
         assert jnp.allclose(r_ana1_y, r_ana2_y, atol=1e-2, rtol=np.inf)
-        
 
     @pytest.mark.parametrize(
         "R, D",
@@ -540,25 +543,23 @@ class TestConditionalIdentityGaussianPDF:
         assert jnp.allclose(px_given_y1.Sigma, px_given_y2.Sigma)
         assert jnp.allclose(px_given_y1.Lambda, px_given_y2.Lambda)
         assert jnp.allclose(px_given_y1.ln_det_Sigma, px_given_y2.ln_det_Sigma)
-        
-        
-    
+
     @pytest.mark.parametrize(
         "R, D, idx",
         [
-            (10, 1, jnp.array([1,4,9])),
-            (10, 2, jnp.array([1,4,5])),
-            (10, 10, jnp.array([1,4,-1])),
+            (10, 1, jnp.array([1, 4, 9])),
+            (10, 2, jnp.array([1, 4, 5])),
+            (10, 10, jnp.array([1, 4, -1])),
         ],
     )
     def test_update_Sigma(self, R, D, idx):
         px_given_y1, px_given_y2, py = self.create_instance(R, D)
         px_given_y2_sliced = px_given_y2.slice(idx)
-        assert jnp.allclose(px_given_y2_sliced.Sigma, px_given_y2.Sigma[idx]) 
-        assert jnp.allclose(px_given_y2_sliced.Lambda, px_given_y2.Lambda[idx]) 
-        assert jnp.allclose(px_given_y2_sliced.ln_det_Sigma, px_given_y2.ln_det_Sigma[idx]) 
-    
-
+        assert jnp.allclose(px_given_y2_sliced.Sigma, px_given_y2.Sigma[idx])
+        assert jnp.allclose(px_given_y2_sliced.Lambda, px_given_y2.Lambda[idx])
+        assert jnp.allclose(
+            px_given_y2_sliced.ln_det_Sigma, px_given_y2.ln_det_Sigma[idx]
+        )
 
 
 class TestConditionalIdentityDiagGaussianPDF(TestConditionalIdentityGaussianPDF):
@@ -577,10 +578,19 @@ class TestConditionalIdentityDiagGaussianPDF(TestConditionalIdentityGaussianPDF)
 
     @staticmethod
     def get_diagonal_mat(R, D):
-        diag_mat = jnp.tile(jnp.diag(jnp.array(np.random.rand(D,)))[None], (R, 1, 1))
+        diag_mat = jnp.tile(
+            jnp.diag(
+                jnp.array(
+                    np.random.rand(
+                        D,
+                    )
+                )
+            )[None],
+            (R, 1, 1),
+        )
         return diag_mat
-    
-    
+
+
 class TestclassConditionalGaussianDiagPDF(TestConditionalIdentityGaussianPDF):
     @classmethod
     def create_instance(self, R, D):
@@ -594,9 +604,17 @@ class TestclassConditionalGaussianDiagPDF(TestConditionalIdentityGaussianPDF):
         px_given_y2 = conditional.ConditionalGaussianDiagPDF(M=M, b=b, Sigma=Sigma_xy)
         # py = pxy.get_marginal(dim_y)
         return px_given_y1, px_given_y2, py
-    
+
     @staticmethod
     def get_diagonal_mat(R, D):
-        diag_mat = jnp.tile(jnp.diag(jnp.array(np.random.rand(D,)))[None], (R, 1, 1))
+        diag_mat = jnp.tile(
+            jnp.diag(
+                jnp.array(
+                    np.random.rand(
+                        D,
+                    )
+                )
+            )[None],
+            (R, 1, 1),
+        )
         return diag_mat
-    

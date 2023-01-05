@@ -16,6 +16,7 @@ from .utils.linalg import invert_matrix, invert_diagonal
 
 from .utils.dataclass import dataclass
 
+
 @dataclass(kw_only=True)
 class GaussianMeasure(factor.ConjugateFactor):
     r"""A measure with a Gaussian form.
@@ -55,8 +56,8 @@ class GaussianMeasure(factor.ConjugateFactor):
         self.ln_det_Sigma = self.ln_det_Sigma
         self.lnZ = None
         self.mu = None
-       
-    @property 
+
+    @property
     def integration_dict(self) -> Dict:
         return {
             "1": self.integral,
@@ -120,7 +121,10 @@ class GaussianMeasure(factor.ConjugateFactor):
         self.Sigma, self.ln_det_Lambda = invert_matrix(self.Lambda)
         self.ln_det_Sigma = -self.ln_det_Lambda
 
-    def __mul__(self, factor: factor.ConjugateFactor,) -> "GaussianMeasure":
+    def __mul__(
+        self,
+        factor: factor.ConjugateFactor,
+    ) -> "GaussianMeasure":
         r"""Compute the product between the measure :math:`u(X)` and a conjugate factor :math:`f(X)`.
 
         Returns :math:`f(X) * u(X)`.
@@ -189,10 +193,10 @@ class GaussianMeasure(factor.ConjugateFactor):
     def integrate(self, expr: str = "1", **kwargs) -> Float[Array, "R ..."]:
         r"""Integrate the indicated expression with respect to the Gaussian measure.
 
-                E.g. expr="(Ax+a)" means that :math:`\int (AX + a)u(X){\rm d}X` is computed, and :math:`A` and a can be provided.
+        E.g. expr="(Ax+a)" means that :math:`\int (AX + a)u(X){\rm d}X` is computed, and :math:`A` and a can be provided.
 
-                :param expr: Indicates the expression that should be integrated. Check measure's integration dict.
-                :return: The integral result.
+        :param expr: Indicates the expression that should be integrated. Check measure's integration dict.
+        :return: The integral result.
         """
         return self.integration_dict[expr](**kwargs)
 
@@ -336,7 +340,7 @@ class GaussianMeasure(factor.ConjugateFactor):
 
            \int X {\rm d}u(X)
 
-        Returns:    
+        Returns:
             The solved intergal.
         """
         constant = self.integral()
@@ -458,7 +462,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         r"""Compute the quadratic expectation.
 
         .. math::
-        
+
             \int (AX+a)'(BX+b) {\rm d}\phi(X),
 
         with :math:`\phi(X) = u(X) / \int {\rm d}u(X)`.
@@ -468,8 +472,8 @@ class GaussianMeasure(factor.ConjugateFactor):
             a_vec: Real valued vector.
             B_mat: Real valued matrix.
             b_vec: Real valued vector.
-            
-        Returns:    
+
+        Returns:
             The solved intergal.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
@@ -531,7 +535,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             a_vec: Real valued vector.
             B_mat: Real valued matrix.
             b_vec: Real valued vector.
-            
+
         Returns:
             The solved intergal.
         """
@@ -557,7 +561,7 @@ class GaussianMeasure(factor.ConjugateFactor):
 
         Args:
             b_vec: Real avlued vector.
-            
+
         Returns:
             The solved intergal.
         """
@@ -568,7 +572,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         bmSigma = jnp.einsum("a,abc->abc", bmu_inner, self.Sigma)
         bmu_outer = jnp.einsum("ab,ac->abc", b_vec, self.mu)
         Sigmabm = jnp.einsum("abd,ade->abe", self.Sigma, bmu_outer)
-        return (mbExx + bmSigma + Sigmabm)
+        return mbExx + bmSigma + Sigmabm
 
     def _expectation_cubic_outer(
         self, A_mat: Float[Array, "#R 1 D"], a_vec: Float[Array, "#R 1"]
@@ -584,7 +588,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         Args:
             A_mat: Real valued matrix. If None, it is assumed identity.
             a_vec: Real valued vector. If None, it is assumed zeros.
-                
+
         Returns:
             Solved integral.
         """
@@ -786,15 +790,15 @@ class GaussianMeasure(factor.ConjugateFactor):
 
           \int (AX+a)^\top(Bx+b)(Cx+c)^\top {\rm d}u(X),
 
-        Args:        
+        Args:
             A_mat: Real valued matrix.
             a_vec: Real valued vector.
             B_mat: Real valued matrix.
             b_vec: Real valued vector.
             C_mat: Real valued matrix.
             c_vec: Real valued vector.
-            
-        Returns:    
+
+        Returns:
             The solved intergal.
         """
         A_mat, a_vec = self._get_default(A_mat, a_vec)
@@ -899,7 +903,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             c_vec: Real valued vector.
             D_mat: Real valued matrix.
             d_vec: Real valued vector.
-            
+
         Returns:
             The solved intergal.
         """
@@ -1006,7 +1010,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             c_vec: Real valued vector.
             D_mat: Real valued matrix.
             d_vec: Real valued vector.
-            
+
         Returns:
             The solved intergal.
         """
@@ -1030,6 +1034,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             The integral
         """
         return factor.intergate_log_factor(self)
+
 
 @dataclass(kw_only=True)
 class GaussianDiagMeasure(GaussianMeasure):
@@ -1071,7 +1076,9 @@ class GaussianDiagMeasure(GaussianMeasure):
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         nu_new = jnp.take(self.nu, indices, axis=0)
         ln_beta_new = jnp.take(self.ln_beta, indices, axis=0)
-        new_measure = GaussianDiagMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        new_measure = GaussianDiagMeasure(
+            Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new
+        )
         if self.Sigma is not None:
             new_measure.Sigma = jnp.take(self.Sigma, indices, axis=0)
             new_measure.ln_det_Sigma = jnp.take(self.ln_det_Sigma, indices, axis=0)
@@ -1091,7 +1098,9 @@ class GaussianDiagMeasure(GaussianMeasure):
         Lambda_new = jnp.sum(self.Lambda, axis=0, keepdims=True)
         nu_new = jnp.sum(self.nu, axis=0, keepdims=True)
         ln_beta_new = jnp.sum(self.ln_beta, axis=0, keepdims=True)
-        new_measure = GaussianDiagMeasure(Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new)
+        new_measure = GaussianDiagMeasure(
+            Lambda=Lambda_new, nu=nu_new, ln_beta=ln_beta_new
+        )
         if self.Sigma is not None:
             new_measure._prepare_integration()
         return new_measure

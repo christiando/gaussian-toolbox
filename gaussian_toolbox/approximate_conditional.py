@@ -10,6 +10,7 @@ from jaxtyping import Array, Float, Int, Bool
 from jax import lax
 from jax import jit
 
+
 @dataclass(kw_only=True)
 class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     """Base class for approximate conditional."""
@@ -30,7 +31,9 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         phi_x = jnp.block([x, self.k_func.evaluate(x).T])
         return phi_x
 
-    def get_conditional_mu(self, x: Float[Array, "N Dx"], **kwargs) -> Float[Array, "1 N Dy"]:
+    def get_conditional_mu(
+        self, x: Float[Array, "N Dx"], **kwargs
+    ) -> Float[Array, "1 N Dy"]:
         """Compute the conditional mu function :math:`\mu(X=x) = M \phi(x) + b`.
 
         Args:
@@ -200,10 +203,12 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
         cond_p_xy = conditional.ConditionalGaussianPDF(
-            M=M_new, b=b_new, Sigma=Sigma_new,
+            M=M_new,
+            b=b_new,
+            Sigma=Sigma_new,
         )
         return cond_p_xy
-    
+
     def affine_marginal_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
     ) -> pdf.GaussianPDF:
@@ -227,14 +232,17 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
 
         Args:
             p_x: The density which we average over.
-            
+
         Returns:
             The joint distribution p(y).
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y,)
+        p_y = pdf.GaussianPDF(
+            Sigma=Sigma_y,
+            mu=mu_y,
+        )
         return p_y
-    
+
     def integrate_log_conditional(
         self, p_yx: measure.GaussianMeasure, **kwargs
     ) -> Float[Array, "R"]:
@@ -244,6 +252,7 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         self, p_x: measure.GaussianMeasure, **kwargs
     ) -> callable:
         raise NotImplementedError("Log integral not implemented!")
+
 
 @dataclass(kw_only=True)
 class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
@@ -290,7 +299,6 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
 
     def __post_init__(
         self,
-
     ):
         if self.b is None:
             self.b = jnp.zeros((self.R, self.Dy))
@@ -303,17 +311,17 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
             self.Sigma, ln_det_Lambda = invert_matrix(self.Lambda)
             self.ln_det_Sigma = -ln_det_Lambda
         self.update_phi()
-        
+
     @property
     def Dk(self) -> int:
         r"""Number of kernels."""
         return self.mu.shape[0]
-    
+
     @property
     def Dx(self) -> int:
         r"""Dimensionality of :math:`X`."""
         return self.mu.shape[1]
-    
+
     @property
     def Dphi(self) -> int:
         r"""Dimensionality of feature vector (:math:`D_x+D_k`)."""
@@ -322,7 +330,7 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
     def update_phi(self):
         """Set up the non-linear kernel function in :math:`\phi(x)`."""
         Lambda = jnp.eye(self.Dx)[None] / self.length_scale[:, None] ** 2
-        nu = self.mu / self.length_scale ** 2
+        nu = self.mu / self.length_scale**2
         ln_beta = -0.5 * jnp.sum((self.mu / self.length_scale) ** 2, axis=1)
         self.k_func = measure.GaussianDiagMeasure(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
@@ -393,7 +401,9 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: Float[Array, "R Dy"]=None, **kwargs) -> Union[callable, Float[Array, "R Dy"]]:
+    def integrate_log_conditional_y(
+        self, p_x: pdf.GaussianPDF, y: Float[Array, "R Dy"] = None, **kwargs
+    ) -> Union[callable, Float[Array, "R Dy"]]:
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -455,7 +465,8 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
             return log_expectation_y
         else:
             return log_expectation_y(y)
-        
+
+
 @dataclass(kw_only=True)
 class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
     r"""A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
@@ -497,10 +508,9 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
     Sigma: Float[Array, "1 Dy Dy"] = None
     Lambda: Float[Array, "1 Dy Dy"] = None
     ln_det_Sigma: Float[Array, "1"] = None
-    
+
     def __post_init__(
         self,
-
     ):
         if self.b is None:
             self.b = jnp.zeros((self.R, self.Dy))
@@ -515,28 +525,27 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         self.w0 = self.W[:, 0]
         self.W = self.W[:, 1:]
         self.update_phi()
-        
+
     @property
     def Dk(self) -> int:
         r"""Number of kernels."""
         return self.W.shape[0]
-    
+
     @property
     def Dx(self) -> int:
         r"""Dimensionality of :math:`X`."""
         return self.W.shape[1]
-    
+
     @property
     def Dphi(self) -> int:
         r"""Dimensionality of feature vector (:math:`D_x+D_k`)."""
         return self.Dk + self.Dx
-    
 
     def update_phi(self):
         """Set up the non-linear kernel function in :math:`\phi(x)`."""
         v = self.W
         nu = self.W * self.w0[:, None]
-        ln_beta = -0.5 * self.w0 ** 2
+        ln_beta = -0.5 * self.w0**2
         self.k_func = factor.OneRankFactor(v=v, nu=nu, ln_beta=ln_beta)
 
     def integrate_log_conditional(
@@ -606,7 +615,9 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         )
         return log_expectation
 
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: Float[Array, "R Dy"]=None, **kwargs) -> Union[callable, Float[Array, "R"]]:
+    def integrate_log_conditional_y(
+        self, p_x: pdf.GaussianPDF, y: Float[Array, "R Dy"] = None, **kwargs
+    ) -> Union[callable, Float[Array, "R"]]:
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -670,6 +681,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         else:
             return log_expectation_y(y)
 
+
 @dataclass(kw_only=True)
 class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     r"""A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
@@ -709,30 +721,31 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
 
     def __post_init__(
         self,
-
     ):
         if self.R != 1:
             raise NotImplementedError("So far only R=1 is supported.")
         if self.Dy < self.Du:
-            raise NotImplementedError("There must be less vectors U than dimensionality of Y.")
-        self.sigma2_x = self.sigma_x ** 2
+            raise NotImplementedError(
+                "There must be less vectors U than dimensionality of Y."
+            )
+        self.sigma2_x = self.sigma_x**2
         self._setup_noise_diagonal_functions()
-        
+
     @property
     def R(self) -> int:
         """Number of conditionals (leading dimension)."""
         return self.M.shape[0]
-    
+
     @property
     def Dy(self) -> int:
         r"""Dimensionality of :math:`Y`."""
         return self.M.shape[1]
-    
+
     @property
     def Dx(self) -> int:
         r"""Dimensionality of :math:`X`."""
         return self.M.shape[2]
-    
+
     @property
     def Du(self) -> int:
         r"""Number of orthonormal low rank vectors :math:`U`."""
@@ -750,7 +763,12 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         self.exp_h_plus = factor.LinearFactor(nu=nu, ln_beta=ln_beta)
         self.exp_h_minus = factor.LinearFactor(nu=-nu, ln_beta=-ln_beta)
 
-    def get_conditional_cov(self, x: Float[Array, "N Dx"], invert: bool=False) -> Union[Float[Array, "N Dy Dy"], Tuple[Float[Array, "N Dy Dy"], Float[Array, "N Dy Dy"], Float[Array, "N"]]]:
+    def get_conditional_cov(
+        self, x: Float[Array, "N Dx"], invert: bool = False
+    ) -> Union[
+        Float[Array, "N Dy Dy"],
+        Tuple[Float[Array, "N Dy Dy"], Float[Array, "N Dy Dy"], Float[Array, "N"]],
+    ]:
         r"""Evaluate the covariance at a given :math:`X=x`, i.e.
 
         .. math::
@@ -775,10 +793,12 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             G_x = D_x / (self.sigma2_x + D_x)
             print(G_x.shape, self.U.shape)
             Sigma_y_x_inv = jnp.eye(self.Dy)[None] - jnp.einsum(
-            "adb,cb->acd", jnp.einsum("ab,cb->cab", self.U, G_x), self.U
-        )
+                "adb,cb->acd", jnp.einsum("ab,cb->cab", self.U, G_x), self.U
+            )
             Sigma_y_x_inv /= self.sigma2_x
-            ln_det_Sigma_y_x = (self.Dy - self.Du) * jnp.log(self.sigma2_x) + jnp.sum(jnp.log(self.sigma2_x + D_x), axis=1)
+            ln_det_Sigma_y_x = (self.Dy - self.Du) * jnp.log(self.sigma2_x) + jnp.sum(
+                jnp.log(self.sigma2_x + D_x), axis=1
+            )
             return Sigma_y_x, Sigma_y_x_inv, ln_det_Sigma_y_x
         else:
             return Sigma_y_x
@@ -794,11 +814,15 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
-        Sigma_new, Lambda_new, ln_det_Sigma_new = self.get_conditional_cov(x, invert=True)
-        #Sigma_new = .5 * (Sigma_new + jnp.swapaxes(Sigma_new, -2, -1))
-        return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new)
-        #Sigma_new = self.get_conditional_cov(x)
-        #return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new)
+        Sigma_new, Lambda_new, ln_det_Sigma_new = self.get_conditional_cov(
+            x, invert=True
+        )
+        # Sigma_new = .5 * (Sigma_new + jnp.swapaxes(Sigma_new, -2, -1))
+        return pdf.GaussianPDF(
+            Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new
+        )
+        # Sigma_new = self.get_conditional_cov(x)
+        # return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new)
 
     def set_y(self, y: Float[Array, "R Dy"], **kwargs):
         r"""Not valid function for this model class.
@@ -835,7 +859,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         Sigma_int = self.sigma2_x * jnp.eye(self.Dy)[None] + jnp.einsum(
             "abc,dc->abd", self.U[None] * D_int[:, None], self.U
         )
-        Sigma_int = .5 * (Sigma_int + jnp.swapaxes(Sigma_int, -2, -1))
+        Sigma_int = 0.5 * (Sigma_int + jnp.swapaxes(Sigma_int, -2, -1))
         return Sigma_int
 
     def get_expected_moments(
@@ -844,11 +868,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         r"""Compute the expected mean and covariance
 
         .. math::
-            
+
             \mu_y = \mathbb{E}[y] = M \mathbb{E}[x] + b
 
         .. math::
-            
+
             \Sigma_y = \mathbb{E}[yy'] - \mu_y \mu_y^\top = \sigma_x^2 I + \sum_i U_i \mathbb{E}[D_i(x)] U_i^\top + \mathbb{E}[\mu(x)\mu(x)^\top] - \mu_y \mu_y^\top
 
         Args:
@@ -946,7 +970,9 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
         cond_p_xy = conditional.ConditionalGaussianPDF(
-            M=M_new, b=b_new, Sigma=Sigma_new,
+            M=M_new,
+            b=b_new,
+            Sigma=Sigma_new,
         )
         return cond_p_xy
 
@@ -981,8 +1007,9 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y)
         return p_y
 
-
-    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"], **kwargs) -> Float[Array, "N"]:
+    def integrate_log_conditional_y(
+        self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"], **kwargs
+    ) -> Float[Array, "N"]:
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
@@ -999,12 +1026,18 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             The integral evaluated for of :math:`Y=y`.
         """
         vec = y - self.b
-        E_epsilon2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=-self.M, a_vec=vec, B_mat=-self.M, b_vec=vec)
-        
+        E_epsilon2 = p_x.integrate(
+            "(Ax+a)'(Bx+b)", A_mat=-self.M, a_vec=vec, B_mat=-self.M, b_vec=vec
+        )
+
         def scan_body_function(carry, args_i):
             W_i, u_i, beta_i = args_i
-            omega_star_i, omega_dagger_i, _ = lax.stop_gradient(self._get_omega_star_i(W_i, u_i, beta_i, p_x, y))
-            uRu_i, log_lb_sum_i = self._get_lb_i(W_i, u_i, beta_i, omega_star_i, omega_dagger_i, p_x, y)
+            omega_star_i, omega_dagger_i, _ = lax.stop_gradient(
+                self._get_omega_star_i(W_i, u_i, beta_i, p_x, y)
+            )
+            uRu_i, log_lb_sum_i = self._get_lb_i(
+                W_i, u_i, beta_i, omega_star_i, omega_dagger_i, p_x, y
+            )
             result = (uRu_i, log_lb_sum_i)
             return carry, result
 
@@ -1014,26 +1047,42 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         E_ln_sigma2_f = jnp.sum(log_lb_sum, axis=0)
         log_int_y = -0.5 * (E_epsilon2 - E_D_inv_epsilon2) / self.sigma_x**2
         # determinant part
-        log_int_y = log_int_y - 0.5 * E_ln_sigma2_f + 0.5 * (self.Du - self.Dy) * jnp.log(self.sigma_x**2) - .5 * self.Dy * jnp.log(2. * jnp.pi)
+        log_int_y = (
+            log_int_y
+            - 0.5 * E_ln_sigma2_f
+            + 0.5 * (self.Du - self.Dy) * jnp.log(self.sigma_x**2)
+            - 0.5 * self.Dy * jnp.log(2.0 * jnp.pi)
+        )
         return log_int_y
 
-    def _get_lb_i(self, W_i: Float[Array, "Dx+1"], u_i: Float[Array, "Dy"], beta_i: Float[Array, "1"], omega_star: Float[Array, "N"], omega_dagger, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"]) -> Tuple[Float[Array, "N"], Float[Array, "N"]]:
+    def _get_lb_i(
+        self,
+        W_i: Float[Array, "Dx+1"],
+        u_i: Float[Array, "Dy"],
+        beta_i: Float[Array, "1"],
+        omega_star: Float[Array, "N"],
+        omega_dagger,
+        p_x: pdf.GaussianPDF,
+        y: Float[Array, "N Dy"],
+    ) -> Tuple[Float[Array, "N"], Float[Array, "N"]]:
         # phi = pdf.GaussianPDF(**phi_dict)
         # beta = self.beta[iu:iu + 1]
         # Lower bound for \mathbb{E}[ln (sigma_x^2 + f(h))]
         R = p_x.R
         w_i = W_i[1:].reshape((1, -1))
-        v =  jnp.tile(w_i, (R, 1))
+        v = jnp.tile(w_i, (R, 1))
         b_i = W_i[:1]
         u_i = u_i.reshape((-1, 1))
-        #uC = jnp.dot(u_i.T, -self.M[0])
-        #uy_d = jnp.dot(u_i.T, (y - self.b[0]).T)
+        # uC = jnp.dot(u_i.T, -self.M[0])
+        # uy_d = jnp.dot(u_i.T, (y - self.b[0]).T)
         # Lower bound for \mathbb{E}[ln (sigma_x^2 + f(h))]
-        
+
         Eh2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
         f_omega_dagger = self.f(omega_dagger, beta_i)
         g_omega_dagger = self.g(omega_dagger, beta_i)
-        log_lb = jnp.log(self.sigma_x**2 + f_omega_dagger) + .5 * g_omega_dagger * (Eh2 - omega_dagger ** 2)
+        log_lb = jnp.log(self.sigma_x**2 + f_omega_dagger) + 0.5 * g_omega_dagger * (
+            Eh2 - omega_dagger**2
+        )
         g_omega = self.g(omega_star, beta_i)
         nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
         nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
@@ -1064,12 +1113,20 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         )
         R = R_plus + R_minus
         R = R
-        #R = .5 * (R + R.T)
-        uRu = jnp.sum(u_i.T * jnp.einsum('abc, cb -> ab', R, u_i), axis=1)
+        # R = .5 * (R + R.T)
+        uRu = jnp.sum(u_i.T * jnp.einsum("abc, cb -> ab", R, u_i), axis=1)
         log_lb_sum = log_lb
         return uRu, log_lb_sum
-    
-    def _get_omega_star_i(self, W_i: Float[Array, "Dy+1"], u_i: Float[Array, "Dy"], beta_i: Float[Array, "1"], p_x: pdf.GaussianPDF, y: Float[Array, "N"], conv_crit: float=1e-3) -> Tuple[Float[Array, "N"], Int[Array, "_"]]:
+
+    def _get_omega_star_i(
+        self,
+        W_i: Float[Array, "Dy+1"],
+        u_i: Float[Array, "Dy"],
+        beta_i: Float[Array, "1"],
+        p_x: pdf.GaussianPDF,
+        y: Float[Array, "N"],
+        conv_crit: float = 1e-3,
+    ) -> Tuple[Float[Array, "N"], Int[Array, "_"]]:
         R = p_x.R
         w_i = W_i[1:].reshape((1, -1))
         v = jnp.tile(w_i, (R, 1))
@@ -1162,7 +1219,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         ) > conv_crit
 
         return omega_star, omega_dagger, indices_non_converged
-    
+
     def f(self, h: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         """Compute the function
 
@@ -1181,7 +1238,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
 
     def f_prime(self, h: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         """Computes the derivative of f
-        
+
         .. math::
 
             f^\prime(h) = 2 * \beta * \sinh(h)
@@ -1199,7 +1256,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         r"""Computes the function
 
         .. math::
-        
+
             g(\omega) = f'(\omega) / (sigma_x^2 + f(\omega)) / |\omega|
 
             for the variational bound

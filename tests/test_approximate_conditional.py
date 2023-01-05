@@ -36,7 +36,12 @@ class TestLRBFGaussianConditional:
         return psd_mat
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Dk", [(1, 5, 2, 2), (1, 10, 3, 1), (1, 2, 5, 5),],
+        "R, Dx, Dy, Dk",
+        [
+            (1, 5, 2, 2),
+            (1, 10, 3, 1),
+            (1, 2, 5, 5),
+        ],
     )
     def test_affine_tranformations(self, R, Dx, Dy, Dk):
         cond, p_X = self.create_instance(R, Dx, Dy, Dk)
@@ -55,7 +60,12 @@ class TestLRBFGaussianConditional:
         assert jnp.allclose(p_X_given_Y.Lambda, p_X_given_Y2.Lambda)
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Dk", [(1, 5, 2, 2), (1, 10, 3, 1), (1, 2, 5, 5),],
+        "R, Dx, Dy, Dk",
+        [
+            (1, 5, 2, 2),
+            (1, 10, 3, 1),
+            (1, 2, 5, 5),
+        ],
     )
     def test_condition_on_x(self, R, Dx, Dy, Dk):
         cond, p_X = self.create_instance(R, Dx, Dy, Dk)
@@ -65,7 +75,12 @@ class TestLRBFGaussianConditional:
         assert jnp.allclose(cond_x.mu, mu_x)
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Dk", [(1, 5, 2, 2), (1, 10, 3, 1), (1, 2, 5, 5),],
+        "R, Dx, Dy, Dk",
+        [
+            (1, 5, 2, 2),
+            (1, 10, 3, 1),
+            (1, 2, 5, 5),
+        ],
     )
     def test_integrate_log_conditional(self, R, Dx, Dy, Dk):
         cond, p_X = self.create_instance(R, Dx, Dy, Dk)
@@ -96,23 +111,23 @@ class TestLSEMGaussianConditional(TestLRBFGaussianConditional):
         Sigma_x = self.get_pd_matrix(R, Dx)
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
-    
+
+
 class TestHCCovGaussianConditional:
-    
     @classmethod
     def create_instance(self, R, Dx, Dy, Du):
-        noise_x = 1.
+        noise_x = 1.0
         C = jnp.array(np.random.randn(Dy, Dx))
         C = C / jnp.sqrt(jnp.sum(C**2, axis=0))[None]
         d = 1e-1 * jnp.array(np.random.randn(Dy))
         rand_mat = np.random.rand(Dy, Dy) - 0.5
         Q, _ = np.linalg.qr(rand_mat)
-        U = jnp.array(Q[:, : Du])
+        U = jnp.array(Q[:, :Du])
         # self.U = jnp.eye(Dx)[:, :Du]
         W = 1e-1 * np.random.randn(Du, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
-        beta = .5**2 * jnp.ones(Du)
+        beta = 0.5**2 * jnp.ones(Du)
         sigma_x = jnp.array([noise_x])
         cond = approximate_conditional.HCCovGaussianConditional(
             M=jnp.array([C]),
@@ -123,11 +138,12 @@ class TestHCCovGaussianConditional:
             beta=beta,
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
-        Sigma_x = 10 * self.get_pd_matrix(R, Dx)#jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        Sigma_x = 10 * self.get_pd_matrix(
+            R, Dx
+        )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
-    
-    
+
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
         # Q = jnp.array(np.random.randn((R, D, D))
@@ -138,9 +154,14 @@ class TestHCCovGaussianConditional:
         psd_mat = jnp.einsum("abc,abd->acd", A, A)
         psd_mat += jnp.eye(D)[None]
         return psd_mat
-    
+
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du", [(1, 5, 2, 2), (1, 10, 3, 1), (1, 2, 5, 2),],
+        "R, Dx, Dy, Du",
+        [
+            (1, 5, 2, 2),
+            (1, 10, 3, 1),
+            (1, 2, 5, 2),
+        ],
     )
     def test_affine_tranformations(self, R, Dx, Dy, Du):
         cond, p_X = self.create_instance(R, Dx, Dy, Du)
@@ -157,9 +178,10 @@ class TestHCCovGaussianConditional:
         assert jnp.allclose(p_X_given_Y.b, p_X_given_Y2.b)
         assert jnp.allclose(p_X_given_Y.Sigma, p_X_given_Y2.Sigma)
         assert jnp.allclose(p_X_given_Y.Lambda, p_X_given_Y2.Lambda)
-        
+
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du", [(1, 5, 1, 1), (1, 10, 1, 1), (1, 5, 2, 2), (1, 1, 10, 2)],
+        "R, Dx, Dy, Du",
+        [(1, 5, 1, 1), (1, 10, 1, 1), (1, 5, 2, 2), (1, 1, 10, 2)],
     )
     def test_integrate_log_conditional_y(self, R, Dx, Dy, Du):
         N = 1
@@ -168,6 +190,6 @@ class TestHCCovGaussianConditional:
         integral_lb = cond.integrate_log_conditional_y(p_X, y=y)
         key = jax.random.PRNGKey(42)
         X_sample = p_X.sample(key, 100000)
-        integral_sample_mean = jnp.mean(cond(X_sample[:,0]).evaluate_ln(y), axis=0)
-        integral_sample_std= jnp.std(cond(X_sample[:,0]).evaluate_ln(y), axis=0)
+        integral_sample_mean = jnp.mean(cond(X_sample[:, 0]).evaluate_ln(y), axis=0)
+        integral_sample_std = jnp.std(cond(X_sample[:, 0]).evaluate_ln(y), axis=0)
         assert jnp.all(integral_lb <= integral_sample_mean + 1e-2 * integral_sample_std)

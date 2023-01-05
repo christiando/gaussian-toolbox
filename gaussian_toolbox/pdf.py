@@ -11,7 +11,6 @@ __author__ = "Christian Donner"
 from jax.random import PRNGKey
 import jax
 from jax import numpy as jnp
-import numpy as np
 
 # from .
 from . import measure
@@ -21,6 +20,7 @@ from typing import Dict
 
 from .utils.dataclass import dataclass
 from dataclasses import field
+
 
 @dataclass(kw_only=True)
 class GaussianPDF(measure.GaussianMeasure):
@@ -32,6 +32,7 @@ class GaussianPDF(measure.GaussianMeasure):
         Lambda: Information (precision) matrix of the Gaussians.
         ln_det_Sigma: Log determinant of the covariance matrix.
     """
+
     Sigma: Float[Array, "R D D"]
     mu: Float[Array, "R D"]
     Lambda: Float[Array, "R D D"] = None
@@ -39,7 +40,7 @@ class GaussianPDF(measure.GaussianMeasure):
     nu: Float[Array, "R D"] = field(init=False)
     ln_beta: Float[Array, "R"] = field(init=False)
     lnZ: Float[Array, "R"] = field(default=None, init=False)
-    
+
     def __post_init__(self):
         if self.Lambda is None:
             self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
@@ -85,7 +86,9 @@ class GaussianPDF(measure.GaussianMeasure):
         # Sigma_new = lax.dynamic_index_in_dim(self.Sigma, indices, axis=0)
         # mu_new = lax.dynamic_index_in_dim(self.mu, indices, axis=0)
         # ln_det_Sigma_new = lax.dynamic_index_in_dim(self.ln_det_Sigma, indices, axis=0)
-        new_measure = GaussianPDF(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new)
+        new_measure = GaussianPDF(
+            Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new
+        )
         return new_measure
 
     def update(self, indices: Int[Array, "R_update"], density: "GaussianPDF"):
@@ -99,7 +102,7 @@ class GaussianPDF(measure.GaussianMeasure):
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
         self.mu = self.mu.at[indices].set(density.mu)
         self.ln_det_Sigma = self.ln_det_Sigma.at[indices].set(density.ln_det_Sigma)
-        #self.ln_det_Lambda = self.ln_det_Lambda.at[indices].set(density.ln_det_Lambda)
+        # self.ln_det_Lambda = self.ln_det_Lambda.at[indices].set(density.ln_det_Lambda)
         self.lnZ = self.lnZ.at[indices].set(density.lnZ)
         self.nu = self.nu.at[indices].set(density.nu)
         self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)
@@ -137,12 +140,12 @@ class GaussianPDF(measure.GaussianMeasure):
     def kl_divergence(self, p1: "GaussianPDF") -> Float[Array, "R"]:
         r"""Compute the Kulback Leibler divergence between two multivariate Gaussians.
 
-                .. math
+             .. math
 
-           D_KL(p|p1) = \int p(X)\log \frac{p(X)}{p_1(X)} {\rm d}X
+        D_KL(p|p1) = \int p(X)\log \frac{p(X)}{p_1(X)} {\rm d}X
 
-                :param p1: The other Gaussian Density.
-                :return: Kulback Leibler divergence.
+             :param p1: The other Gaussian Density.
+             :return: Kulback Leibler divergence.
         """
         assert self.R == p1.R or p1.R == 1 or self.R == 1
         assert self.D == p1.D
@@ -225,6 +228,7 @@ class GaussianPDF(measure.GaussianMeasure):
         }
         return density_dict
 
+
 @dataclass(kw_only=True)
 class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix.
@@ -238,6 +242,7 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
         Lambda: Information (precision) matrix of the Gaussians.
         ln_det_Sigma: Log determinant of the covariance matrix.
     """
+
     Sigma: Float[Array, "R D D"]
     mu: Float[Array, "R D"]
     Lambda: Float[Array, "R D D"] = None
@@ -245,7 +250,7 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     nu: Float[Array, "R D"] = field(init=False)
     ln_beta: Float[Array, "R"] = field(init=False)
     lnZ: Float[Array, "R"] = field(default=None, init=False)
-    
+
     def __post_init__(self):
         self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
         if self.nu is None:
@@ -257,7 +262,6 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
         self.ln_det_Sigma = self.ln_det_Sigma
         self._prepare_integration()
         self.normalize()
-        
 
     def slice(self, indices: Int[Array, "R_new"]) -> "GaussianDiagPDF":
         """Return an object with only the specified entries.
@@ -273,7 +277,12 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
         mu_new = jnp.take(self.mu, indices, axis=0)
         ln_det_Sigma_new = jnp.take(self.ln_det_Sigma, indices, axis=0)
-        new_measure = GaussianDiagPDF(Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new,)
+        new_measure = GaussianDiagPDF(
+            Sigma=Sigma_new,
+            mu=mu_new,
+            Lambda=Lambda_new,
+            ln_det_Sigma=ln_det_Sigma_new,
+        )
         return new_measure
 
     def update(self, indices: Int[Array, "R_update"], density: "GaussianDiagPDF"):
@@ -287,7 +296,7 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
         self.mu = self.mu.at[indices].set(density.mu)
         self.ln_det_Sigma = self.ln_det_Sigma.at[indices].set(density.ln_det_Sigma)
-        #self.ln_det_Lambda = self.ln_det_Lambda.at[indices].set(density.ln_det_Lambda)
+        # self.ln_det_Lambda = self.ln_det_Lambda.at[indices].set(density.ln_det_Lambda)
         self.lnZ = self.lnZ.at[indices].set(density.lnZ)
         self.nu = self.nu.at[indices].set(density.nu)
         self.ln_beta = self.ln_beta.at[indices].set(density.ln_beta)

@@ -28,7 +28,11 @@ class TestGaussianMeasure(TestConjugateFactor):
     def create_instance(self, R, D):
         Lambda = self.get_pd_matrix(R, D)
         nu = jnp.array(np.random.randn(R, D))
-        ln_beta = jnp.array(np.random.randn(R,))
+        ln_beta = jnp.array(
+            np.random.randn(
+                R,
+            )
+        )
         return measure.GaussianMeasure(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
@@ -119,10 +123,30 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert jnp.allclose(-ln_det_Lambda_new, m_prod.ln_det_Sigma)
 
     @pytest.mark.parametrize(
-        "R, D", [(2, 5,), (1, 5,), (6, 1,), (7, 5,),],
+        "R, D",
+        [
+            (
+                2,
+                5,
+            ),
+            (
+                1,
+                5,
+            ),
+            (
+                6,
+                1,
+            ),
+            (
+                7,
+                5,
+            ),
+        ],
     )
     def test_compute_lnZ(
-        self, R, D,
+        self,
+        R,
+        D,
     ):
         Lambda = jnp.zeros((R, D, D))
         Lambda = Lambda.at[:].set(jnp.eye(D) * np.random.rand(R)[:, None, None])
@@ -163,7 +187,8 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert m12.R == m1.R * m2.R
         assert m12.D == m1.D == m2.D
         Lambda_new = jnp.reshape(
-            (m1.Lambda[:, None] + m2.Lambda[None]), (m1.R * m2.R, m2.D, m2.D),
+            (m1.Lambda[:, None] + m2.Lambda[None]),
+            (m1.R * m2.R, m2.D, m2.D),
         )
         nu_new = jnp.reshape((m1.nu[:, None] + m2.nu[None]), (m1.R * m2.R, m2.D))
         ln_beta_new = jnp.reshape(
@@ -174,7 +199,8 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert jnp.allclose(m12.ln_beta, ln_beta_new)
         m1 = self.create_instance(R1, D)
         Lambda_new = jnp.reshape(
-            (m1.Lambda[:, None] + m2.Lambda[None]), (m1.R * m2.R, m2.D, m2.D),
+            (m1.Lambda[:, None] + m2.Lambda[None]),
+            (m1.R * m2.R, m2.D, m2.D),
         )
         nu_new = jnp.reshape((m1.nu[:, None] + m2.nu[None]), (m1.R * m2.R, m2.D))
         ln_beta_new = jnp.reshape(
@@ -191,7 +217,8 @@ class TestGaussianMeasure(TestConjugateFactor):
         m1 = self.create_instance(R1, D)
         m1._prepare_integration()
         Lambda_new = jnp.reshape(
-            (m1.Lambda[:, None] + m2.Lambda[None]), (m1.R * m2.R, m2.D, m2.D),
+            (m1.Lambda[:, None] + m2.Lambda[None]),
+            (m1.R * m2.R, m2.D, m2.D),
         )
         nu_new = jnp.reshape((m1.nu[:, None] + m2.nu[None]), (m1.R * m2.R, m2.D))
         ln_beta_new = jnp.reshape(
@@ -256,7 +283,25 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert jnp.allclose(m12.ln_det_Sigma, -m12.ln_det_Lambda)
 
     @pytest.mark.parametrize(
-        "R, D", [(2, 2,), (1, 1,), (2, 1,), (1, 2,),],
+        "R, D",
+        [
+            (
+                2,
+                2,
+            ),
+            (
+                1,
+                1,
+            ),
+            (
+                2,
+                1,
+            ),
+            (
+                1,
+                2,
+            ),
+        ],
     )
     def test_integrate1(self, R, D):
         np.random.seed(1)
@@ -269,7 +314,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         mu = Sigma_diag * nu
         normalization = jnp.exp(
             jnp.sum(
-                0.5 * jnp.log(2.0 * jnp.pi * Sigma_diag) + 0.5 * mu ** 2 / Sigma_diag,
+                0.5 * jnp.log(2.0 * jnp.pi * Sigma_diag) + 0.5 * mu**2 / Sigma_diag,
                 axis=1,
             )
         )
@@ -279,7 +324,25 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert np.allclose(normalization, integral_analytic_light)
 
     @pytest.mark.parametrize(
-        "R, D", [(2, 2,), (1, 1,), (2, 1,), (1, 2,),],
+        "R, D",
+        [
+            (
+                2,
+                2,
+            ),
+            (
+                1,
+                1,
+            ),
+            (
+                2,
+                1,
+            ),
+            (
+                1,
+                2,
+            ),
+        ],
     )
     def test_integratex(self, R, D):
         np.random.seed(1)
@@ -292,7 +355,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         mu = Sigma_diag * nu
         normalization = jnp.exp(
             jnp.sum(
-                0.5 * jnp.log(2.0 * jnp.pi * Sigma_diag) + 0.5 * mu ** 2 / Sigma_diag,
+                0.5 * jnp.log(2.0 * jnp.pi * Sigma_diag) + 0.5 * mu**2 / Sigma_diag,
                 axis=1,
             )
         )
@@ -300,11 +363,33 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert np.allclose(normalization[:, None] * mu, integral_analytic)
 
     @pytest.mark.parametrize(
-        "R, D", [(10, 2,), (1, 1,), (10, 1,), (1, 2,),],
+        "R, D",
+        [
+            (
+                10,
+                2,
+            ),
+            (
+                1,
+                1,
+            ),
+            (
+                10,
+                1,
+            ),
+            (
+                1,
+                2,
+            ),
+        ],
     )
     def test_integrate_Ax_a(self, R, D):
         np.random.seed(1)
-        A, a = jnp.asarray(np.random.rand(D, D)), jnp.asarray(np.random.rand(D,))
+        A, a = jnp.asarray(np.random.rand(D, D)), jnp.asarray(
+            np.random.rand(
+                D,
+            )
+        )
         Lambda = jnp.zeros((R, D, D))
         Lambda = Lambda.at[:].set(jnp.eye(D) * (np.random.rand(R, D) + 1)[:, :, None])
         nu = jnp.array(np.random.randn(R, D))
@@ -314,7 +399,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         mu = Sigma_diag * nu
         normalization = jnp.exp(
             jnp.sum(
-                0.5 * jnp.log(2.0 * jnp.pi * Sigma_diag) + 0.5 * mu ** 2 / Sigma_diag,
+                0.5 * jnp.log(2.0 * jnp.pi * Sigma_diag) + 0.5 * mu**2 / Sigma_diag,
                 axis=1,
             )
         )
@@ -323,7 +408,25 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert np.allclose(integral, integral_analytic, atol=1e-2)
 
     @pytest.mark.parametrize(
-        "R, D", [(10, 2,), (1, 1,), (10, 1,), (10, 2,),],
+        "R, D",
+        [
+            (
+                10,
+                2,
+            ),
+            (
+                1,
+                1,
+            ),
+            (
+                10,
+                1,
+            ),
+            (
+                10,
+                2,
+            ),
+        ],
     )
     def test_integrate_xx(self, R, D):
         np.random.seed(1)
@@ -336,7 +439,7 @@ class TestGaussianMeasure(TestConjugateFactor):
         mu = Sigma_diag * nu
         normalization = jnp.exp(
             jnp.sum(
-                0.5 * jnp.log(2.0 * jnp.pi * Sigma_diag) + 0.5 * mu ** 2 / Sigma_diag,
+                0.5 * jnp.log(2.0 * jnp.pi * Sigma_diag) + 0.5 * mu**2 / Sigma_diag,
                 axis=1,
             )
         )
@@ -347,7 +450,8 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert np.allclose(integral, integral_analytic)
 
     @pytest.mark.parametrize(
-        "R, D, k, l", [(1, 2, 2, 5), (2, 2, 3, 1), (1, 1, 2, 5)],
+        "R, D, k, l",
+        [(1, 2, 2, 5), (2, 2, 3, 1), (1, 1, 2, 5)],
     )
     def test_integrate_general_quadratic_outer(self, R, D, k, l):
         # Generate matrices & vectors
@@ -375,7 +479,8 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert jnp.allclose(integral_sample, integral_analytic, atol=1e-2, rtol=np.inf)
 
     @pytest.mark.parametrize(
-        "R", [1, 2, 3],
+        "R",
+        [1, 2, 3],
     )
     def test_integrate_general_cubic(self, R):
         D, k, l = 1, 1, 1
@@ -416,7 +521,11 @@ class TestGaussianMeasure(TestConjugateFactor):
 
             @jit
             def func(x):
-                x_vec = jnp.array([x,]).T
+                x_vec = jnp.array(
+                    [
+                        x,
+                    ]
+                ).T
                 Ax_a = A_mat * x_vec + a_vec
                 Bx_b = B_mat * x_vec + b_vec
                 Cx_c = C_mat * x_vec + c_vec
@@ -435,7 +544,8 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert jnp.allclose(integral_num, integral_analytic_inner[r], atol=1e-2)
 
     @pytest.mark.parametrize(
-        "R", [1, 2, 3],
+        "R",
+        [1, 2, 3],
     )
     def test_integrate_general_quartic(self, R):
         D, k, l = 1, 1, 1
@@ -484,7 +594,11 @@ class TestGaussianMeasure(TestConjugateFactor):
 
             @jit
             def func(x):
-                x_vec = jnp.array([x,]).T
+                x_vec = jnp.array(
+                    [
+                        x,
+                    ]
+                ).T
                 Ax_a = A_mat * x_vec + a_vec
                 Bx_b = B_mat * x_vec + b_vec
                 Cx_c = C_mat * x_vec + c_vec
@@ -504,7 +618,11 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert jnp.allclose(integral_num, integral_analytic_inner[r], atol=1e-2)
 
     @pytest.mark.parametrize(
-        "R", [2, 1,],
+        "R",
+        [
+            2,
+            1,
+        ],
     )
     def test_integrate_cubic_outer(self, R):
         D = 1
@@ -516,10 +634,31 @@ class TestGaussianMeasure(TestConjugateFactor):
         m = self.create_instance(R, D)
         r1 = m.integrate("x(A'x + a)x'", A_mat=A_mat, a_vec=a_vec)
         r2 = m.integrate("(Ax+a)'(Bx+b)(Cx+c)'", B_mat=A_mat, b_vec=a_vec)
-        assert jnp.allclose(r1[:, :, 0], r2,)
+        assert jnp.allclose(
+            r1[:, :, 0],
+            r2,
+        )
 
     @pytest.mark.parametrize(
-        "R, D", [(2, 2,), (1, 1,), (2, 1,), (1, 2,),],
+        "R, D",
+        [
+            (
+                2,
+                2,
+            ),
+            (
+                1,
+                1,
+            ),
+            (
+                2,
+                1,
+            ),
+            (
+                1,
+                2,
+            ),
+        ],
     )
     def test_integrate_xbxx(self, R, D):
         D = 1
@@ -530,7 +669,25 @@ class TestGaussianMeasure(TestConjugateFactor):
         assert jnp.allclose(r1, r2)
 
     @pytest.mark.parametrize(
-        "R, D", [(2, 2,), (1, 1,), (2, 1,), (1, 2,),],
+        "R, D",
+        [
+            (
+                2,
+                2,
+            ),
+            (
+                1,
+                1,
+            ),
+            (
+                2,
+                1,
+            ),
+            (
+                1,
+                2,
+            ),
+        ],
     )
     def test_integrate_log_factor(self, R, D):
         m = self.create_instance(R, D)
@@ -544,7 +701,11 @@ class TestGaussianMeasure(TestConjugateFactor):
             for r in range(R):
 
                 def func(x):
-                    x_vec = jnp.array([x,]).T
+                    x_vec = jnp.array(
+                        [
+                            x,
+                        ]
+                    ).T
                     integral = u.evaluate_ln(x_vec).T * m(x_vec).T
                     return integral[:, r]
 
@@ -583,5 +744,9 @@ class TestGaussianDiagMeasure(TestGaussianMeasure):
             (1.0 / jnp.array(np.random.rand(D, D)) * jnp.eye(D))[None], [R, 1, 1]
         )
         nu = jnp.array(np.random.randn(R, D))
-        ln_beta = jnp.array(np.random.randn(R,))
+        ln_beta = jnp.array(
+            np.random.randn(
+                R,
+            )
+        )
         return measure.GaussianDiagMeasure(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
