@@ -105,7 +105,7 @@ html_theme_options = {
     "show_toc_level": 2,
 }
 
-html_logo = "gt_logo.png"
+html_logo = "_static/gt_logo.png"
 
 add_module_names = False
 
