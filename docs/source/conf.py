@@ -42,14 +42,41 @@ extensions = [
     "sphinx.ext.autodoc",  # Core library for html generation from docstrings
     "sphinx.ext.autosummary",  # Create neat summary tables
     "sphinx.ext.mathjax",
+    "sphinx.ext.napoleon",
+    "sphinx_autodoc_typehints",
     "myst_parser",
     "nbsphinx",
 ]
+
+autodoc_default_options = {
+    "members": "var1, var2",
+    "member-order": "bysource",
+    "undoc-members": True,
+    "exclude-members": "__weakref__, to_tuple, from_tuple, replace",
+}
+
 
 autosummary_generate = feature_external_ges  # Turn on sphinx.ext.autosummary
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
+
+myst_enable_extensions = [
+    "amsmath",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "fieldlist",
+    "html_admonition",
+    "html_image",
+    "linkify",
+    "replacements",
+    "smartquotes",
+    "strikethrough",
+    "substitution",
+    "tasklist",
+]
+
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -62,7 +89,7 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "sphinx_rtd_theme"
+html_theme = "sphinx_book_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -71,15 +98,14 @@ html_static_path = ["_static"]
 
 html_theme_options = {
     "collapse_navigation": True,
-    "sticky_navigation": True,
     "navigation_depth": 2,
-    "includehidden": False,
-    "titles_only": True,
     "logo_only": True,
-    "display_version": False,
+    "repository_url": "https://github.com/christiando/gaussian-toolbox",
+    "use_repository_button": True,
+    "show_toc_level": 2,
 }
 
-html_logo = "gt_logo.png"
+html_logo = "_static/gt_logo.png"
 
 add_module_names = False
 

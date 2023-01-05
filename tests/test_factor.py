@@ -12,7 +12,11 @@ class TestConjugateFactor:
     def create_instance(self, R, D):
         Lambda = self.get_pd_matrix(R, D)
         nu = jnp.array(np.random.randn(R, D))
-        ln_beta = jnp.array(np.random.randn(R,))
+        ln_beta = jnp.array(
+            np.random.randn(
+                R,
+            )
+        )
         return factor.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     @staticmethod
@@ -131,9 +135,19 @@ class TestOneRankFactor(TestConjugateFactor):
     @classmethod
     def create_instance(self, R, D):
         v = jnp.array(np.random.randn(R, D))
-        g = jnp.abs(jnp.array(np.random.randn(R,)))
+        g = jnp.abs(
+            jnp.array(
+                np.random.randn(
+                    R,
+                )
+            )
+        )
         nu = jnp.array(np.random.randn(R, D))
-        ln_beta = jnp.array(np.random.randn(R,))
+        ln_beta = jnp.array(
+            np.random.randn(
+                R,
+            )
+        )
         return factor.OneRankFactor(v=v, g=g, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
@@ -147,7 +161,11 @@ class TestOneRankFactor(TestConjugateFactor):
         v = jnp.array(np.random.randn(R, D))
         g = None
         nu = jnp.array(np.random.randn(R, D))
-        ln_beta = jnp.array(np.random.randn(R,))
+        ln_beta = jnp.array(
+            np.random.randn(
+                R,
+            )
+        )
         f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
         assert f.g.shape == (f.R,)
@@ -155,16 +173,32 @@ class TestOneRankFactor(TestConjugateFactor):
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
         v = jnp.array(np.random.randn(R, D))
-        g = jnp.abs(jnp.array(np.random.randn(R,)))
+        g = jnp.abs(
+            jnp.array(
+                np.random.randn(
+                    R,
+                )
+            )
+        )
         nu = None
-        ln_beta = jnp.array(np.random.randn(R,))
+        ln_beta = jnp.array(
+            np.random.randn(
+                R,
+            )
+        )
         f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
         assert f.g.shape == (f.R,)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
         v = jnp.array(np.random.randn(R, D))
-        g = jnp.abs(jnp.array(np.random.randn(R,)))
+        g = jnp.abs(
+            jnp.array(
+                np.random.randn(
+                    R,
+                )
+            )
+        )
         nu = jnp.array(np.random.randn(R, D))
         ln_beta = None
         f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
@@ -174,7 +208,13 @@ class TestOneRankFactor(TestConjugateFactor):
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
         v = jnp.array(np.random.randn(R, D))
-        g = jnp.abs(jnp.array(np.random.randn(R,)))
+        g = jnp.abs(
+            jnp.array(
+                np.random.randn(
+                    R,
+                )
+            )
+        )
         nu = None
         ln_beta = None
         f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
@@ -255,7 +295,11 @@ class TestLinearFactor(TestConjugateFactor):
     @classmethod
     def create_instance(self, R, D):
         nu = jnp.array(np.random.randn(R, D))
-        ln_beta = jnp.array(np.random.randn(R,))
+        ln_beta = jnp.array(
+            np.random.randn(
+                R,
+            )
+        )
         return factor.LinearFactor(nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
@@ -282,7 +326,11 @@ class TestConstantFactor(TestConjugateFactor):
 
     @classmethod
     def create_instance(self, R, D):
-        ln_beta = jnp.array(np.random.randn(R,))
+        ln_beta = jnp.array(
+            np.random.randn(
+                R,
+            )
+        )
         return factor.ConstantFactor(ln_beta=ln_beta, num_dim=D)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
@@ -291,4 +339,3 @@ class TestConstantFactor(TestConjugateFactor):
         assert f.Lambda.shape == (f.R, f.D, f.D)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
-
