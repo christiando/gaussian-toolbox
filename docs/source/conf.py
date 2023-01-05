@@ -102,6 +102,7 @@ html_theme_options = {
     "logo_only": True,
     "repository_url": "https://github.com/christiando/gaussian-toolbox",
     "use_repository_button": True,
+    "show_toc_level": 2,
 }
 
 html_logo = "gt_logo.png"

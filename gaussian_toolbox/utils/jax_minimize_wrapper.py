@@ -3,11 +3,14 @@
 UPDATE: This is obsolete now that `jax.scipy.optimize.minimize` is exists!
 """
 
-__all__ = ["minimize", "ScipyMinimize"]
+# Acknowledgements: Taken from https://gist.github.com/slinderman/24552af1bdbb6cb033bfea9b2dc4ecfd
+
+__all__ = ["minimize"]
 import numpy as onp
 import scipy.optimize
 from jax import grad, jit
 from jax.flatten_util import ravel_pytree
+
 
 def minimize(
     fun,
