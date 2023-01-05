@@ -8,16 +8,7 @@ __all__ = ["minimize", "ScipyMinimize"]
 import numpy as onp
 import scipy.optimize
 from jax import grad, jit
-from jax.tree_util import tree_flatten, tree_unflatten
 from jax.flatten_util import ravel_pytree
-from itertools import count
-
-from objax import Jit, Grad
-from objax.module import Module, ModuleList
-from objax.typing import JaxArray
-from objax.util import class_name
-from objax.variable import TrainRef, StateVar, TrainVar, VarCollection
-
 
 def minimize(
     fun,

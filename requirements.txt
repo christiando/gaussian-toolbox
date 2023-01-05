@@ -3,7 +3,6 @@ matplotlib
 scipy
 jaxlib>=0.1.60
 jax>=0.2.10
-objax>=1.6.0
 pytest>=5.2.4
 jaxtyping
 pytest-cov

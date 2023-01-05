@@ -2,9 +2,7 @@ from gaussian_toolbox import pdf
 from gaussian_toolbox.utils import linalg
 import pytest
 from jax import numpy as jnp
-from jax import scipy as jsc
 import numpy as np
-import objax
 from scipy.stats import multivariate_normal
 import jax
 
@@ -15,18 +13,18 @@ class TestGaussianPDF:
 
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
-        # Q = objax.random.normal((R, D, D))
-        # eig_vals = jnp.abs(eigen_mu + objax.random.normal((R, D)))
+        # Q = jnp.array(np.random.randn(R, D, D))
+        # eig_vals = jnp.abs(eigen_mu + jnp.array(np.random.randn(R, D)))
         # psd_mat = jnp.einsum("abc,abd->acd", Q * eig_vals[:, :, None], Q)
         # psd_mat = 0.5 * (psd_mat + jnp.swapaxes(psd_mat, -1, -2))
-        A = objax.random.uniform((R, D, D))
+        A = jnp.array(np.random.rand(R, D, D))
         psd_mat = jnp.einsum("abc,abd->acd", A, A)
         psd_mat += jnp.eye(D)[None]
         return psd_mat
 
     def create_instance(self, R, D):
         Sigma = self.get_pd_matrix(R, D)
-        mu = objax.random.normal((R, D))
+        mu = jnp.array(np.random.randn(R, D))
         return pdf.GaussianPDF(Sigma=Sigma, mu=mu)
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
@@ -160,6 +158,6 @@ class TestGaussianDiagPDF(TestGaussianPDF):
         self.test_class = pdf.GaussianDiagPDF
 
     def create_instance(self, R, D):
-        Sigma = jnp.tile((objax.random.uniform((D, D)) * jnp.eye(D))[None], [R, 1, 1])
-        mu = objax.random.normal((R, D))
+        Sigma = jnp.tile((jnp.array(np.random.rand(D, D)) * jnp.eye(D))[None], [R, 1, 1])
+        mu = jnp.array(np.random.randn(R, D))
         return pdf.GaussianDiagPDF(Sigma=Sigma, mu=mu)

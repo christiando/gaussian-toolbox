@@ -2,7 +2,6 @@ from gaussian_toolbox import factor, measure
 import pytest
 from jax import numpy as jnp
 import numpy as np
-import objax
 
 
 class TestConjugateFactor:
@@ -12,17 +11,17 @@ class TestConjugateFactor:
     @classmethod
     def create_instance(self, R, D):
         Lambda = self.get_pd_matrix(R, D)
-        nu = objax.random.normal((R, D))
-        ln_beta = objax.random.normal((R,))
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.array(np.random.randn(R,))
         return factor.ConjugateFactor(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
-        # Q = objax.random.normal((R, D, D))
-        # eig_vals = jnp.abs(eigen_mu + objax.random.normal((R, D)))
+        # Q = jnp.array(np.random.randn(R, D, D))
+        # eig_vals = jnp.abs(eigen_mu + jnp.array(np.random.randn(R, D)))
         # psd_mat = jnp.einsum("abc,abd->acd", Q * eig_vals[:, :, None], Q)
         # psd_mat = 0.5 * (psd_mat + jnp.swapaxes(psd_mat, -1, -2))
-        A = objax.random.uniform((R, D, D))
+        A = jnp.array(np.random.rand(R, D, D))
         psd_mat = jnp.einsum("abc,abd->acd", A, A)
         psd_mat += jnp.eye(D)[None]
         return psd_mat
@@ -131,10 +130,10 @@ class TestOneRankFactor(TestConjugateFactor):
 
     @classmethod
     def create_instance(self, R, D):
-        v = objax.random.normal((R, D))
-        g = jnp.abs(objax.random.normal((R,)))
-        nu = objax.random.normal((R, D))
-        ln_beta = objax.random.normal((R,))
+        v = jnp.array(np.random.randn(R, D))
+        g = jnp.abs(jnp.array(np.random.randn(R,)))
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.array(np.random.randn(R,))
         return factor.OneRankFactor(v=v, g=g, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
@@ -145,28 +144,28 @@ class TestOneRankFactor(TestConjugateFactor):
         assert f.Lambda.shape == (f.R, f.D, f.D)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
-        v = objax.random.normal((R, D))
+        v = jnp.array(np.random.randn(R, D))
         g = None
-        nu = objax.random.normal((R, D))
-        ln_beta = objax.random.normal((R,))
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.array(np.random.randn(R,))
         f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
         assert f.g.shape == (f.R,)
         assert f.Lambda.shape == (f.R, f.D, f.D)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
-        v = objax.random.normal((R, D))
-        g = jnp.abs(objax.random.normal((R,)))
+        v = jnp.array(np.random.randn(R, D))
+        g = jnp.abs(jnp.array(np.random.randn(R,)))
         nu = None
-        ln_beta = objax.random.normal((R,))
+        ln_beta = jnp.array(np.random.randn(R,))
         f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
         assert f.g.shape == (f.R,)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
-        v = objax.random.normal((R, D))
-        g = jnp.abs(objax.random.normal((R,)))
-        nu = objax.random.normal((R, D))
+        v = jnp.array(np.random.randn(R, D))
+        g = jnp.abs(jnp.array(np.random.randn(R,)))
+        nu = jnp.array(np.random.randn(R, D))
         ln_beta = None
         f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
         assert f.v.shape == (f.R, f.D)
@@ -174,8 +173,8 @@ class TestOneRankFactor(TestConjugateFactor):
         assert f.Lambda.shape == (f.R, f.D, f.D)
         assert f.nu.shape == (f.R, f.D)
         assert f.ln_beta.shape == (f.R,)
-        v = objax.random.normal((R, D))
-        g = jnp.abs(objax.random.normal((R,)))
+        v = jnp.array(np.random.randn(R, D))
+        g = jnp.abs(jnp.array(np.random.randn(R,)))
         nu = None
         ln_beta = None
         f = self.test_class(v=v, g=g, nu=nu, ln_beta=ln_beta)
@@ -255,8 +254,8 @@ class TestLinearFactor(TestConjugateFactor):
 
     @classmethod
     def create_instance(self, R, D):
-        nu = objax.random.normal((R, D))
-        ln_beta = objax.random.normal((R,))
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.array(np.random.randn(R,))
         return factor.LinearFactor(nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
@@ -283,7 +282,7 @@ class TestConstantFactor(TestConjugateFactor):
 
     @classmethod
     def create_instance(self, R, D):
-        ln_beta = objax.random.normal((R,))
+        ln_beta = jnp.array(np.random.randn(R,))
         return factor.ConstantFactor(ln_beta=ln_beta, num_dim=D)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
