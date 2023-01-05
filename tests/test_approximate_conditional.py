@@ -1,45 +1,36 @@
 from gaussian_toolbox import (
     pdf,
-    conditional,
-    measure,
     approximate_conditional,
 )
-from gaussian_toolbox.utils import linalg
 import pytest
 from jax import numpy as jnp
-from jax import scipy as jsc
 from jax import config
 import jax
 
 config.update("jax_enable_x64", True)
 import numpy as np
-import objax
 
 
 class TestLRBFGaussianConditional:
     @classmethod
     def create_instance(self, R, Dx, Dy, Dk):
         Dphi = Dx + Dk
-        M = objax.random.normal((R, Dy, Dphi))
-        b = objax.random.normal((R, Dy))
-        length_scale = objax.random.uniform((Dk, Dx))
-        mu_k = objax.random.normal((Dk, Dx))
+        M = jnp.array(np.random.randn(R, Dy, Dphi))
+        b = jnp.array(np.random.randn(R, Dy))
+        length_scale = jnp.array(np.random.randn(Dk, Dx))
+        mu_k = jnp.array(np.random.randn(Dk, Dx))
         Sigma = self.get_pd_matrix(R, Dy)
         cond = approximate_conditional.LRBFGaussianConditional(
             M=M, b=b, mu=mu_k, length_scale=length_scale, Sigma=Sigma
         )
-        mu_x = objax.random.normal((R, Dx))
+        mu_x = jnp.array(np.random.randn(R, Dx))
         Sigma_x = self.get_pd_matrix(R, Dx)
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
 
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
-        # Q = objax.random.normal((R, D, D))
-        # eig_vals = jnp.abs(eigen_mu + objax.random.normal((R, D)))
-        # psd_mat = jnp.einsum("abc,abd->acd", Q * eig_vals[:, :, None], Q)
-        # psd_mat = 0.5 * (psd_mat + jnp.swapaxes(psd_mat, -1, -2))
-        A = objax.random.uniform((R, D, D))
+        A = jnp.array(np.random.randn(R, D, D))
         psd_mat = jnp.einsum("abc,abd->acd", A, A)
         psd_mat += jnp.eye(D)[None]
         return psd_mat
@@ -68,7 +59,7 @@ class TestLRBFGaussianConditional:
     )
     def test_condition_on_x(self, R, Dx, Dy, Dk):
         cond, p_X = self.create_instance(R, Dx, Dy, Dk)
-        x = objax.random.normal((2, Dx))
+        x = jnp.array(np.random.randn(2, Dx))
         cond_x = cond.condition_on_x(x)
         mu_x = jnp.einsum("abc,dc->adb", cond.M, cond.evaluate_phi(x)) + cond.b[:, None]
         assert jnp.allclose(cond_x.mu, mu_x)
@@ -93,15 +84,15 @@ class TestLSEMGaussianConditional(TestLRBFGaussianConditional):
     @classmethod
     def create_instance(self, R, Dx, Dy, Dk):
         Dphi = Dx + Dk
-        M = objax.random.normal((R, Dy, Dphi))
-        b = objax.random.normal((R, Dy))
-        W = objax.random.normal((Dk, Dx + 1))
-        mu_k = objax.random.normal((Dk, Dx))
+        M = jnp.array(np.random.randn(R, Dy, Dphi))
+        b = jnp.array(np.random.randn(R, Dy))
+        W = jnp.array(np.random.randn(Dk, Dx + 1))
+        mu_k = jnp.array(np.random.randn(Dk, Dx))
         Sigma = self.get_pd_matrix(R, Dy)
         cond = approximate_conditional.LSEMGaussianConditional(
             M=M, b=b, W=W, Sigma=Sigma
         )
-        mu_x = objax.random.normal((R, Dx))
+        mu_x = jnp.array(np.random.randn(R, Dx))
         Sigma_x = self.get_pd_matrix(R, Dx)
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
@@ -131,7 +122,7 @@ class TestHCCovGaussianConditional:
             W=W,
             beta=beta,
         )
-        mu_x = objax.random.normal((R, Dx))
+        mu_x = jnp.array(np.random.randn(R, Dx))
         Sigma_x = 10 * self.get_pd_matrix(R, Dx)#jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
@@ -139,11 +130,11 @@ class TestHCCovGaussianConditional:
     
     @staticmethod
     def get_pd_matrix(R, D, eigen_mu=1):
-        # Q = objax.random.normal((R, D, D))
-        # eig_vals = jnp.abs(eigen_mu + objax.random.normal((R, D)))
+        # Q = jnp.array(np.random.randn((R, D, D))
+        # eig_vals = jnp.abs(eigen_mu + jnp.array(np.random.randn((R, D)))
         # psd_mat = jnp.einsum("abc,abd->acd", Q * eig_vals[:, :, None], Q)
         # psd_mat = 0.5 * (psd_mat + jnp.swapaxes(psd_mat, -1, -2))
-        A = objax.random.uniform((R, D, D))
+        A = jnp.array(np.random.rand(R, D, D))
         psd_mat = jnp.einsum("abc,abd->acd", A, A)
         psd_mat += jnp.eye(D)[None]
         return psd_mat

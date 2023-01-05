@@ -17,7 +17,6 @@ import jax
 
 config.update("jax_enable_x64", True)
 import numpy as np
-import objax
 from scipy import integrate as sc_integrate
 
 
@@ -28,8 +27,8 @@ class TestGaussianMeasure(TestConjugateFactor):
     @classmethod
     def create_instance(self, R, D):
         Lambda = self.get_pd_matrix(R, D)
-        nu = objax.random.normal((R, D))
-        ln_beta = objax.random.normal((R,))
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.array(np.random.randn(R,))
         return measure.GaussianMeasure(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
 
     @pytest.mark.parametrize("R, D", [(100, 5), (1, 5), (100, 1)])
@@ -581,8 +580,8 @@ class TestGaussianDiagMeasure(TestGaussianMeasure):
     @classmethod
     def create_instance(self, R, D):
         Lambda = jnp.tile(
-            (1.0 / objax.random.uniform((D, D)) * jnp.eye(D))[None], [R, 1, 1]
+            (1.0 / jnp.array(np.random.rand(D, D)) * jnp.eye(D))[None], [R, 1, 1]
         )
-        nu = objax.random.normal((R, D))
-        ln_beta = objax.random.normal((R,))
+        nu = jnp.array(np.random.randn(R, D))
+        ln_beta = jnp.array(np.random.randn(R,))
         return measure.GaussianDiagMeasure(Lambda=Lambda, nu=nu, ln_beta=ln_beta)
