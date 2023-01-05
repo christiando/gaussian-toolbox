@@ -3,9 +3,7 @@
 Just use the following commands
 
 ```
-git clone https://github.com/christiando/gaussian-toolbox.git
-cd gaussian-toolbox/
-pip install .
+pip install git+https://github.com/christiando/gaussian-toolbox
 ```
 
 # Getting started

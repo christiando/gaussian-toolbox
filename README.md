@@ -87,9 +87,7 @@ Got interested? What can you do with it?
 Clone the repository into a directory and go into the folder. Just do the following
 
 ```bash
-git clone https://github.com/christiando/gaussian-toolbox.git
-cd gaussian-toolbox/
-pip install .
+pip install git+https://github.com/christiando/gaussian-toolbox
 ```
 
 For code development do
