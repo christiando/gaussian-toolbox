@@ -26,10 +26,11 @@ from dataclasses import field
 class GaussianPDF(measure.GaussianMeasure):
     """A normalized Gaussian density, with specified mean and covariance matrix.
 
-    :param Sigma: Covariance matrices of the Gaussian densities. 
-    :param mu: Mean of the Gaussians. 
-    :param Lambda: Information (precision) matrix of the Gaussians. 
-    :param ln_det_Sigma: Log determinant of the covariance matrix. 
+    Args:
+        Sigma: Covariance matrices of the Gaussian densities.
+        mu: Mean of the Gaussians.
+        Lambda: Information (precision) matrix of the Gaussians.
+        ln_det_Sigma: Log determinant of the covariance matrix.
     """
     Sigma: Float[Array, "R D D"]
     mu: Float[Array, "R D"]
@@ -53,10 +54,13 @@ class GaussianPDF(measure.GaussianMeasure):
 
     def sample(self, key: PRNGKey, num_samples: int) -> Float[Array, "N R D"]:
         """Sample from the Gaussian density.
-        
-        :param key: Jax pseudo random number generator.
-        :param num_samples: Number og samples.
-        :return: Samples. 
+
+        Args:
+            key: Jax pseudo random number generator.
+            num_samples: Number og samples.
+
+        Returns:
+            Samples.
         """
         rand_nums = jax.random.normal(key, (num_samples, self.R, self.D))
         L = jnp.linalg.cholesky(self.Sigma)
@@ -66,8 +70,12 @@ class GaussianPDF(measure.GaussianMeasure):
     def slice(self, indices: Int[Array, "R_new"]) -> "GaussianPDF":
         """Return an object with only the specified entries.
 
-        :param indices: The entries that should be contained in the returned object.
-        :return: The resulting Gaussian density.
+        Args:
+            indices: The entries that should be contained in the
+                returned object.
+
+        Returns:
+            The resulting Gaussian density.
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
@@ -83,8 +91,9 @@ class GaussianPDF(measure.GaussianMeasure):
     def update(self, indices: Int[Array, "R_update"], density: "GaussianPDF"):
         """Update densities at indicated entries.
 
-        :param indices: The entries that should be updated.
-        :param density: New densities.
+        Args:
+            indices: The entries that should be updated.
+            density: New densities.
         """
         self.Lambda = self.Lambda.at[indices].set(density.Lambda)
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
@@ -98,8 +107,12 @@ class GaussianPDF(measure.GaussianMeasure):
     def get_marginal(self, dim_x: Int[Array, "Dx"]) -> "GaussianPDF":
         """Get the marginal of the indicated dimensions.
 
-        :param dim_x: The dimensions of the variables, the marginal is required for.
-        :return: The resulting marginal Gaussian density.
+        Args:
+            dim_x: The dimensions of the variables, the marginal is
+                required for.
+
+        Returns:
+            The resulting marginal Gaussian density.
         """
         idx = jnp.ix_(jnp.arange(self.Sigma.shape[0]), dim_x, dim_x)
         Sigma_new = self.Sigma[idx]
@@ -110,25 +123,26 @@ class GaussianPDF(measure.GaussianMeasure):
 
     def entropy(self) -> Float[Array, "R"]:
         r"""Computes the entropy of the density.
-        
+
         .. math::
-        
+
             H_X = -\int p(X)\log p(X) {\rm d}X
 
-        :return: Entropy of the density 
+        Returns:
+            Entropy of the density
         """
         entropy = 0.5 * (self.D * (1.0 + jnp.log(2 * jnp.pi)) + self.ln_det_Sigma)
         return entropy
 
     def kl_divergence(self, p1: "GaussianPDF") -> Float[Array, "R"]:
-        r""" Compute the Kulback Leibler divergence between two multivariate Gaussians.
-        
-        .. math
-        
-            D_KL(p|p1) = \int p(X)\log \frac{p(X)}{p_1(X)} {\rm d}X
+        r"""Compute the Kulback Leibler divergence between two multivariate Gaussians.
 
-        :param p1: The other Gaussian Density.
-        :return: Kulback Leibler divergence.
+                .. math
+
+           D_KL(p|p1) = \int p(X)\log \frac{p(X)}{p_1(X)} {\rm d}X
+
+                :param p1: The other Gaussian Density.
+                :return: Kulback Leibler divergence.
         """
         assert self.R == p1.R or p1.R == 1 or self.R == 1
         assert self.D == p1.D
@@ -151,8 +165,13 @@ class GaussianPDF(measure.GaussianMeasure):
     def condition_on(self, dim_y: Float[Array, "Dy"]) -> "ConditionalGaussianPDF":
         """Return density conditioned on indicated dimensions, i.e. :math:`p(X|Y)`.
 
-        :param dim_y: The dimensions of the variables, that should be conditioned on.
-        :return: The corresponding conditional Gaussian density :math:`p(X|Y)`.
+        Args:
+            dim_y: The dimensions of the variables, that should be
+                conditioned on.
+
+        Returns:
+            The corresponding conditional Gaussian density
+            :math:`p(X|Y)`.
         """
         from . import conditional
 
@@ -172,9 +191,15 @@ class GaussianPDF(measure.GaussianMeasure):
     ) -> "ConditionalGaussianPDF":
         """Returns density conditioned on indicated dimensions, i.e. :math:`p(X|Y)`.
 
-        :param dim_y: The dimensions of the variables, that should be conditioned on.
-        :param dim_x: The dimensions of the variables, that should be still be free.
-        :return: The corresponding conditional Gaussian density :math:`p(X|Y)`.
+        Args:
+            dim_y: The dimensions of the variables, that should be
+                conditioned on.
+            dim_x: The dimensions of the variables, that should be still
+                be free.
+
+        Returns:
+            The corresponding conditional Gaussian density
+            :math:`p(X|Y)`.
         """
         from . import conditional
 
@@ -189,7 +214,8 @@ class GaussianPDF(measure.GaussianMeasure):
     def to_dict(self) -> Dict:
         """Write Gaussian into dict.
 
-        :return: Dictionary with relevant parameters.
+        Returns:
+            Dictionary with relevant parameters.
         """
         density_dict = {
             "Sigma": self.Sigma,
@@ -201,14 +227,16 @@ class GaussianPDF(measure.GaussianMeasure):
 
 @dataclass(kw_only=True)
 class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
-    """A normalized Gaussian density, with specified mean and covariance matrix. 
-    
+    """A normalized Gaussian density, with specified mean and covariance matrix.
+
     :math:`\Sigma` should be diagonal (and hence :math:`\Lambda`).
 
-    :param Sigma: Covariance matrices of the Gaussian densities. Must be diagonal. 
-    :param mu: Mean of the Gaussians. 
-    :param Lambda: Information (precision) matrix of the Gaussians. 
-    :param ln_det_Sigma: Log determinant of the covariance matrix. 
+    Args:
+        Sigma: Covariance matrices of the Gaussian densities. Must be
+            diagonal.
+        mu: Mean of the Gaussians.
+        Lambda: Information (precision) matrix of the Gaussians.
+        ln_det_Sigma: Log determinant of the covariance matrix.
     """
     Sigma: Float[Array, "R D D"]
     mu: Float[Array, "R D"]
@@ -234,8 +262,12 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     def slice(self, indices: Int[Array, "R_new"]) -> "GaussianDiagPDF":
         """Return an object with only the specified entries.
 
-        :param indices: The entries that should be contained in the returned object.
-        :return: The resulting Gaussian diagonal density.
+        Args:
+            indices: The entries that should be contained in the
+                returned object.
+
+        Returns:
+            The resulting Gaussian diagonal density.
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
@@ -247,8 +279,9 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     def update(self, indices: Int[Array, "R_update"], density: "GaussianDiagPDF"):
         """Update densities at indicated entries.
 
-        :param indices: The entries that should be updated.
-        :param density: New densities.
+        Args:
+            indices: The entries that should be updated.
+            density: New densities.
         """
         self.Lambda = self.Lambda.at[indices].set(density.Lambda)
         self.Sigma = self.Sigma.at[indices].set(density.Sigma)
@@ -262,8 +295,12 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     def get_marginal(self, dim_idx: Int[Array, "Dx"]) -> "GaussianDiagPDF":
         """Get the marginal of the indicated dimensions.
 
-        :param dim_idx: The dimensions of the variables, the marginal is required for.
-        :return: The resulting marginal Gaussian density.
+        Args:
+            dim_idx: The dimensions of the variables, the marginal is
+                required for.
+
+        Returns:
+            The resulting marginal Gaussian density.
         """
         Sigma_new = self.Sigma[:, dim_idx][:, :, dim_idx]
         mu_new = self.mu[:, dim_idx]

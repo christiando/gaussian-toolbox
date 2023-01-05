@@ -31,12 +31,15 @@ class ConditionalGaussianPDF:
 
     with the conditional mean function :math:`\mu(X) = M X + b`.
 
-    :param M: Matrix in the mean function. 
-    :param b: Vector in the conditional mean function. If None all entries are zeros. 
-    :param Sigma: The covariance matrix of the conditional. 
-    :param Lambda: Information (precision) matrix of the Gaussians. 
-    :param ln_det_Sigma: Log determinant of the covariance matrix. 
-    :raises RuntimeError: Raised if neither Sigma nor Lambda are provided.
+    Args:
+        M: Matrix in the mean function.
+        b: Vector in the conditional mean function. If None all entries are zeros.
+        Sigma: The covariance matrix of the conditional.
+        Lambda: Information (precision) matrix of the Gaussians.
+        ln_det_Sigma: Log determinant of the covariance matrix.
+
+    Raises:
+        RuntimeError: Raised if neither Sigma nor Lambda are provided.
     """
     M: Float[Array, "R Dy Dx"]
     b: Float[Array, "R Dy"] = None
@@ -58,20 +61,17 @@ class ConditionalGaussianPDF:
         
     @property
     def R(self) -> int:
-        """Number of conditionals (leading dimension).
-        """
+        """Number of conditionals (leading dimension)."""
         return self.M.shape[0]
     
     @property
     def Dy(self) -> int:
-        r"""Dimensionality of $Y$.
-        """
+        r"""Dimensionality of :math:`Y`."""
         return self.M.shape[1]
     
     @property
     def Dx(self) -> int:
-        r"""Dimensionality of $X$.
-        """
+        r"""Dimensionality of :math:`X`."""
         return self.M.shape[2]
 
     def __str__(self) -> str:
@@ -84,16 +84,23 @@ class ConditionalGaussianPDF:
 
             p(Y\\vert X=x) =  {\cal N}(\mu(X=x), \Sigma)
 
-        :param x: Instances, the :math:`\mu` should be conditioned on. 
-        :return: The density conditioned on x.
+        Args:
+            x: Instances, the :math:`\mu` should be conditioned on.
+
+        Returns:
+            The density conditioned on x.
         """
         return self.condition_on_x(x)
 
     def slice(self, indices: Int[Array, "R_new"]) -> "ConditionalGaussianPDF":
         """Return the conditional with only the specified entries.
 
-        :param indices: The entries that should be contained in the returned object.
-        :return: The resulting conditional Gaussian diagonal density.
+        Args:
+            indices: The entries that should be contained in the
+                returned object.
+
+        Returns:
+            The resulting conditional Gaussian diagonal density.
         """
         M_new = jnp.take(self.M, indices, axis=0)
         b_new = jnp.take(self.b, indices, axis=0)
@@ -108,8 +115,11 @@ class ConditionalGaussianPDF:
     def get_conditional_mu(self, x: Float[Array, "N Dx"], **kwargs) -> jnp.ndarray:
         """Compute the conditional :math:`\mu` function :math:`\mu(X=x) = M x + b`.
 
-        :param x: Instances, the mu should be conditioned on. 
-        :return: Conditional means. 
+        Args:
+            x: Instances, the mu should be conditioned on.
+
+        Returns:
+            Conditional means.
         """
         mu_y = jnp.einsum("abc,dc->adb", self.M, x) + self.b[:, None]
         return mu_y
@@ -117,8 +127,11 @@ class ConditionalGaussianPDF:
     def condition_on_x(self, x: Float[Array, "N Dx"], **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`x`.
 
-        :param x: Instances, the mu should be conditioned on. 
-        :return: The density conditioned on :math:`x`.
+        Args:
+            x: Instances, the mu should be conditioned on.
+
+        Returns:
+            The density conditioned on :math:`x`.
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((self.R * N, self.Dy))
@@ -141,8 +154,12 @@ class ConditionalGaussianPDF:
     def set_y(self, y: Float[Array, "N Dy"], **kwargs) -> factor.ConjugateFactor:
         """Set a specific value for :math:`y` in :math:`p(Y=y|X)` and returns the corresponding conjugate factor.
 
-        :param y: Data for :math:`y`, where the rth entry is associated with the rth conditional density.
-        :return: The conjugate factor where the first dimension is R.
+        Args:
+            y: Data for :math:`y`, where the rth entry is associated
+                with the rth conditional density.
+
+        Returns:
+            The conjugate factor where the first dimension is R.
         """
         try:
             assert self.R == 1 or y.shape[0] == self.R
@@ -186,9 +203,15 @@ class ConditionalGaussianPDF:
 
         where :math:`p(Y|X)` is the object itself.
 
-        :param p_x: Marginal density over :math:`X`.
-        :raises RuntimeError: Only works if one of the densities involved have R==1.
-        :return: The joint density.
+        Args:
+            p_x: Marginal density over :math:`X`.
+
+        Raises:
+            RuntimeError: Only works if one of the densities involved
+                have R==1.
+
+        Returns:
+            The joint density.
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -265,9 +288,15 @@ class ConditionalGaussianPDF:
         """Return the marginal density :math:`p(X)` given :math:`p(Y|X)` and :math:`p(X)`, where :math:`p(Y|X)`
         is the object itself.
 
-        :param p_x: Marginal density over :math:`X`.
-        :raises RuntimeError: Only works if one of the densities involved have R==1.
-        :return: The marginal density.
+        Args:
+            p_x: Marginal density over :math:`X`.
+
+        Raises:
+            RuntimeError: Only works if one of the densities involved
+                have R==1.
+
+        Returns:
+            The marginal density.
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -292,9 +321,15 @@ class ConditionalGaussianPDF:
         """Return the conditional density :math:`p(X|Y)`, given :math:`p(Y|X)` and :math:`p(X)`, where :math:`p(Y|X)`
         is the object itself.
 
-        :param p_x: Marginal density over :math:`X`.
-        :raises RuntimeError: Only works if one of the densities involved have R==1.
-        :rtype: ConditionalGaussianPDF
+        Args:
+            p_x: Marginal density over :math:`X`.
+
+        Raises:
+            RuntimeError: Only works if one of the densities involved
+                have R==1.
+
+        Returns:
+            ConditionalGaussianPDF
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -344,9 +379,15 @@ class ConditionalGaussianPDF:
 
             \int \log(p(Y|X))p(Y,X){\\rm d}Y{\\rm d}X.
 
-        :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: Returns the integral with respect to density :math:`p(Y,X)`.
+        Args:
+            p_yx: Probability density function (first dimensions are
+                :math:`Y`, last ones are :math:`X`).
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            Returns the integral with respect to density :math:`p(Y,X)`.
         """
         if self.R != 1 and self.R != p_yx.R:
             raise NotImplementedError("Only implemented for R=1.")
@@ -371,9 +412,14 @@ class ConditionalGaussianPDF:
 
            f(Y) = \int \log(p(Y|X))p(X){\\rm d}x.
 
-        :param p_x: Density over :math:`X`.
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: The integral as function of :math:`Y`.
+        Args:
+            p_x: Density over :math:`X`.
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            The integral as function of :math:`Y`.
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
@@ -407,8 +453,11 @@ class ConditionalGaussianPDF:
 
             H_{Y|X} = H_{Y,X} - H_X = -\int p(X,Y)\ln p(Y|X) {\\rm d}X {\\rm d}Y
 
-        :param p_x: Marginal over conditional variable
-        :return: Conditional entropy
+        Args:
+            p_x: Marginal over conditional variable
+
+        Returns:
+            Conditional entropy
         """
         p_xy = self.affine_joint_transformation(p_x)
         cond_entropy = p_xy.entropy() - p_x.entropy()
@@ -421,8 +470,11 @@ class ConditionalGaussianPDF:
 
             I_{Y,X} = H_{Y,X} - H_X - H_Y
 
-        :param p_x: Marginal over conditional variable.
-        :return: Mutual information
+        Args:
+            p_x: Marginal over conditional variable.
+
+        Returns:
+            Mutual information
         """
         cond_entropy = self.conditional_entropy(p_x, **kwargs)
         p_y = self.affine_marginal_transformation(p_x, **kwargs)
@@ -432,8 +484,12 @@ class ConditionalGaussianPDF:
     def update_Sigma(self, Sigma_new: Float[Array, "R Dy Dy"]):
         """Updates the covariance matrix :math:`\Sigma`.
 
-        :param Sigma_new: The new covariance matrix
-        :raises ValueError: Raised when dimension of old and new covariance do not match.
+        Args:
+            Sigma_new: The new covariance matrix
+
+        Raises:
+            ValueError: Raised when dimension of old and new covariance
+                do not match.
         """
         if self.Sigma.shape != Sigma_new.shape:
             raise ValueError("Dimensions of the new Sigma don't match.")
@@ -450,12 +506,17 @@ class ConditionalGaussianDiagPDF(ConditionalGaussianPDF):
 
     with the conditional mean function :math:`\mu(X) = M X + b` and :math:`\Sigma` is diagonal.
 
-    :param M: Matrix in the mean function. 
-    :param b: Vector in the conditional mean function. If None all entries are zeros.
-    :param Sigma: The (diagonal) covariance matrix of the conditional. 
-    :param Lambda: (Diagonal) Information (precision) matrix of the Gaussians. 
-    :param ln_det_Sigma: Log determinant of the covariance matrix. 
-    :raises RuntimeError: Raised if neither Sigma nor Lambda are provided
+    Args:
+        M: Matrix in the mean function.
+        b: Vector in the conditional mean function. If None all entries
+            are zeros.
+        Sigma: The (diagonal) covariance matrix of the conditional.
+        Lambda: (Diagonal) Information (precision) matrix of the
+            Gaussians.
+        ln_det_Sigma: Log determinant of the covariance matrix.
+
+    Raises:
+        RuntimeError: Raised if neither Sigma nor Lambda are provided
     """
     
     def __post_init__(self):
@@ -482,11 +543,15 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
         where :math:`M(u)` and :math:`b(u)` come from the same neural network.
 
-    :param Sigma: Covariance matrix,
-    :param num_cond_dim: Dimension of the conditional variable.
-    :param num_control_dim: Dimension of the control variable
-    :param control_func: Mapping control variables to (Dy*(Dx+1)) vector.
-    :raises NotImplementedError: Raised when the leading dimension of Sigma is not 1.
+    Args:
+        Sigma: Covariance matrix,
+        num_cond_dim: Dimension of the conditional variable.
+        num_control_dim: Dimension of the control variable
+        control_func: Mapping control variables to (Dy*(Dx+1)) vector.
+
+    Raises:
+        NotImplementedError: Raised when the leading dimension of Sigma
+            is not 1.
     """
     Sigma: Float[Array, "1 Dy Dy"]
     num_cond_dim: int
@@ -507,26 +572,22 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         
     @property
     def R(self) -> int:
-        """Number of conditionals (leading dimension).
-        """
+        """Number of conditionals (leading dimension)."""
         return self.Sigma.shape[0]
     
     @property
     def Dy(self) -> int:
-        r"""Dimensionality of $Y$.
-        """
+        r"""Dimensionality of :math:`Y`."""
         return self.Sigma.shape[1]
     
     @property
     def Du(self) -> int:
-        r"""Dimensionality of control parameter $U$.
-        """
+        r"""Dimensionality of control parameter $U$."""
         return self.num_control_dim
     
     @property
     def Dx(self) -> int:
-        r"""Dimensionality of $X$.
-        """
+        r"""Dimensionality of :math:`X`."""
         return self.num_cond_dim
     
     def __call__(self, x: Float[Array, "N Dx"], u: Float[Array, "1 Du"], **kwargs) -> pdf.GaussianPDF:
@@ -536,17 +597,22 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
             p(Y\\vert X=x) =  {\cal N}(\mu(X=x), \Sigma)
 
-        :param x: Instances, the :math:`\mu` should be conditioned on. 
-        :param x: Control variables.
-        :return: The density conditioned on x and u.
+        Args:
+            x: Control variables.
+
+        Returns:
+            The density conditioned on x and u.
         """
         return self.condition_on_x_u(x, u)
 
     def get_M_b(self, u: Float[Array, "R Du"]) -> Tuple[Float[Array, "R Dy Dx"], Float[Array, "R Dy"]]:
         """Construct :math:`M(u)` and :math:`b(u)` from the output.
 
-        :param u: Control variables.
-        :return: Returns :math:`M(u)` and :math:`b(u)`.
+        Args:
+            u: Control variables.
+
+        Returns:
+            Returns :math:`M(u)` and :math:`b(u)`.
         """
         output = self.control_func(u)
         M = output[:, : self.Dy * self.Dx].reshape((-1, self.Dy, self.Dx))
@@ -560,8 +626,11 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
             p(Y|X, u).
 
-        :param u: Control variables.
-        :return: The conditional
+        Args:
+            u: Control variables.
+
+        Returns:
+            The conditional
         """
         R = u.shape[0]
         M, b = self.get_M_b(u)
@@ -581,9 +650,12 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
             \mu(X=x|u) = M(u)x + b(u)
 
-        :param x: Conditional variable.
-        :param u: Control variables.
-        :return: Conditional mean.
+        Args:
+            x: Conditional variable.
+            u: Control variables.
+
+        Returns:
+            Conditional mean.
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.get_conditional_mu(x)
@@ -595,9 +667,12 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
             p(Y|X=x, u)
 
-        :param x: Conditional variable.
-        :param u: Control variables.
-        :return: Gaussian density conditioned on instances x, and u.
+        Args:
+            x: Conditional variable.
+            u: Control variables.
+
+        Returns:
+            Gaussian density conditioned on instances x, and u.
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.condition_on_x(x)
@@ -609,9 +684,12 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
             p(Y=y|X, u)
 
-        :param y: Random variable.
-        :param u: Control variables.
-        :return: The factor with the instantiation.
+        Args:
+            y: Random variable.
+            u: Control variables.
+
+        Returns:
+            The factor with the instantiation.
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.set_y(y)
@@ -627,9 +705,12 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
         where :math:`p(Y|X,u)` is the object itself.
 
-        :param p_x: Marginal over :math:`X`.
-        :param u: Control variables.
-        :return: The joint density.
+        Args:
+            p_x: Marginal over :math:`X`.
+            u: Control variables.
+
+        Returns:
+            The joint density.
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_joint_transformation(p_x)
@@ -640,9 +721,12 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         """Return the marginal density :math:`p(Y)` given  :math:`p(Y|X,u)` and :math:`p(X)`,
         where p(Y|X,u) is the object itself.
 
-        :param p_x: Marginal over :math:`X`.
-        :param u: Control variables.
-        :return: Marginal density.
+        Args:
+            p_x: Marginal over :math:`X`.
+            u: Control variables.
+
+        Returns:
+            Marginal density.
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_marginal_transformation(p_x)
@@ -653,9 +737,12 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         """Return the conditional density :math:`p(X|Y, u)`, given :math:`p(Y|X,u)` and :math:`p(X)`,
         where :math:`p(Y|X,u)` is the object itself.
 
-        :param p_x: Marginal over :math:`X`.
-        :param u: Control variables.
-        :return: Conditional density :math:`p(X|Y, u)`.
+        Args:
+            p_x: Marginal over :math:`X`.
+            u: Control variables.
+
+        Returns:
+            Conditional density :math:`p(X|Y, u)`.
         """
         cond_gauss = self.set_control_variable(u)
         return cond_gauss.affine_conditional_transformation(p_x)
@@ -669,9 +756,12 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
             H_{y|x,u} = H_{y,x|u} - H_x = -\int p(X,Y\\vert u)\ln p(Y|X,u) {\\rm d}x {\\rm d}y
 
-        :param p_x: Marginal over condtional variable.
-        :param u: Control variables.
-        :return: Conditional entropy.
+        Args:
+            p_x: Marginal over condtional variable.
+            u: Control variables.
+
+        Returns:
+            Conditional entropy.
         """
         p_xy = self.affine_joint_transformation(p_x, u)
         cond_entropy = p_xy.entropy() - p_x.entropy()
@@ -686,10 +776,16 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
             \int \log(p(Y|X,u))p(Y,X){\\rm d}Y{\\rm d}X.
 
-        :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :param u: Control variables.
-        :raises NotImplementedError: Only one network input allowed.
-        :return: Returns the integral with respect to density :math:`p(Y,X)`.
+        Args:
+            p_yx: Probability density function (first dimensions are
+                :math:`Y`, last ones are :math:`X`).
+            u: Control variables.
+
+        Raises:
+            NotImplementedError: Only one network input allowed.
+
+        Returns:
+            Returns the integral with respect to density :math:`p(Y,X)`.
         """
         if u.shape[0] != 1:
             raise NotImplementedError("Only implemented for a single input.")
@@ -705,10 +801,16 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
 
            f(Y) = \int \log(p(Y|X,u))p(X)dX.
 
-        :param p_x: Density over :math:`X`.
-        :param u: Control variables.
-        :raises NotImplementedError: Only one network input allowed.
-        :return: The integral as function of :math:`Y`. If provided already evaluated for :math:`Y=y`.
+        Args:
+            p_x: Density over :math:`X`.
+            u: Control variables.
+
+        Raises:
+            NotImplementedError: Only one network input allowed.
+
+        Returns:
+            The integral as function of :math:`Y`. If provided already
+            evaluated for :math:`Y=y`.
         """
         if u.shape[0] != 1:
             raise NotImplementedError("Only implemented for a single input.")
@@ -726,10 +828,13 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
 
     with the conditional mean function :math:`\mu(X) = X`.
 
-    :param Sigma: The covariance matrix of the conditional.
-    :param Lambda: Information (precision) matrix of the Gaussians.
-    :param ln_det_Sigma: Log determinant of the covariance matrix. 
-    :raises RuntimeError: Raised if neither Sigma nor Lambda are provided
+    Args:
+        Sigma: The covariance matrix of the conditional.
+        Lambda: Information (precision) matrix of the Gaussians.
+        ln_det_Sigma: Log determinant of the covariance matrix.
+
+    Raises:
+        RuntimeError: Raised if neither Sigma nor Lambda are provided
     """
     Sigma: Float[Array, "R Dy Dy"] = None
     Lambda: Float[Array, "R Dy Dy"] = None
@@ -754,20 +859,17 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     
     @property
     def R(self) -> int:
-        """Number of conditionals (leading dimension).
-        """
+        """Number of conditionals (leading dimension)."""
         return self.Sigma.shape[0]
     
     @property
     def Dx(self) -> int:
-        r"""Dimensionality of $X$.
-        """
+        r"""Dimensionality of :math:`X`."""
         return self.Sigma.shape[1]
     
     @property
     def Dy(self) -> int:
-        r"""Dimensionality of $Y$.
-        """
+        r"""Dimensionality of :math:`Y`."""
         return self.Sigma.shape[1]
 
     def __str__(self) -> str:
@@ -780,18 +882,24 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
 
             p(Y\\vert X=x) =  {\cal N}(\mu(X=x), \Sigma)
 
-        :param x: Instances, the :math:`\mu` should be conditioned on.
-        :return: The density conditioned on x.
+        Args:
+            x: Instances, the :math:`\mu` should be conditioned on.
+
+        Returns:
+            The density conditioned on x.
         """
         return self.condition_on_x(x)
 
     def slice(self, indices: Int[Array, "R_new"] ) -> "ConditionalGaussianPDF":
         """Return the conditional with only the specified entries.
 
-        :param indices: The entries that should be contained in the returned object.
-        :type indices: jnp.ndarray
-        :return: The resulting conditional Gaussian diagonal density.
-        :rtype: ConditionalGaussianPDF
+        Args:
+            indices (jnp.ndarray): The entries that should be contained
+                in the returned object.
+
+        Returns:
+            ConditionalGaussianPDF: The resulting conditional Gaussian
+            diagonal density.
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
@@ -804,8 +912,11 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     def get_conditional_mu(self, x: Float[Array, "R Dx"] , **kwargs) -> jnp.ndarray:
         """Compute the conditional :math:`\mu` function :math:`\mu(X=x) = M x + b`.
 
-        :param x: Instances, the mu should be conditioned on. 
-        :return: Conditional means.
+        Args:
+            x: Instances, the mu should be conditioned on.
+
+        Returns:
+            Conditional means.
         """
         mu_y = jnp.tile(x[None], (self.R, 1, 1))
         return mu_y
@@ -813,8 +924,11 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     def condition_on_x(self, x: Float[Array, "R Dx"] , **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`x`.
 
-        :param x: Instances, the mu should be conditioned on. 
-        :return: The density conditioned on :math:`x`.
+        Args:
+            x: Instances, the mu should be conditioned on.
+
+        Returns:
+            The density conditioned on :math:`x`.
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((self.R * N, self.Dy))
@@ -837,8 +951,12 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     def set_y(self, y: Float[Array, "R Dy"] , **kwargs) -> factor.ConjugateFactor:
         """Set a specific value for :math:`y` in :math:`p(Y=y|X)` and returns the corresponding conjugate factor.
 
-        :param y: Data for :math:`y`, where the rth entry is associated with the rth conditional density.
-        :return: The conjugate factor where the first dimension is R.
+        Args:
+            y: Data for :math:`y`, where the rth entry is associated
+                with the rth conditional density.
+
+        Returns:
+            The conjugate factor where the first dimension is R.
         """
         try:
             assert self.R == 1 or y.shape[0] == self.R
@@ -873,9 +991,15 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
 
         where :math:`p(Y|X)` is the object itself.
 
-        :param p_x: Marginal density over :math:`X`.
-        :raises RuntimeError: Only works if one of the densities involved have R==1.
-        :return: The joint density.
+        Args:
+            p_x: Marginal density over :math:`X`.
+
+        Raises:
+            RuntimeError: Only works if one of the densities involved
+                have R==1.
+
+        Returns:
+            The joint density.
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -944,9 +1068,15 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         """Return the marginal density :math:`p(X)` given :math:`p(Y|X)` and :math:`p(X)`, where :math:`p(Y|X)`
         is the object itself.
 
-        :param p_x: Marginal density over :math:`X`.
-        :raises RuntimeError: Only works if one of the densities involved have R==1.
-        :return: The marginal density.
+        Args:
+            p_x: Marginal density over :math:`X`.
+
+        Raises:
+            RuntimeError: Only works if one of the densities involved
+                have R==1.
+
+        Returns:
+            The marginal density.
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -971,9 +1101,15 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
         """Return the conditional density :math:`p(X|Y)`, given :math:`p(Y|X)` and :math:`p(X)`, where :math:`p(Y|X)`
         is the object itself.
 
-        :param p_x: Marginal density over :math:`X`.
-        :raises RuntimeError: Only works if one of the densities involved have R==1.
-        :return: The conditional density :math:`p(Y|X)`.
+        Args:
+            p_x: Marginal density over :math:`X`.
+
+        Raises:
+            RuntimeError: Only works if one of the densities involved
+                have R==1.
+
+        Returns:
+            The conditional density :math:`p(Y|X)`.
         """
         # At the moment, I am not sure whether it makes sense to consider the case, where you have a combination of
         # multiple marginals and multiple cond
@@ -1020,9 +1156,15 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
 
             \int \log(p(Y|X))p(Y,X){\\rm d}Y{\\rm d}X.
 
-        :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: Returns the integral with respect to density :math:`p(Y,X)`.
+        Args:
+            p_yx: Probability density function (first dimensions are
+                :math:`Y`, last ones are :math:`X`).
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            Returns the integral with respect to density :math:`p(Y,X)`.
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
@@ -1043,9 +1185,15 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
 
            f(Y) = \int \log(p(Y|X))p(X){\\rm d}x.
 
-        :param p_x: Density over :math:`X`.
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: The integral as function of :math:`Y`. If provided already evaluated for :math:`Y=y`.
+        Args:
+            p_x: Density over :math:`X`.
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            The integral as function of :math:`Y`. If provided already
+            evaluated for :math:`Y=y`.
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
@@ -1075,8 +1223,11 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
 
             H_{Y|X} = H_{Y,X} - H_X = -\int p(X,Y)\ln p(Y|X) {\\rm d}X {\\rm d}Y
 
-        :param p_x: Marginal over conditional variable.
-        :return: Conditional entropy.
+        Args:
+            p_x: Marginal over conditional variable.
+
+        Returns:
+            Conditional entropy.
         """
         p_xy = self.affine_joint_transformation(p_x)
         cond_entropy = p_xy.entropy() - p_x.entropy()
@@ -1089,8 +1240,11 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
 
             I_{Y,X} = H_{Y,X} - H_X - H_Y
 
-        :param p_x: Marginal over conditional variable.
-        :return: Mutual information.
+        Args:
+            p_x: Marginal over conditional variable.
+
+        Returns:
+            Mutual information.
         """
         cond_entropy = self.conditional_entropy(p_x, **kwargs)
         p_y = self.affine_marginal_transformation(p_x, **kwargs)
@@ -1100,8 +1254,12 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     def update_Sigma(self, Sigma_new: Float[Array, "R Dy Dy"] ):
         """Updates the covariance matrix :math:`\Sigma`.
 
-        :param Sigma_new: The new covariance matrix.
-        :raises ValueError: Raised when dimension of old and new covariance do not match.
+        Args:
+            Sigma_new: The new covariance matrix.
+
+        Raises:
+            ValueError: Raised when dimension of old and new covariance
+                do not match.
         """
         if self.Sigma.shape != Sigma_new.shape:
             raise ValueError("Dimensions of the new Sigma don't match.")
@@ -1118,10 +1276,13 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
 
     with the conditional mean function :math:`\mu(X) = X`.
 
-    :param Sigma: The covariance matrix of the conditional.
-    :param Lambda: Information (precision) matrix of the Gaussians. 
-    :param ln_det_Sigma: Log determinant of the covariance matrix. 
-    :raises RuntimeError: Raised if neither Sigma nor Lambda are provided
+    Args:
+        Sigma: The covariance matrix of the conditional.
+        Lambda: Information (precision) matrix of the Gaussians.
+        ln_det_Sigma: Log determinant of the covariance matrix.
+
+    Raises:
+        RuntimeError: Raised if neither Sigma nor Lambda are provided
     """
 
     def __post_init__(
@@ -1146,16 +1307,23 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
 
             p(Y\\vert X=x) =  {\cal N}(\mu(X=x), \Sigma)
 
-        :param x: Instances, the :math:`\mu` should be conditioned on. 
-        :return: The density conditioned on x.
+        Args:
+            x: Instances, the :math:`\mu` should be conditioned on.
+
+        Returns:
+            The density conditioned on x.
         """
         return self.condition_on_x(x)
 
     def slice(self, indices: Int[Array, "R_new"] ) -> "ConditionalGaussianPDF":
         """Return the conditional with only the specified entries.
 
-        :param indices: The entries that should be contained in the returned object.
-        :return: The resulting conditional Gaussian diagonal density.
+        Args:
+            indices: The entries that should be contained in the
+                returned object.
+
+        Returns:
+            The resulting conditional Gaussian diagonal density.
         """
         Lambda_new = jnp.take(self.Lambda, indices, axis=0)
         Sigma_new = jnp.take(self.Sigma, indices, axis=0)
@@ -1168,8 +1336,11 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
     def get_conditional_mu(self, x: Float[Array, "N Dx"] , **kwargs) -> Float[Array, "R N Dy"] :
         """Compute the conditional :math:`\mu` function :math:`\mu(X=x) = M x + b`.
 
-        :param x: Instances, the mu should be conditioned on.
-        :return: Conditional means. 
+        Args:
+            x: Instances, the mu should be conditioned on.
+
+        Returns:
+            Conditional means.
         """
         mu_y = jnp.tile(x[None], (self.R, 1, 1))
         return mu_y
@@ -1177,8 +1348,11 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
     def condition_on_x(self, x: Float[Array, "N Dx"] , **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`x`.
 
-        :param x: Instances, the mu should be conditioned on. 
-        :return: The density conditioned on :math:`x`.
+        Args:
+            x: Instances, the mu should be conditioned on.
+
+        Returns:
+            The density conditioned on :math:`x`.
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((self.R * N, self.Dy))
@@ -1201,8 +1375,12 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
     def set_y(self, y: Float[Array, "R Dy"] , **kwargs) -> factor.ConjugateFactor:
         """Set a specific value for :math:`y` in :math:`p(Y=y|X)` and returns the corresponding conjugate factor.
 
-        :param y: Data for :math:`y`, where the rth entry is associated with the rth conditional density.
-        :return: The conjugate factor where the first dimension is R.
+        Args:
+            y: Data for :math:`y`, where the rth entry is associated
+                with the rth conditional density.
+
+        Returns:
+            The conjugate factor where the first dimension is R.
         """
         try:
             assert self.R == 1 or y.shape[0] == self.R
@@ -1226,9 +1404,15 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
 
             \int \log(p(Y|X))p(Y,X){\\rm d}Y{\\rm d}X.
 
-        :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: Returns the integral with respect to density :math:`p(Y,X)`.
+        Args:
+            p_yx: Probability density function (first dimensions are
+                :math:`Y`, last ones are :math:`X`).
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            Returns the integral with respect to density :math:`p(Y,X)`.
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
@@ -1249,9 +1433,14 @@ class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
 
            f(Y) = \int \log(p(Y|X))p(X){\\rm d}x.
 
-        :param p_x: Density over :math:`X`.
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: The integral as function of :math:`Y`.
+        Args:
+            p_x: Density over :math:`X`.
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            The integral as function of :math:`Y`.
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")

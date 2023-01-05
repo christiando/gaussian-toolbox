@@ -1,5 +1,4 @@
-"""
-A collection of helper functions for optimization with JAX. 
+"""A collection of helper functions for optimization with JAX.
 
 UPDATE: This is obsolete now that `jax.scipy.optimize.minimize` is exists!
 """
@@ -21,8 +20,7 @@ def minimize(
     callback=None,
     options=None,
 ):
-    """
-    """
+    """"""
 
     """
     A simple wrapper for scipy.optimize.minimize using JAX.

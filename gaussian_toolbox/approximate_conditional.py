@@ -12,18 +12,20 @@ from jax import jit
 
 @dataclass(kw_only=True)
 class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
-    """ Base class for approximate conditional.
-    """
+    """Base class for approximate conditional."""
 
     def evaluate_phi(self, x: Float[Array, "N Dx"]) -> Float[Array, "N Dphi"]:
         """Evaluate the feature vector
-        
+
         .. math::
 
             \phi(X=x) = (x_0, x_1,...,x_m, k(h_1(x))),...,k(h_n(x)))^\\top.
 
-        :param x: Points where phi should be evaluated. 
-        :return: Feature vector.
+        Args:
+            x: Points where phi should be evaluated.
+
+        Returns:
+            Feature vector.
         """
         phi_x = jnp.block([x, self.k_func.evaluate(x).T])
         return phi_x
@@ -31,9 +33,11 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     def get_conditional_mu(self, x: Float[Array, "N Dx"], **kwargs) -> Float[Array, "1 N Dy"]:
         """Compute the conditional mu function :math:`\mu(X=x) = M \phi(x) + b`.
 
+        Args:
+            x: Points where :math:`\phi` should be evaluated.
 
-        :param x: Points where :math:`\phi` should be evaluated. 
-        :return: Conditional mu. 
+        Returns:
+            Conditional mu.
         """
         phi_x = self.evaluate_phi(x)
         mu_y = jnp.einsum("ab,cb->ca", self.M[0], phi_x) + self.b[0][None]
@@ -42,8 +46,13 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     def set_y(self, y: Float[Array, "R Dy"], **kwargs):
         """Not valid function for this model class.
 
-        :param y: Data for :math:`Y`, where the rth entry is associated with the rth conditional density. 
-        :raises AttributeError: Raised because doesn't :math:`p(Y|X)` is not a ConjugateFactor for :math:`X`. 
+        Args:
+            y: Data for :math:`Y`, where the rth entry is associated
+                with the rth conditional density.
+
+        Raises:
+            AttributeError: Raised because doesn't :math:`p(Y|X)` is not
+                a ConjugateFactor for :math:`X`.
         """
         raise NotImplementedError("This class doesn't have the function set_y.")
 
@@ -52,8 +61,11 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     ) -> Tuple[Float[Array, "R Dy"], Float[Array, "R Dy Dy"]]:
         """Compute the expected covariance :math:`\Sigma_Y = \mathbb{E}[YY^\\top] - \mathbb{E}[Y]\mathbb{E}[Y]^\\top`.
 
-        :param p_x: The density which we average over.
-        :return: Returns the expected mean and covariance.
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Returns the expected mean and covariance.
         """
         #### E[f(x)] ####
         # E[x] [R, Dx]
@@ -98,8 +110,11 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     def get_expected_cross_terms(self, p_x: pdf.GaussianPDF) -> Float[Array, "R Dx Dy"]:
         """Compute :math:`\mathbb{E}[YX^\\top] = \int\int YX^\\top p(Y|X)p(X) {\\rm d}Y{\\rm d}x = \int (M f(X) + b)X^\\top p(X) {\\rm d}X`.
 
-        :param p_x: The density which we average over.
-        :return: Returns the cross expectations.
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Returns the cross expectations.
         """
         # E[xx']
         Exx = p_x.integrate("xx'")
@@ -124,28 +139,30 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     ) -> pdf.GaussianPDF:
         r"""Get an approximation of the joint density
 
-        .. math: 
-        
+        .. math:
+
             p(X,Y) \approx N(\mu_{XY},\Sigma_{XY}),
 
         The mean is given by
 
         .. math::
-        
+
             \mu_{XY} = (\mu_X, \mu_Y)^\top
 
         with :math:`\mu_Y = \mathbb{E}[\mu_Y(X)]`. The covariance is given by
-        
+
         .. math::
-        
+
             \Sigma_{xy} = \begin{pmatrix}
                         \Sigma_X  &                                \mathbb{E}[XY^\top] - \mu_X\mu_Y^\top \\
                         \mathbb{E}[YX^\top] - \mu_Y\mu_X^\top & \mathbb{E}[YY^\top] - \mu_Y\mu_Y^\top
                         \end{pmatrix}.
 
+        Args:
+            p_x: The density which we average over.
 
-        :param p_x: The density which we average over.
-        :return: The joint distribution p(x,y).
+        Returns:
+            The joint distribution p(x,y).
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
@@ -163,13 +180,16 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         self, p_x: pdf.GaussianPDF, **kwargs
     ) -> conditional.ConditionalGaussianPDF:
         r"""Get an approximation of the joint density via moment matching
-        
+
         .. math::
 
             p(X|Y) \approx {\cal N}(\mu_{X|Y},Sigma_{X|Y}),
 
-        :param p_x: The density which we average over.
-        :return: The conditional density ::math:`p(X|Y)`.
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            The conditional density ::math:`p(X|Y)`.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = invert_matrix(Sigma_y)[0]
@@ -187,26 +207,26 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
     def affine_marginal_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
     ) -> pdf.GaussianPDF:
-        r""" Get an approximation of the marginal density
-        
-        .. math::
+        r"""Get an approximation of the marginal density
 
-            p(Y)\aprox N(\mu_Y,\Sigma_y),
+                .. math::
 
-        The mean is given by
-        
-        .. math::
+           p(Y)\aprox N(\mu_Y,\Sigma_y),
 
-            \mu_Y = \mathbb{E}[\mu_Y(X)]. 
+                The mean is given by
 
-        The covariance is given by
+                .. math::
 
-        .. math::
-        
-            \Sigma_Y = E[YY^\top] - \mu_Y\mu_Y^\top.
+           \mu_Y = \mathbb{E}[\mu_Y(X)].
 
-        :param p_x: The density which we average over.
-        :return: The joint distribution p(y).
+                The covariance is given by
+
+                .. math::
+
+           \Sigma_Y = E[YY^\top] - \mu_Y\mu_Y^\top.
+
+                :param p_x: The density which we average over.
+                :return: The joint distribution p(y).
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y,)
@@ -227,33 +247,35 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
     r"""A conditional Gaussian density, with a linear RBF mean (LRBFM) function,
 
     .. math::
-        
+
         p(Y|X) = {\cal N}(\mu(X), \Sigma)
 
-    with the conditional mean function :math:`\mu(X) = M \phi(X) + b`. 
+    with the conditional mean function :math:`\mu(X) = M \phi(X) + b`.
     :math:`\phi(X)` is a feature vector of the form
 
-    .. math:: 
-    
+    .. math::
+
         \phi(X) = (1,X_1,...,X_m,k(h_1(X)),...,k(h_n(X)))^\top,
 
     with
 
     .. math::
-    
+
         k(h) = \exp(-h^2 / 2) \text{ and  } h_i(X) = (X_i - s_{i}) / l_i.
 
     Note, that the affine transformations will be approximated via moment matching.
 
+    Args:
+        M: Matrix in the mean function.
+        b: Vector in the conditional mean function.
+        mu: Parameters for linear mapping in the nonlinear functions.
+        length_scale: Length-scale of the kernels.
+        Sigma: The covariance matrix of the conditional.
+        Lambda: Information (precision) matrix of the Gaussians.
+        ln_det_Sigma: Log determinant of the covariance matrix.
 
-    :param M: Matrix in the mean function. 
-    :param b: Vector in the conditional mean function. 
-    :param mu: Parameters for linear mapping in the nonlinear functions. 
-    :param length_scale: Length-scale of the kernels. 
-    :param Sigma: The covariance matrix of the conditional. 
-    :param Lambda: Information (precision) matrix of the Gaussians. 
-    :param ln_det_Sigma:  Log determinant of the covariance matrix. 
-    :raises RuntimeError: If neither Sigma nor Lambda are provided.
+    Raises:
+        RuntimeError: If neither Sigma nor Lambda are provided.
     """
     M: Float[Array, "1 Dy Dk+Dx"]
     b: Float[Array, "1 Dy"]
@@ -281,25 +303,21 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         
     @property
     def Dk(self) -> int:
-        r"""Number of kernels.
-        """
+        r"""Number of kernels."""
         return self.mu.shape[0]
     
     @property
     def Dx(self) -> int:
-        r"""Dimensionality of $X$.
-        """
+        r"""Dimensionality of :math:`X`."""
         return self.mu.shape[1]
     
     @property
     def Dphi(self) -> int:
-        r"""Dimensionality of feature vector ($D_x+D_k$).
-        """
+        r"""Dimensionality of feature vector (:math:`D_x+D_k`)."""
         return self.Dk + self.Dx
 
     def update_phi(self):
-        """ Set up the non-linear kernel function in :math:`\phi(x)`.
-        """
+        """Set up the non-linear kernel function in :math:`\phi(x)`."""
         Lambda = jnp.eye(self.Dx)[None] / self.length_scale[:, None] ** 2
         nu = self.mu / self.length_scale ** 2
         ln_beta = -0.5 * jnp.sum((self.mu / self.length_scale) ** 2, axis=1)
@@ -309,14 +327,20 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         self, p_yx: pdf.GaussianPDF, p_x: pdf.GaussianPDF = None, **kwargs
     ) -> Float[Array, "R"]:
         r"""Integrate over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
-        
+
         .. math::
-        
+
             \int \log(p(Y|X))p(Y,X){\rm d}Y{\rm d}X.
 
-        :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: Returns the integral with respect to density :math:`p(Y,X)`.
+        Args:
+            p_yx: Probability density function (first dimensions are
+                :math:`Y`, last ones are :math:`X`).
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            Returns the integral with respect to density :math:`p(Y,X)`.
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
@@ -370,12 +394,17 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
-        
+
             f(Y) = \int \log(p(Y|X))p(X){\rm d}X.
-    
-        :param p_x: Density over :math:`X`.
-        :raises NotImplementedError: Only implemented for R=1.
-        :rtype: callable
+
+        Args:
+            p_x: Density over :math:`X`.
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            callable
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
@@ -429,31 +458,34 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
     r"""A conditional Gaussian density, with a linear squared exponential mean (LSEM) function,
 
     .. math::
-    
+
         p(Y|X) = {\cal N}(\mu(X), \Sigma)
 
-    with the conditional mean function :math:`mu(X) = M \phi(X) + b`. 
+    with the conditional mean function :math:`mu(X) = M \phi(X) + b`.
     :math:`\phi(X)` is a feature vector of the form
 
     .. math::
-    
+
         \phi(X) = (1,X_1,...,X_m,k(h_1(X)),...,k(h_n(X)))^\top,
 
     with
-    
+
     .. math::
 
         k(h) = exp(-h^2 / 2) \text{ and } h_i(x) = w_i^\top x + w_{i,0}.
 
     Note, that the affine transformations will be approximated via moment matching.
 
-    :param M: Matrix in the mean function.
-    :param b: Vector in the conditional mean function. 
-    :param W: Parameters for linear mapping in the nonlinear functions. 
-    :param Sigma: The covariance matrix of the conditional. 
-    :param Lambda: Information (precision) matrix of the Gaussians.
-    :param ln_det_Sigma:  Log determinant of the covariance matrix.
-    :raises RuntimeError: If neither Sigma nor Lambda are provided.
+    Args:
+        M: Matrix in the mean function.
+        b: Vector in the conditional mean function.
+        W: Parameters for linear mapping in the nonlinear functions.
+        Sigma: The covariance matrix of the conditional.
+        Lambda: Information (precision) matrix of the Gaussians.
+        ln_det_Sigma: Log determinant of the covariance matrix.
+
+    Raises:
+        RuntimeError: If neither Sigma nor Lambda are provided.
     """
 
     M: Float[Array, "1 Dy Dk+Dx+1"]
@@ -483,26 +515,22 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         
     @property
     def Dk(self) -> int:
-        r"""Number of kernels.
-        """
+        r"""Number of kernels."""
         return self.W.shape[0]
     
     @property
     def Dx(self) -> int:
-        r"""Dimensionality of $X$.
-        """
+        r"""Dimensionality of :math:`X`."""
         return self.W.shape[1]
     
     @property
     def Dphi(self) -> int:
-        r"""Dimensionality of feature vector ($D_x+D_k$).
-        """
+        r"""Dimensionality of feature vector (:math:`D_x+D_k`)."""
         return self.Dk + self.Dx
     
 
     def update_phi(self):
-        """ Set up the non-linear kernel function in :math:`\phi(x)`.
-        """
+        """Set up the non-linear kernel function in :math:`\phi(x)`."""
         v = self.W
         nu = self.W * self.w0[:, None]
         ln_beta = -0.5 * self.w0 ** 2
@@ -512,14 +540,20 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         self, p_yx: pdf.GaussianPDF, p_x: pdf.GaussianPDF = None, **kwargs
     ) -> Float[Array, "R"]:
         r"""Integrate over the log conditional with respect to the pdf :math:`p(Y,X)`. I.e.
-        
+
         .. math::
-        
+
             \int \log(p(Y|X))p(Y,X){\rm d}Y{\rm d}X.
 
-        :param p_yx: Probability density function (first dimensions are :math:`Y`, last ones are :math:`X`).
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: Returns the integral with respect to density :math:`p(Y,X)`.
+        Args:
+            p_yx: Probability density function (first dimensions are
+                :math:`Y`, last ones are :math:`X`).
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            Returns the integral with respect to density :math:`p(Y,X)`.
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
@@ -573,12 +607,18 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
-        
+
             f(Y) = \int \log(p(Y|X))p(X){\rm d}X.
-    
-        :param p_x: Density over :math:`X`.
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: The integral as function of :math:`Y`. If provided already evaluated for :math:`Y=y`.
+
+        Args:
+            p_x: Density over :math:`X`.
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            The integral as function of :math:`Y`. If provided already
+            evaluated for :math:`Y=y`.
         """
         if self.R != 1:
             raise NotImplementedError("Only implemented for R=1.")
@@ -629,15 +669,15 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
 
 @dataclass(kw_only=True)
 class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
-    """A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
+    r"""A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
 
     .. math::
-        
+
         p(y|x) = N(\mu(x), \Sigma(x))
 
-    with the conditional mean function :math:`\mu(x) = M x + b`. 
+    with the conditional mean function :math:`\mu(x) = M x + b`.
     The covariance matrix has the form
-    
+
     .. math::
 
         \Sigma_y(x) = \sigma_x^2 I + \sum_i U_i D_i(x) U_i^\\top,
@@ -646,13 +686,16 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
 
     Note, that the affine transformations will be approximated via moment matching.
 
-    :param M: Matrix in the mean function.
-    :param b: Vector in the conditional mean function. 
-    :param sigma_x: Diagonal noise parameter.
-    :param U: Othonormal vectors for low rank noise part.
-    :param W: Noise weights for low rank components (w_i & b_i). 
-    :param beta: Scaling for low rank noise components. 
-    :raises NotImplementedError: Only works with R==1.
+    Args:
+        M: Matrix in the mean function.
+        b: Vector in the conditional mean function.
+        sigma_x: Diagonal noise parameter.
+        U: Othonormal vectors for low rank noise part.
+        W: Noise weights for low rank components (w_i & b_i).
+        beta: Scaling for low rank noise components.
+
+    Raises:
+        NotImplementedError: Only works with R==1.
     """
     M: Float[Array, "1 Dy Dx"]
     b: Float[Array, "1 Dy"]
@@ -674,33 +717,29 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         
     @property
     def R(self) -> int:
-        """Number of conditionals (leading dimension).
-        """
+        """Number of conditionals (leading dimension)."""
         return self.M.shape[0]
     
     @property
     def Dy(self) -> int:
-        r"""Dimensionality of $Y$.
-        """
+        r"""Dimensionality of :math:`Y`."""
         return self.M.shape[1]
     
     @property
     def Dx(self) -> int:
-        r"""Dimensionality of $X$.
-        """
+        r"""Dimensionality of :math:`X`."""
         return self.M.shape[2]
     
     @property
     def Du(self) -> int:
-        r"""Number of orthonormal low rank vectors $U$.
-        """
+        r"""Number of orthonormal low rank vectors :math:`U`."""
         return self.beta.shape[0]
 
     def _setup_noise_diagonal_functions(self):
         """Create the functions, that later need to be integrated over, i.e.
 
         .. math::
-            
+
             \exp(h_i(z)) \\text{ and } \exp(-h_i(z))
         """
         nu = self.W[:, 1:]
@@ -712,14 +751,16 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         r"""Evaluate the covariance at a given :math:`X=x`, i.e.
 
         .. math::
-        
+
             \Sigma_y(X=x) = \sigma_x^2 I + \sum_i U_i D_i(x) U_i^\top,
 
         with :math:`D_i(x) = 2 * \beta_i * \cosh(h_i(x))` and :math:`h_i(x) = w_i^\top x + b_i`.
 
+        Args:
+            x: Instances, the :math:`\mu` should be conditioned on.
 
-        :param x: Instances, the :math:`\mu` should be conditioned on.
-        :return: Conditional covariance.
+        Returns:
+            Conditional covariance.
         """
         D_x = self.beta[None] * (self.exp_h_plus(x) + self.exp_h_minus(x)).T
         Sigma_0 = self.sigma2_x * jnp.eye(self.Dy)
@@ -742,8 +783,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def condition_on_x(self, x: Float[Array, "N Dx"], **kwargs) -> pdf.GaussianPDF:
         """Get Gaussian Density conditioned on :math:`X=x`.
 
-        :param x: Instances, the mu and Sigma should be conditioned on.
-        :return: The density conditioned on :math:`X=x`.
+        Args:
+            x: Instances, the mu and Sigma should be conditioned on.
+
+        Returns:
+            The density conditioned on :math:`X=x`.
         """
         N = x.shape[0]
         mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
@@ -756,20 +800,28 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def set_y(self, y: Float[Array, "R Dy"], **kwargs):
         """Not valid function for this model class.
 
-        :param y: Data for :math:`Y`, where the rth entry is associated with the rth conditional density. 
-        :raises AttributeError: Raised because doesn't :math:`p(Y|X)` is not a ConjugateFactor for :math:`X`. 
+        Args:
+            y: Data for :math:`Y`, where the rth entry is associated
+                with the rth conditional density.
+
+        Raises:
+            AttributeError: Raised because doesn't :math:`p(Y|X)` is not
+                a ConjugateFactor for :math:`X`.
         """
         raise AttributeError("HCCovGaussianConditional doesn't have function set_y.")
 
     def integrate_Sigma_x(self, p_x: pdf.GaussianPDF) -> Float[Array, "Dy Dy"]:
         r"""Integrate covariance with respect to :math:`p(X)`.
-        
+
         .. math::
 
             \int \Sigma_Y(X)p(X) {\rm d}X.
 
-        :param p_x: The density the covatiance is integrated with.
-        :return: Integrated covariance matrix.
+        Args:
+            p_x: The density the covatiance is integrated with.
+
+        Returns:
+            Integrated covariance matrix.
         """
         # int 2 cosh(h(z)) dphi(z)
         D_int = (
@@ -792,9 +844,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
 
         Sigma_y = E[yy'] - mu_y mu_y' = sigma_x^2 I + \sum_i U_i E[D_i(x)] U_i' + E[mu(x)mu(x)'] - mu_y mu_y'
 
+        Args:
+            p_x: The density which we average over.
 
-        :param p_x: The density which we average over.
-        :return: Returns the expected mean and covariance. 
+        Returns:
+            Returns the expected mean and covariance.
         """
         mu_y = self.get_conditional_mu(p_x.mu)[0]
         Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
@@ -807,8 +861,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def get_expected_cross_terms(self, p_x: pdf.GaussianPDF) -> Float[Array, "R Dx Dy"]:
         """Compute E[yx'] = \int\int yx' p(y|x)p(x) dydx = int (M x + b)x' p(x) dx
 
-        :param p_x: The density which we average over.
-        :return: Cross expectations.
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Cross expectations.
         """
         Eyx = p_x.integrate(
             "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=None, b_vec=None
@@ -831,8 +888,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             Sigma_{xy} = (Sigma_x            E[xy'] - mu_xmu_y'
                           E[yx'] - mu_ymu_x' E[yy'] - mu_ymu_y').
 
-        :param p_x: The density which we average over.
-        :return: Joint distribution of p(x,y).
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Joint distribution of p(x,y).
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
@@ -851,13 +911,16 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         self, p_x: pdf.GaussianPDF
     ) -> conditional.ConditionalGaussianPDF:
         r"""Get an approximation of the joint density via moment matching
-        
+
         .. math::
 
             p(X|Y) \approx {\cal N}(\mu_{X|Y},\Sigma_{X|Y}).
 
-        :param p_x: Marginal Gaussian density over :math:`X`.
-        :return: Conditional density of :math:`p(X|Y)`.
+        Args:
+            p_x: Marginal Gaussian density over :math:`X`.
+
+        Returns:
+            Conditional density of :math:`p(X|Y)`.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         Lambda_y = invert_matrix(Sigma_y)[0]
@@ -878,23 +941,26 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         r"""Get an approximation of the marginal density
 
         .. math
-        
+
             p(Y) \approx N(\mu_Y,\Sigma_Y),
 
         The mean is given by
 
         .. math::
-        
-            \mu_Y = \mathbb{E}[\mu_Y(X)]. 
+
+            \mu_Y = \mathbb{E}[\mu_Y(X)].
 
         The covariance is given by
-        
+
         .. math::
 
             \Sigma_y = \mathbb{E}[YY^\top] - \mu_Y\mu_Y^\top.
 
-        :param p_x: Marginal Gaussian density over :math`X`.
-        :return: The marginal density :math:`p(Y)`.
+        Args:
+            p_x: Marginal Gaussian density over :math`X`.
+
+        Returns:
+            The marginal density :math:`p(Y)`.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
         p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y)
@@ -905,12 +971,17 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
 
         .. math::
-        
+
             f(Y) = \int \log(p(Y|X))p(X){\rm d}X.
-    
-        :param p_x: Density over :math:`X`.
-        :raises NotImplementedError: Only implemented for R=1.
-        :return: The integral evaluated for of :math:`Y=y`.
+
+        Args:
+            p_x: Density over :math:`X`.
+
+        Raises:
+            NotImplementedError: Only implemented for R=1.
+
+        Returns:
+            The integral evaluated for of :math:`Y=y`.
         """
         vec = y - self.b
         E_epsilon2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=-self.M, a_vec=vec, B_mat=-self.M, b_vec=vec)
@@ -945,61 +1016,6 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         # Lower bound for E[ln (sigma_x^2 + f(h))]
         
         Eh2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
-        """
-        g_omega = self.g(omega_star, beta_i)
-        nu_plus = (1.0 - g_omega[:, None] * b_i) * w_i
-        nu_minus = (-1.0 - g_omega[:, None] * b_i) * w_i
-        ln_beta = (
-            -jnp.log(self.sigma_x**2 + self.f(omega_star, beta_i))
-            - 0.5 * g_omega * (b_i**2 - omega_star**2)
-            + jnp.log(beta_i)
-        )
-        ln_beta_plus = ln_beta + b_i
-        ln_beta_minus = ln_beta - b_i
-        # Create OneRankFactors
-        exp_factor_plus = factor.OneRankFactor(
-            v=v, g=g_omega, nu=nu_plus, ln_beta=ln_beta_plus
-        )
-        exp_factor_minus = factor.OneRankFactor(
-            v=v, g=g_omega, nu=nu_minus, ln_beta=ln_beta_minus
-        )
-        # Create the two measures
-        exp_phi_plus = p_x.hadamard(exp_factor_plus, update_full=True)
-        exp_phi_minus = p_x.hadamard(exp_factor_minus, update_full=True)
-        # Fourth order integrals E[h^2 (x-Cz-d)^2]
-        quart_int_plus = exp_phi_plus.integrate(
-            "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
-            A_mat=uC,
-            a_vec=uy_d.T,
-            B_mat=uC,
-            b_vec=uy_d.T,
-            C_mat=w_i,
-            c_vec=b_i,
-            D_mat=w_i,
-            d_vec=b_i,
-        )
-        quart_int_minus = exp_phi_minus.integrate(
-            "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
-            A_mat=uC,
-            a_vec=uy_d.T,
-            B_mat=uC,
-            b_vec=uy_d.T,
-            C_mat=w_i,
-            c_vec=b_i,
-            D_mat=w_i,
-            d_vec=b_i,
-        )
-        quart_int = quart_int_plus + quart_int_minus
-        # Second order integrals E[(x-Cz-d)^2] Dims: [Du, Dx, Dx]
-        quad_int_plus = exp_phi_plus.integrate(
-            "(Ax+a)'(Bx+b)", A_mat=uC, a_vec=uy_d.T, B_mat=uC, b_vec=uy_d.T
-        )
-        quad_int_minus = exp_phi_minus.integrate(
-            "(Ax+a)'(Bx+b)", A_mat=uC, a_vec=uy_d.T, B_mat=uC, b_vec=uy_d.T
-        )
-        quad_int = quad_int_plus + quad_int_minus
-        omega_star = jnp.sqrt(jnp.abs(quart_int / quad_int))
-        """
         f_omega_dagger = self.f(omega_dagger, beta_i)
         g_omega_dagger = self.g(omega_dagger, beta_i)
         log_lb = jnp.log(self.sigma_x**2 + f_omega_dagger) + .5 * g_omega_dagger * (Eh2 - omega_dagger ** 2)
@@ -1135,36 +1151,51 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     def f(self, h: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         """Compute the function
 
-        f(h) = 2 * beta * cosh(h)
+        ..math::
 
-        :param h: Activation functions.
-        :param beta: Scaling factor.
-        :return: Evaluated functions
+        f(h) = 2 * \beta * \cosh(h)
+
+        Args:
+            h: Activation functions.
+            beta: Scaling factor.
+
+        Returns:
+            Evaluated functions
         """
         return 2 * beta * jnp.cosh(h)
 
     def f_prime(self, h: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         """Computes the derivative of f
+        
+        ..math::
 
-            f'(h) = 2 * beta * sinh(h)
+            f^\prime(h) = 2 * \beta * \sinh(h)
 
-        :param h: Activation functions.
-        :param beta: Scaling factor.
-        :return: Evaluated derivative functions.
+        Args:
+            h: Activation functions.
+            beta: Scaling factor.
+
+        Returns:
+            Evaluated derivative functions.
         """
         return 2 * beta * jnp.sinh(h)
 
     def g(self, omega: Float[Array, "N"], beta: float) -> Float[Array, "N"]:
         r"""Computes the function
 
-            g(omega) = f'(omega) / (sigma_x^2 + f(omega)) / |omega|
+        ..math::
+        
+            g(\omega) = f'(\omega) / (sigma_x^2 + f(\omega)) / |\omega|
 
             for the variational bound
 
-        :param omega: Free variational parameter.
-        :param beta:  Scaling factor.
-        :param sigma_x: Noise parameter.
-        :return: Evaluated function.
+        Args:
+            omega: Free variational parameter.
+            beta: Scaling factor.
+            sigma_x: Noise parameter.
+
+        Returns:
+            Evaluated function.
         """
         return (
             self.f_prime(omega, beta)
