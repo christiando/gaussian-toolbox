@@ -281,14 +281,20 @@ class LRBFGaussianConditional(LConjugateFactorMGaussianConditional):
         
     @property
     def Dk(self) -> int:
+        r"""Number of kernels.
+        """
         return self.mu.shape[0]
     
     @property
     def Dx(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.mu.shape[1]
     
     @property
     def Dphi(self) -> int:
+        r"""Dimensionality of feature vector ($D_x+D_k$).
+        """
         return self.Dk + self.Dx
 
     def update_phi(self):
@@ -477,14 +483,20 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
         
     @property
     def Dk(self) -> int:
+        r"""Number of kernels.
+        """
         return self.W.shape[0]
     
     @property
     def Dx(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.W.shape[1]
     
     @property
     def Dphi(self) -> int:
+        r"""Dimensionality of feature vector ($D_x+D_k$).
+        """
         return self.Dk + self.Dx
     
 
@@ -655,23 +667,33 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     ):
         if self.R != 1:
             raise NotImplementedError("So far only R=1 is supported.")
+        if self.Dy < self.Du:
+            raise NotImplementedError("There must be less vectors U than dimensionality of Y.")
         self.sigma2_x = self.sigma_x ** 2
         self._setup_noise_diagonal_functions()
         
     @property
     def R(self) -> int:
+        """Number of conditionals (leading dimension).
+        """
         return self.M.shape[0]
     
     @property
     def Dy(self) -> int:
+        r"""Dimensionality of $Y$.
+        """
         return self.M.shape[1]
     
     @property
     def Dx(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.M.shape[2]
     
     @property
     def Du(self) -> int:
+        r"""Number of orthonormal low rank vectors $U$.
+        """
         return self.beta.shape[0]
 
     def _setup_noise_diagonal_functions(self):

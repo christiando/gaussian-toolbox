@@ -22,7 +22,7 @@ class GaussianMeasure(factor.ConjugateFactor):
 
     .. math::
     
-        u(X) = \beta * \exp(- 0.5 * X^\top\Lambda X + X^\top\nu),
+        u(X) = \beta \exp\left(- \frac{1}{2} X^\top\Lambda X + X^\top\nu\right),
 
     D is the dimension, and R the number of Gaussians. 
 
@@ -947,8 +947,8 @@ class GaussianDiagMeasure(GaussianMeasure):
 
     .. math::
     
-        u(X) = \beta * \exp(- 0.5 * X^\top\Lambda X + X^\top\nu),
-\
+        u(X) = \beta \exp\left(- \frac{1}{2} X^\top\Lambda X + X^\top\nu\right),
+
     D is the dimension, and R the number of Gaussians. 
 
     :param Lambda: Information (precision) matrix of the Gaussian distributions. Needs to be positive definite and diagonal.

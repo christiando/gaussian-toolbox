@@ -58,14 +58,20 @@ class ConditionalGaussianPDF:
         
     @property
     def R(self) -> int:
+        """Number of conditionals (leading dimension).
+        """
         return self.M.shape[0]
     
     @property
     def Dy(self) -> int:
+        r"""Dimensionality of $Y$.
+        """
         return self.M.shape[1]
     
     @property
     def Dx(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.M.shape[2]
 
     def __str__(self) -> str:
@@ -482,7 +488,7 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
     :param control_func: Mapping control variables to (Dy*(Dx+1)) vector.
     :raises NotImplementedError: Raised when the leading dimension of Sigma is not 1.
     """
-    Sigma: Float[Array, "N Dy Dy"]
+    Sigma: Float[Array, "1 Dy Dy"]
     num_cond_dim: int
     num_control_dim: int
     control_func: callable
@@ -501,18 +507,26 @@ class NNControlGaussianConditional(ConditionalGaussianPDF):
         
     @property
     def R(self) -> int:
+        """Number of conditionals (leading dimension).
+        """
         return self.Sigma.shape[0]
     
     @property
     def Dy(self) -> int:
+        r"""Dimensionality of $Y$.
+        """
         return self.Sigma.shape[1]
     
     @property
     def Du(self) -> int:
+        r"""Dimensionality of control parameter $U$.
+        """
         return self.num_control_dim
     
     @property
     def Dx(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.num_cond_dim
     
     def __call__(self, x: Float[Array, "N Dx"], u: Float[Array, "1 Du"], **kwargs) -> pdf.GaussianPDF:
@@ -740,14 +754,20 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
     
     @property
     def R(self) -> int:
+        """Number of conditionals (leading dimension).
+        """
         return self.Sigma.shape[0]
     
     @property
     def Dx(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.Sigma.shape[1]
     
     @property
     def Dy(self) -> int:
+        r"""Dimensionality of $Y$.
+        """
         return self.Sigma.shape[1]
 
     def __str__(self) -> str:
@@ -1090,7 +1110,7 @@ class ConditionalIdentityGaussianPDF(ConditionalGaussianPDF):
 
 @dataclass(kw_only=True)
 class ConditionalIdentityDiagGaussianPDF(ConditionalIdentityGaussianPDF):
-    """A conditional Gaussian density
+    r"""A conditional Gaussian density
 
     .. math::
 

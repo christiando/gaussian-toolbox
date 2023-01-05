@@ -18,28 +18,28 @@ from jaxtyping import Array, Float, Int
 
 @dataclass(kw_only=True)
 class ConjugateFactor:
+    r"""Object representing a factor which is conjugate to a Gaussian measure.
+    
+    A general term, which can be multiplied with a Gaussian and the result is still a Gaussian, 
+    i.e. has the functional form
+    
+    .. math::
+    
+        f(X) = \beta \exp\left(- \frac{1}{2} X^\top\Lambda X + X^\top\nu\right),
+
+    D is the dimension, and R the number of Gaussians.
+
+    Note: At least :math:`\Lambda` or :math:`nu` should be specified!
+
+    :param Lambda: Information (precision) matrix of the Gaussian distributions. Must be positive semidefinite.
+    :param nu: Information vector of a Gaussian distribution. If None all zeros.
+    :param ln_beta: The log constant factor of the factor. If None all zeros.
+    """
     Lambda: Float[Array, "R D D"]
     nu: Float[Array, "R D"] = None
     ln_beta: Float[Array, "R"] = None
     
     def __post_init__(self):
-        r"""Object representing a factor which is conjugate to a Gaussian measure.
-        
-        A general term, which can be multiplied with a Gaussian and the result is still a Gaussian, 
-        i.e. has the functional form
-        
-        .. math::
-        
-            f(X) = \beta * exp(- 0.5 * X^\top\Lambda X + X^\top\nu),
-
-        D is the dimension, and R the number of Gaussians.
-
-        Note: At least :math:`\Lambda` or :math:`nu` should be specified!
-
-        :param Lambda: Information (precision) matrix of the Gaussian distributions. Must be positive semidefinite.
-        :param nu: Information vector of a Gaussian distribution. If None all zeros.
-        :param ln_beta: The log constant factor of the factor. If None all zeros.
-        """
         if self.nu is None:
             self.nu = jnp.zeros((self.R, self.D))
         if self.ln_beta is None:
@@ -47,10 +47,14 @@ class ConjugateFactor:
 
     @property
     def R(self) -> int:
+        """Number of factors (leading dimension).
+        """
         return self.Lambda.shape[0]
     
     @property
     def D(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.Lambda.shape[1]
 
     def __str__(self) -> str:
@@ -252,9 +256,9 @@ class OneRankFactor(ConjugateFactor):
     
     .. math::
     
-        f(X) = \beta * exp(- 0.5 * X^\top\Lambda X + X^\top\nu),
+        f(X) = \beta \exp\left(- \frac{1}{2}X^\top\Lambda X + X^\top\nu\right),
     
-    but :math:`\Lambda is of rank 1 and has the form :math:`\Lambda=g * vv^\top`.
+    but :math:`\Lambda` is of rank 1 and has the form :math:`\Lambda=g * vv^\top`.
 
     D is the dimension, and R the number of Gaussians.
 
@@ -283,10 +287,14 @@ class OneRankFactor(ConjugateFactor):
         
     @property
     def R(self) -> int:
+        """Number of factors (leading dimension).
+        """
         return self.v.shape[0]
         
     @property
     def D(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.v.shape[1]
 
     def slice(self, indices: Int[Array, "R_new"]) -> "OneRankFactor":
@@ -364,7 +372,7 @@ class OneRankFactor(ConjugateFactor):
     def _hadamard_with_measure(
         self, measure: "GaussianMeasure", update_full: bool=True
     ) -> Dict:
-        """Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
+        r"""Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
         
         Returns :math:`f(x) * u(x)`. In contrast to full rank updates, the updated covariances and 
         log determinants can be computed efficiently, using Woodbury matrix inversion and matrix deteriminant lemma.
@@ -418,6 +426,23 @@ class OneRankFactor(ConjugateFactor):
 
 @dataclass(kw_only=True)
 class LinearFactor(ConjugateFactor):
+    r"""Object representing a factor which is conjugate to a Gaussian measure.
+    
+    A general term, which can be multiplied with a Gaussian and the result is still a Gaussian, 
+    i.e. has the functional form
+    
+    .. math::
+    
+        f(X) = \beta \exp\left(X^\top\nu\right),
+
+    D is the dimension, and R the number of Gaussians.
+
+    Note: At least :math:`\Lambda` or :math:`nu` should be specified!
+
+    :param Lambda: Is ignored.
+    :param nu: Information vector of a Gaussian distribution. If None all zeros.
+    :param ln_beta: The log constant factor of the factor. If None all zeros.
+    """
     nu: Float[Array, "R D"]
     ln_beta: Float[Array, "R"] = None
     Lambda: Float[Array, "R D D"] = field(init=False)
@@ -429,10 +454,14 @@ class LinearFactor(ConjugateFactor):
 
     @property
     def R(self) -> int:
+        """Number of factors (leading dimension).
+        """
         return self.nu.shape[0]
     
     @property
     def D(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.nu.shape[1]
 
     def slice(self, indices: Int[Array, "R_new"]) -> "LinearFactor":
@@ -491,7 +520,7 @@ class LinearFactor(ConjugateFactor):
     def _hadamard_with_measure(
         self, measure: "GaussianMeasure", update_full: bool=True
     ) -> Dict:
-        """ Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
+        r""" Compute the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`.
         
         Returns :math:`f(X) * u(X)`. For the linear term, we do not need to update the covariances.
 
@@ -534,12 +563,14 @@ class LinearFactor(ConjugateFactor):
 
 @dataclass(kw_only=True)
 class ConstantFactor(ConjugateFactor):
-    """A term, which can be multiplied with a Gaussian and the result is still a Gaussian.
+    r"""A term, which can be multiplied with a Gaussian and the result is still a Gaussian.
     
     It has the functional form :math:`f(X) = \beta`.
 
     D is the dimension, and R the number of Gaussians.
 
+    :param Lambda: Is ignored.
+    :param nu: Is ignored.
     :param ln_beta: The log constant factor of the factor.
     :param D: The dimension of the Gaussian.
     """
@@ -558,10 +589,14 @@ class ConstantFactor(ConjugateFactor):
     
     @property
     def D(self) -> int:
+        r"""Dimensionality of $X$.
+        """
         return self.num_dim
     
     @property
     def R(self) -> int:
+        """Number of factors (leading dimension).
+        """
         return self.ln_beta.shape[0]
 
     def slice(self, indices: Int[Array, "R_new"]) -> "ConstantFactor":
@@ -619,7 +654,7 @@ class ConstantFactor(ConjugateFactor):
     def _hadamard_with_measure(
         self, measure: "GaussianMeasure", update_full: bool=True
     ) -> dict:
-        """ Coumputes the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`
+        """ Computes the hadamard (componentwise) product between the current factor and a Gaussian measure :math:`u(X)`
         
         Returns :math:`f(X) * u(X)`. For the linear term, we do not need to update the covariances.
 
