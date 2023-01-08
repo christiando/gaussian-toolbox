@@ -88,7 +88,6 @@ def mappable_dataclass(cls):
 
 def dataclass(
     cls=None,
-    *,
     init=True,
     repr=True,  # pylint: disable=redefined-builtin
     eq=True,
