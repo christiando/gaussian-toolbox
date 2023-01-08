@@ -3,6 +3,7 @@
 [![tests](https://github.com//christiando/gaussian-toolbox/actions/workflows/python-app.yml/badge.svg)](https://github.com//christiando/gaussian-toolbox/actions/workflows/python-app.yml)
 [![codecov](https://codecov.io/github/christiando/gaussian-toolbox/branch/main/graph/badge.svg?token=IR47CKMXXD)](https://codecov.io/github/christiando/gaussian-toolbox)
 ![Docs](https://github.com/christiando/gaussian-toolbox/actions/workflows/docs.yml/badge.svg)
+![python](https://img.shields.io/badge/python-3.10-blue)
 
 The main motivation of this library is to make Gaussian manipulations as easy as possible. For this certain [object classes](https://christiando.github.io/gaussian-toolbox/notebooks/gaussian_objects.html) are defined, which can be manipulated in the following way. The basic code tries to follow roughly this The code roughly follows this [note](http://users.isy.liu.se/en/rt/schon/Publications/SchonL2011.pdf).
 
