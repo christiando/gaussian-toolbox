@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/github/christiando/gaussian-toolbox/branch/main/graph/badge.svg?token=IR47CKMXXD)](https://codecov.io/github/christiando/gaussian-toolbox)
 ![Docs](https://github.com/christiando/gaussian-toolbox/actions/workflows/docs.yml/badge.svg)
 
-The main motivation of this library is to make Gaussian manipulations as easy as possible. For this certain [object classes](/docs/source/notebooks/gaussian_objects.ipynb) are defined, which can be manipulated in the following way. The basic code tries to follow roughly this The code roughly follows this [note](http://users.isy.liu.se/en/rt/schon/Publications/SchonL2011.pdf).
+The main motivation of this library is to make Gaussian manipulations as easy as possible. For this certain [object classes](https://christiando.github.io/gaussian-toolbox/notebooks/gaussian_objects.html) are defined, which can be manipulated in the following way. The basic code tries to follow roughly this The code roughly follows this [note](http://users.isy.liu.se/en/rt/schon/Publications/SchonL2011.pdf).
 
 [**Basic Usage**](#basics) | [**Install guide**](#installation) | [**Citing**](#citation) | [**Documentation**](https://christiando.github.io/gaussian-toolbox/)
 
@@ -73,11 +73,11 @@ p_Y_given_X = ConditionalGaussianPDF(...)
 p_X_given_Y = p_Y_given_X.affine_conditional_transformation(p_X)
 ```
 
-Other operations that are provided are conditioning, marginalizing, getting the joint or marginal density. For a more exhaustive example see the [docs](/docs/source/notebooks/affine_transforms.ipynb)
+Other operations that are provided are conditioning, marginalizing, getting the joint or marginal density. For a more exhaustive example see the [docs](https://christiando.github.io/gaussian-toolbox/notebooks/affine_transforms.html)
 
 # And much more
 
-Based upon these operations and extensions thereof, basic models (e.g. [linear regression](/docs/source/notebooks/linear_regression.ipynb)), but also more complex models (e.g. for [time-series](/docs/source/notebooks/timeseries.ipynb)) can be implemented.
+Based upon these operations and extensions thereof, basic models (e.g. [linear regression](https://christiando.github.io/gaussian-toolbox/notebooks/linear_regression.html)), but also more complex models (e.g. for [time-series](https://christiando.github.io/gaussian-toolbox/notebooks/timeseries.html)) can be implemented.
 Furthermore, the `GT` is written completely with [JAX](https://github.com/google/jax/tree/main/docs), such that your code can run on GPU/TPU, can be just-in-time compiled, vectorized etc. Furthermore, it can be easily combined with other libraries like [optax](https://github.com/deepmind/optax) and [haiku](https://github.com/deepmind/dm-haiku). Combining Gaussian manipulations with neural networks has never been easier.
 
 Got interested? What can you do with it?
