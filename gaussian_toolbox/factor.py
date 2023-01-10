@@ -225,7 +225,7 @@ class ConjugateFactor:
             )
         return new_density_dict
 
-    def integrate_log_factor(self, phi_x: "GaussianMeasure") -> Float[Array, "R"]:
+    def _integrate_log_factor(self, phi_x: "GaussianMeasure") -> Float[Array, "R"]:
         """Integrate over the log factor with respect to a Gaussian measure.
 
         Args:

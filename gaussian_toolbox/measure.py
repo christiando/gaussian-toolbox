@@ -1033,7 +1033,7 @@ class GaussianMeasure(factor.ConjugateFactor):
         Returns:
             The integral
         """
-        return factor.integrate_log_factor(self)
+        return factor._integrate_log_factor(self)
 
 
 @dataclass(kw_only=True)
