@@ -108,6 +108,7 @@ class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
         Sigma_y += MEfb + jnp.swapaxes(MEfb, axis1=1, axis2=2)
         Sigma_y += (self.b[0, None] * self.b[0, :, None])[None]
         Sigma_y -= mu_y[:, None] * mu_y[:, :, None]
+        Sigma_y = 0.5 * (Sigma_y + jnp.swapaxes(Sigma_y, axis1=-1, axis2=-2))
         return mu_y, Sigma_y
 
     def get_expected_cross_terms(self, p_x: pdf.GaussianPDF) -> Float[Array, "R Dx Dy"]:
@@ -886,7 +887,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
         )
         Sigma_y = Eyy - mu_y[:, None] * mu_y[:, :, None]
-        # Sigma_y = .5 * (Sigma_y + Sigma_y.T)
+        Sigma_y = 0.5 * (Sigma_y + jnp.swapaxes(Sigma_y, axis1=-1, axis2=-2))
         return mu_y, Sigma_y
 
     def get_expected_cross_terms(self, p_x: pdf.GaussianPDF) -> Float[Array, "R Dx Dy"]:
