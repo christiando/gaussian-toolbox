@@ -9,6 +9,7 @@ from .utils.dataclass import dataclass
 from jaxtyping import Array, Float, Int, Bool
 from jax import lax
 from jax import jit
+from jax import scipy as jsc
 
 from dataclasses import field
 from jax import random, vmap
@@ -685,11 +686,10 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
             return log_expectation_y
         else:
             return log_expectation_y(y)
-
-
-'''
+        
+        
 @dataclass(kw_only=True)
-class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
+class FullHCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     r"""A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
 
     .. math::
@@ -723,8 +723,11 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
     Sigma: Float[Array, "1 Dy Dy"]
     U: Float[Array, "Dy Du"]
     W: Float[Array, "Du Dx+1"]
+    L: Float[Array, "1 Dy Dy"] = field(default=None)
     exp_h_plus: factor.LinearFactor = field(init=False)
     exp_h_minus: factor.LinearFactor = field(init=False)
+    L_inv: Float[Array, "1 Dy Dy"] = field(init=False)
+    ln_det_Sigma: factor.LinearFactor = field(init=False)
 
     def __post_init__(
         self,
@@ -735,8 +738,58 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             raise NotImplementedError(
                 "There must be less vectors U than dimensionality of Y."
             )
-        self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
+        if self.L is None:
+            cho_factor = jsc.linalg.cho_factor(self.Sigma[0])
+            self.L = jnp.array([cho_factor[0]])
+
+        self.L_inv = jnp.array(
+            [
+                jsc.linalg.solve_triangular(
+                    self.L[0], jnp.eye(self.L.shape[1]), lower=False
+                )
+            ]
+        )
+        self.ln_det_Sigma = jnp.array(
+            [2.0 * jnp.sum(jnp.log(jnp.abs(jnp.diag(self.L[0]))))]
+        )
+        # self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
         self._setup_noise_diagonal_functions()
+
+    def update_chol(self, L: Float[Array, "1 Dy Dy"]):
+        self.L = L
+        self.Sigma = jnp.einsum("abc,abd->acd", self.L, self.L) # L**2
+        self.L_inv = jnp.array(
+            [jsc.linalg.solve_triangular(self.L[0], jnp.eye(self.L.shape[1]))]
+        )
+        #self.L_inv = jnp.array([jnp.diag(1.0 / jnp.diag(self.L[0]))])
+        self.ln_det_Sigma = jnp.array(
+            [2.0 * jnp.sum(jnp.log(jnp.abs(jnp.diag(self.L[0]))))]
+        )
+
+    @classmethod
+    def init_with_cholesky(
+        cls,
+        M: Float[Array, "1 Dy Dx"],
+        b: Float[Array, "1 Dy"],
+        L: Float[Array, "1 Dy Dy"],
+        U: Float[Array, "Dy Du"],
+        W: Float[Array, "Du Dx+1"],
+    ):
+        r"""Initialize the conditional with a Cholesky factor of the covariance matrix.
+
+        Args:
+            M: Matrix in the mean function.
+            b: Vector in the conditional mean function.
+            L: Cholesky factor of the covariance matrix.
+            U: Othonormal vectors for low rank noise part.
+            W: Noise weights for low rank components (w_i & b_i).
+            beta: Scaling for low rank noise components.
+
+        Returns:
+            FullHCCovGaussianConditional: The initialized conditional.
+        """
+        Sigma = jnp.einsum("abc,abd->acd", L, L)
+        return cls(M=M, b=b, Sigma=Sigma, U=U, W=W, L=L)
 
     @property
     def R(self) -> int:
@@ -766,9 +819,9 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             \exp(h_i(z)) \text{ and } \exp(-h_i(z))
         """
         nu = self.W[:, 1:]
-        ln_beta = self.W[:, 0] - jnp.log(2)
-        self.exp_h_plus = factor.LinearFactor(nu=nu, ln_beta=ln_beta)
-        self.exp_h_minus = factor.LinearFactor(nu=-nu, ln_beta=-ln_beta)
+        ln_beta = self.W[:, 0]
+        self.exp_h_plus = factor.LinearFactor(nu=nu, ln_beta=ln_beta - jnp.log(2))
+        self.exp_h_minus = factor.LinearFactor(nu=-nu, ln_beta=-ln_beta - jnp.log(2))
 
     def get_conditional_cov(
         self, x: Float[Array, "N Dx"], invert: bool = False
@@ -794,14 +847,20 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         rotation_mat = jnp.eye(self.Dy)[None] + jnp.einsum(
             "adb,cb->acd", jnp.einsum("ab,cb->cab", self.U, D_x), self.U
         )
-        Sigma = jnp.einsum("abc,acd->abd", self.Sigma, rotation_mat)
+        Sigma = jnp.einsum(
+            "acb,abd->acd", jnp.einsum("abc,abd->acd", self.L, rotation_mat), self.L
+        )
         if invert:
             G_x = D_x / (1 + D_x)
             rotation_mat_inv = jnp.eye(self.Dy)[None] - jnp.einsum(
                 "adb,cb->acd", jnp.einsum("ab,cb->cab", self.U, G_x), self.U
             )
-            Lambda = jnp.einsum("abc,acd->abd", rotation_mat_inv, self.Lambda)
-            ln_det_Sigma_y_x = jnp.sum(jnp.log(1 + D_x), axis=1)
+            Lambda = jnp.einsum(
+                "acb,adb->acd",
+                jnp.einsum("acb,abd->acd", self.L_inv, rotation_mat_inv),
+                self.L_inv,
+            )
+            ln_det_Sigma_y_x = self.ln_det_Sigma + jnp.sum(jnp.log(1 + D_x), axis=1)
             return Sigma, Lambda, ln_det_Sigma_y_x
         else:
             return Sigma
@@ -855,15 +914,19 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         """
         # int 2 cosh(h(z)) dphi(z)
         D_int = (
-            p_x.multiply(self.exp_h_plus).integrate()
-            + p_x.multiply(self.exp_h_minus).integrate()
+            p_x.multiply(self.exp_h_plus, update_full=True).integrate()
+            + p_x.multiply(self.exp_h_minus, update_full=True).integrate()
             - 1.0
         )
-        D_int = D_int.reshape((p_x.R, self.Du))
-        rotation_mat_int = jnp.eye(self.Dy)[None] + jnp.einsum(
-            "abc,dc->abd", self.U[None] * D_int[:, None], self.U
+        # rotation_mat_int = jnp.eye(self.Dy)[None] + jnp.einsum(
+        #    "abc,dc->abd", self.U[None] * D_int[:, None], self.U
+        # )
+        rotation_mat_int = jnp.eye(self.Dy) + jnp.einsum(
+            "a,abc->bc", D_int, jnp.einsum("ba,ca->abc", self.U, self.U)
         )
-        Sigma_int = jnp.einsum("abc,acd->abd", self.Sigma, rotation_mat_int)
+        Sigma_int = jnp.einsum(
+            "acb,abd->acd", jnp.einsum("abc,bd->acd", self.L, rotation_mat_int), self.L
+        )
         Sigma_int = 0.5 * (Sigma_int + jnp.swapaxes(Sigma_int, -2, -1))
         return Sigma_int
 
@@ -967,18 +1030,577 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             Conditional density of :math:`p(X|Y)`.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        Lambda_y = invert_matrix(Sigma_y)[0]
+        try:
+            Lambda_y = invert_matrix(Sigma_y)[0]
+        except FloatingPointError:
+            print(jnp.linalg.eigvals(Sigma_y))
+            self.get_expected_moments2(p_x)
         Eyx = self.get_expected_cross_terms(p_x)
         mu_x = p_x.mu
         cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
         b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
-        cond_p_xy = conditional.ConditionalGaussianPDF(
-            M=M_new,
-            b=b_new,
-            Sigma=Sigma_new,
+        # Sigma_new = 0.5 * (Sigma_new + jnp.swapaxes(Sigma_new, -1, -2))
+        try:
+            cond_p_xy = conditional.ConditionalGaussianPDF(
+                M=M_new,
+                b=b_new,
+                Sigma=Sigma_new,
+            )
+        except FloatingPointError:
+            print(jnp.linalg.cholesky(Sigma_y[0]))
+            print(Sigma_new)
+            raise FloatingPointError(jnp.linalg.eigvals(Sigma_new))
+        return cond_p_xy
+
+    def affine_marginal_transformation(
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
+        r"""Get an approximation of the marginal density
+
+        .. math
+
+            p(Y) \approx N(\mu_Y,\Sigma_Y),
+
+        The mean is given by
+
+        .. math::
+
+            \mu_Y = \mathbb{E}[\mu_Y(X)].
+
+        The covariance is given by
+
+        .. math::
+
+            \Sigma_y = \mathbb{E}[YY^\top] - \mu_Y\mu_Y^\top.
+
+        Args:
+            p_x: Marginal Gaussian density over :math`X`.
+
+        Returns:
+            The marginal density :math:`p(Y)`.
+        """
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
+        p_y = pdf.GaussianPDF(Sigma=Sigma_y, mu=mu_y)
+        return p_y
+    
+    def integrate_log_conditional_y(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"], **kwargs) -> Float[Array, "N"]:
+        lb_quadratic_term = self.get_lb_quadratic_term(p_x, y)
+        lb_log_det = self.get_lb_log_det(p_x)
+        lb_log_p_y = -.5 * (lb_quadratic_term + lb_log_det + self.Dy * jnp.log(2. * jnp.pi))[0]
+        return lb_log_p_y
+    
+    def get_lb_quadratic_term(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"]):
+        projected_M = jnp.einsum('acb,acd->abd', self.L_inv, self.M)
+        projected_yb = jnp.einsum('acb,ac->ab', self.L_inv, y - self.b)
+        homoscedastic_term = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=-projected_M, a_vec=projected_yb, B_mat=-projected_M, b_vec=projected_yb)
+        get_lb_heteroscedastic_term = jnp.sum(vmap(lambda W, U: self.get_lb_heteroscedastic_term_i(p_x, y, W, U))(self.W, self.U.T), axis=0)
+        return homoscedastic_term - get_lb_heteroscedastic_term
+    
+    def get_lb_heteroscedastic_term_i(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"], 
+                                      W_i: Float[Array, "Dx+1"], U_i: Float[Array, "Du"]):
+        omega_star = lax.stop_gradient(self._get_omega_star(p_x=p_x, y=y, W_i=W_i, U_i=U_i))
+        b = W_i[None,:1]
+        w = W_i[None,1:]
+        g_1 = jnp.tanh(omega_star) / omega_star
+        nu_1 = - (jnp.tanh(omega_star) / omega_star)[:,None] * b * w
+        ln_beta_1 = - jnp.log(jnp.cosh(omega_star)) - .5 * jnp.tanh(omega_star) / omega_star * (b ** 2 - omega_star ** 2)
+        phi_1 = p_x.hadamard(factor.OneRankFactor(v=jnp.tile(w, (omega_star.shape[0], 1)), g=g_1, nu=nu_1, ln_beta=ln_beta_1), update_full=True)
+        phi_plus = phi_1.hadamard(factor.LinearFactor(nu=w, ln_beta=b-jnp.log(2.)), update_full=True)
+        phi_minus = phi_1.hadamard(factor.LinearFactor(nu=-w, ln_beta=-b-jnp.log(2.)), update_full=True)
+        # Quadratic integral
+        projected_M = jnp.einsum('acb,acd->abd', self.L_inv, self.M)
+        projected_yb = jnp.einsum('acb,ac->ab', self.L_inv, y - self.b)
+        U_projected_M = jnp.einsum('ab,cad->cbd', U_i[:,None], projected_M)
+        U_projected_yb = jnp.einsum('ab,ca->cb', U_i[:,None], projected_yb)
+        quadratic_1 = phi_1.integrate("(Ax+a)'(Bx+b)", A_mat=-U_projected_M, a_vec=U_projected_yb, B_mat=-U_projected_M, b_vec=U_projected_yb)
+        quadratic_plus = phi_plus.integrate("(Ax+a)'(Bx+b)", A_mat=-U_projected_M, a_vec=U_projected_yb, B_mat=-U_projected_M, b_vec=U_projected_yb)
+        quadratic_minus = phi_minus.integrate("(Ax+a)'(Bx+b)", A_mat=-U_projected_M, a_vec=U_projected_yb, B_mat=-U_projected_M, b_vec=U_projected_yb)
+
+        G_i = - quadratic_1 + quadratic_plus + quadratic_minus
+        return G_i
+    
+    def _get_omega_star(self, p_x: pdf.GaussianPDF, y: jnp.ndarray, W_i: Float[Array, "Dx+1"], U_i: Float[Array, "Du"]):
+        omega_star = self._get_omega_dagger(p_x=p_x, W_i=W_i)
+        omega_dagger = omega_star + 1.
+        cond_func = lambda val: jnp.max(jnp.abs(val[0] - val[1])) > 1e-5
+        body_func = lambda val: (self._update_omega_star(p_x=p_x, y=y, W_i=W_i, U_i=U_i, omega_star=val[0]), val[0])
+        omega_star, _ = lax.while_loop(cond_func, body_func, (omega_star, omega_dagger))
+        return omega_star
+    
+    def _update_omega_star(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"], W_i: Float[Array, "Dx+1"], U_i: Float[Array, "Du"], omega_star: Float[Array, "N"]) -> Float[Array, "N"]:
+        b = W_i[None,:1]
+        w = W_i[None,1:]
+        
+        g_1 = jnp.tanh(omega_star) / omega_star
+        nu_1 = - (jnp.tanh(omega_star) / omega_star)[:,None] * b * w
+        ln_beta_1 = - jnp.log(jnp.cosh(omega_star)) - .5 * jnp.tanh(omega_star) / omega_star * (b[0] ** 2 - omega_star ** 2)
+        phi_1 = p_x.hadamard(factor.OneRankFactor(v=jnp.tile(w, (omega_star.shape[0], 1)), g=g_1, nu=nu_1, ln_beta=ln_beta_1), update_full=True)
+        phi_plus = phi_1.hadamard(factor.LinearFactor(nu=w, ln_beta=b-jnp.log(2.)), update_full=True)
+        phi_minus = phi_1.hadamard(factor.LinearFactor(nu=-w, ln_beta=-b-jnp.log(2.)), update_full=True)
+
+        # Quartic integral
+
+        projected_M = jnp.einsum('acb,acd->abd', self.L_inv, self.M)
+        projected_yb = jnp.einsum('acb,ac->ab', self.L_inv, y - self.b)
+        U_projected_M = jnp.einsum('ab,cad->cbd', U_i[:,None], projected_M)
+        U_projected_yb = jnp.einsum('ab,ca->cb', U_i[:,None], projected_yb)
+        
+        quartic_1 = phi_1.integrate("(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)", A_mat=w, a_vec=b, B_mat=w, b_vec=b, 
+                                    C_mat=-U_projected_M, c_vec=U_projected_yb, D_mat=-U_projected_M, d_vec=U_projected_yb)
+        quartic_plus = phi_plus.integrate("(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)", A_mat=w, a_vec=b, B_mat=w, b_vec=b, 
+                                        C_mat=-U_projected_M, c_vec=U_projected_yb, D_mat=-U_projected_M, d_vec=U_projected_yb)
+        quartic_minus = phi_minus.integrate("(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)", A_mat=w, a_vec=b, B_mat=w, b_vec=b, 
+                                            C_mat=-U_projected_M, c_vec=U_projected_yb, D_mat=-U_projected_M, d_vec=U_projected_yb)
+
+        quartic_integral = - quartic_1 + quartic_plus + quartic_minus
+        # Quadratic integral
+        quadratic_1 = phi_1.integrate("(Ax+a)'(Bx+b)", A_mat=-U_projected_M, a_vec=U_projected_yb, B_mat=-U_projected_M, b_vec=U_projected_yb)
+        quadratic_plus = phi_plus.integrate("(Ax+a)'(Bx+b)", A_mat=-U_projected_M, a_vec=U_projected_yb, B_mat=-U_projected_M, b_vec=U_projected_yb)
+        quadratic_minus = phi_minus.integrate("(Ax+a)'(Bx+b)", A_mat=-U_projected_M, a_vec=U_projected_yb, B_mat=-U_projected_M, b_vec=U_projected_yb)
+        quadratic_integral = - quadratic_1 + quadratic_plus + quadratic_minus
+        omega_star = jnp.sqrt(quartic_integral / quadratic_integral)[0]
+        return omega_star
+
+    @staticmethod
+    def _get_omega_dagger(p_x: pdf.GaussianPDF, W_i: Float[Array, "Dx+1"]) -> Float[Array, "R"]:
+        b = W_i[None,:1]
+        w = W_i[None,1:]
+        omega_dagger = jnp.sqrt(p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w, a_vec=b, B_mat=w, b_vec=b))
+        return omega_dagger
+
+    @staticmethod
+    def k_func(p_x: pdf.GaussianPDF, W_i:Float[Array, "Dx+1"], omega_dagger: Float[Array, "R"]) -> Float[Array, "R"]:
+        b = W_i[None,:1]
+        w = W_i[None,1:]
+        Eh2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w, a_vec=b, B_mat=w, b_vec=b)
+        return jnp.log(jnp.cosh(omega_dagger)) + .5 * jnp.tanh(omega_dagger) / omega_dagger * (Eh2 - omega_dagger ** 2)
+
+    def get_lb_log_det(self, p_x: pdf.GaussianPDF) -> Float[Array, "N"]:
+        omega_dagger = lax.stop_gradient(vmap(lambda W: self._get_omega_dagger(p_x=p_x, W_i=W), in_axes=(0,))(self.W))
+        k_omega = vmap(lambda W, omega: self.k_func(p_x=p_x, W_i=W, omega_dagger=omega))(self.W, omega_dagger)
+        lower_bound_log_det = self.ln_det_Sigma + jnp.sum(k_omega, axis=0)
+        return lower_bound_log_det
+
+    
+    def f(self, h: Float[Array, "N"]) -> Float[Array, "N"]:
+        """Compute the function
+
+        .. math::
+
+        f(h) = \cosh(h) - 1
+
+        Args:
+            h: Activation functions.
+            beta: Scaling factor.
+
+        Returns:
+            Evaluated functions
+        """
+        return jnp.cosh(h) - 1
+
+    def f_prime(self, h: Float[Array, "N"]) -> Float[Array, "N"]:
+        """Computes the derivative of f
+
+        .. math::
+
+            f^\prime(h) = 2 * \beta * \sinh(h)
+
+        Args:
+            h: Activation functions.
+            beta: Scaling factor.
+
+        Returns:
+            Evaluated derivative functions.
+        """
+        return jnp.sinh(h)
+
+    def g(self, omega: Float[Array, "N"]) -> Float[Array, "N"]:
+        r"""Computes the function
+
+        .. math::
+
+            g(\omega) = f'(\omega) / (sigma_x^2 + f(\omega)) / |\omega|
+
+            for the variational bound
+
+        Args:
+            omega: Free variational parameter.
+            beta: Scaling factor.
+            sigma_x: Noise parameter.
+
+        Returns:
+            Evaluated function.
+        """
+        return jnp.tanh(omega) / jnp.abs(omega)
+
+
+
+@dataclass(kw_only=True)
+class FullHCCovGaussianConditional_old(conditional.ConditionalGaussianPDF):
+    r"""A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
+
+    .. math::
+
+        p(y|x) = N(\mu(x), \Sigma(x))
+
+    with the conditional mean function :math:`\mu(x) = M x + b`.
+    The covariance matrix has the form
+
+    .. math::
+
+        \Sigma_y(x) = \sigma_x^2 I + \sum_i U_i D_i(x) U_i^\top,
+
+    and :math:`D_i(x) = 2 * \beta_i * \cosh(h_i(x))` and :math:`h_i(x) = w_i^\top x + b_i`.
+
+    Note, that the affine transformations will be approximated via moment matching.
+
+    Args:
+        M: Matrix in the mean function.
+        b: Vector in the conditional mean function.
+        sigma_x: Diagonal noise parameter.
+        U: Othonormal vectors for low rank noise part.
+        W: Noise weights for low rank components (w_i & b_i).
+        beta: Scaling for low rank noise components.
+
+    Raises:
+        NotImplementedError: Only works with R==1.
+    """
+    M: Float[Array, "1 Dy Dx"]
+    b: Float[Array, "1 Dy"]
+    Sigma: Float[Array, "1 Dy Dy"]
+    U: Float[Array, "Dy Du"]
+    W: Float[Array, "Du Dx+1"]
+    L: Float[Array, "1 Dy Dy"] = field(default=None)
+    exp_h_plus: factor.LinearFactor = field(init=False)
+    exp_h_minus: factor.LinearFactor = field(init=False)
+    L_inv: Float[Array, "1 Dy Dy"] = field(init=False)
+    ln_det_Sigma: factor.LinearFactor = field(init=False)
+
+    def __post_init__(
+        self,
+    ):
+        if self.R != 1:
+            raise NotImplementedError("So far only R=1 is supported.")
+        if self.Dy < self.Du:
+            raise NotImplementedError(
+                "There must be less vectors U than dimensionality of Y."
+            )
+        if self.L is None:
+            cho_factor = jsc.linalg.cho_factor(self.Sigma[0])
+            self.L = jnp.array([cho_factor[0]])
+
+        self.L_inv = jnp.array(
+            [
+                jsc.linalg.solve_triangular(
+                    self.L[0], jnp.eye(self.L.shape[1]), lower=False
+                )
+            ]
         )
+        self.ln_det_Sigma = jnp.array(
+            [2.0 * jnp.sum(jnp.log(jnp.abs(jnp.diag(self.L[0]))))]
+        )
+        # self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
+        self._setup_noise_diagonal_functions()
+
+    def update_chol(self, L: Float[Array, "1 Dy Dy"]):
+        self.L = L
+        self.Sigma = jnp.einsum("abc,abd->acd", self.L, self.L) # L**2
+        self.L_inv = jnp.array(
+            [jsc.linalg.solve_triangular(self.L[0], jnp.eye(self.L.shape[1]))]
+        )
+        #self.L_inv = jnp.array([jnp.diag(1.0 / jnp.diag(self.L[0]))])
+        self.ln_det_Sigma = jnp.array(
+            [2.0 * jnp.sum(jnp.log(jnp.abs(jnp.diag(self.L[0]))))]
+        )
+
+    @classmethod
+    def init_with_cholesky(
+        cls,
+        M: Float[Array, "1 Dy Dx"],
+        b: Float[Array, "1 Dy"],
+        L: Float[Array, "1 Dy Dy"],
+        U: Float[Array, "Dy Du"],
+        W: Float[Array, "Du Dx+1"],
+    ):
+        r"""Initialize the conditional with a Cholesky factor of the covariance matrix.
+
+        Args:
+            M: Matrix in the mean function.
+            b: Vector in the conditional mean function.
+            L: Cholesky factor of the covariance matrix.
+            U: Othonormal vectors for low rank noise part.
+            W: Noise weights for low rank components (w_i & b_i).
+            beta: Scaling for low rank noise components.
+
+        Returns:
+            FullHCCovGaussianConditional: The initialized conditional.
+        """
+        Sigma = jnp.einsum("abc,abd->acd", L, L)
+        return cls(M=M, b=b, Sigma=Sigma, U=U, W=W, L=L)
+
+    @property
+    def R(self) -> int:
+        """Number of conditionals (leading dimension)."""
+        return self.M.shape[0]
+
+    @property
+    def Dy(self) -> int:
+        r"""Dimensionality of :math:`Y`."""
+        return self.M.shape[1]
+
+    @property
+    def Dx(self) -> int:
+        r"""Dimensionality of :math:`X`."""
+        return self.M.shape[2]
+
+    @property
+    def Du(self) -> int:
+        r"""Number of orthonormal low rank vectors :math:`U`."""
+        return self.U.shape[1]
+
+    def _setup_noise_diagonal_functions(self):
+        r"""Create the functions, that later need to be integrated over, i.e.
+
+        .. math::
+
+            \exp(h_i(z)) \text{ and } \exp(-h_i(z))
+        """
+        nu = self.W[:, 1:]
+        ln_beta = self.W[:, 0]
+        self.exp_h_plus = factor.LinearFactor(nu=nu, ln_beta=ln_beta - jnp.log(2))
+        self.exp_h_minus = factor.LinearFactor(nu=-nu, ln_beta=-ln_beta - jnp.log(2))
+
+    def get_conditional_cov(
+        self, x: Float[Array, "N Dx"], invert: bool = False
+    ) -> Union[
+        Float[Array, "N Dy Dy"],
+        Tuple[Float[Array, "N Dy Dy"], Float[Array, "N Dy Dy"], Float[Array, "N"]],
+    ]:
+        r"""Evaluate the covariance at a given :math:`X=x`, i.e.
+
+        .. math::
+
+            \Sigma_y(X=x) = \sigma_x^2 I + \sum_i U_i D_i(x) U_i^\top,
+
+        with :math:`D_i(x) = 2 * \beta_i * \cosh(h_i(x))` and :math:`h_i(x) = w_i^\top x + b_i`.
+
+        Args:
+            x: Instances, the :math:`\mu` should be conditioned on.
+
+        Returns:
+            Conditional covariance.
+        """
+        D_x = (self.exp_h_plus(x) + self.exp_h_minus(x) - 1).T
+        rotation_mat = jnp.eye(self.Dy)[None] + jnp.einsum(
+            "adb,cb->acd", jnp.einsum("ab,cb->cab", self.U, D_x), self.U
+        )
+        Sigma = jnp.einsum(
+            "acb,abd->acd", jnp.einsum("abc,abd->acd", self.L, rotation_mat), self.L
+        )
+        if invert:
+            G_x = D_x / (1 + D_x)
+            rotation_mat_inv = jnp.eye(self.Dy)[None] - jnp.einsum(
+                "adb,cb->acd", jnp.einsum("ab,cb->cab", self.U, G_x), self.U
+            )
+            Lambda = jnp.einsum(
+                "acb,adb->acd",
+                jnp.einsum("acb,abd->acd", self.L_inv, rotation_mat_inv),
+                self.L_inv,
+            )
+            ln_det_Sigma_y_x = self.ln_det_Sigma + jnp.sum(jnp.log(1 + D_x), axis=1)
+            return Sigma, Lambda, ln_det_Sigma_y_x
+        else:
+            return Sigma
+
+    def condition_on_x(self, x: Float[Array, "N Dx"], **kwargs) -> pdf.GaussianPDF:
+        r"""Get Gaussian Density conditioned on :math:`X=x`.
+
+        Args:
+            x: Instances, the mu and Sigma should be conditioned on.
+
+        Returns:
+            The density conditioned on :math:`X=x`.
+        """
+        N = x.shape[0]
+        mu_new = self.get_conditional_mu(x).reshape((N, self.Dy))
+        Sigma_new, Lambda_new, ln_det_Sigma_new = self.get_conditional_cov(
+            x, invert=True
+        )
+        # Sigma_new = .5 * (Sigma_new + jnp.swapaxes(Sigma_new, -2, -1))
+        return pdf.GaussianPDF(
+            Sigma=Sigma_new, mu=mu_new, Lambda=Lambda_new, ln_det_Sigma=ln_det_Sigma_new
+        )
+        # Sigma_new = self.get_conditional_cov(x)
+        # return pdf.GaussianPDF(Sigma=Sigma_new, mu=mu_new)
+
+    def set_y(self, y: Float[Array, "R Dy"], **kwargs):
+        r"""Not valid function for this model class.
+
+        Args:
+            y: Data for :math:`Y`, where the rth entry is associated
+                with the rth conditional density.
+
+        Raises:
+            AttributeError: Raised because doesn't :math:`p(Y|X)` is not
+                a ConjugateFactor for :math:`X`.
+        """
+        raise AttributeError("HCCovGaussianConditional doesn't have function set_y.")
+
+    def integrate_Sigma_x(self, p_x: pdf.GaussianPDF) -> Float[Array, "Dy Dy"]:
+        r"""Integrate covariance with respect to :math:`p(X)`.
+
+        .. math::
+
+            \int \Sigma_Y(X)p(X) {\rm d}X.
+
+        Args:
+            p_x: The density the covatiance is integrated with.
+
+        Returns:
+            Integrated covariance matrix.
+        """
+        # int 2 cosh(h(z)) dphi(z)
+        D_int = (
+            p_x.multiply(self.exp_h_plus, update_full=True).integrate()
+            + p_x.multiply(self.exp_h_minus, update_full=True).integrate()
+            - 1.0
+        )
+        # rotation_mat_int = jnp.eye(self.Dy)[None] + jnp.einsum(
+        #    "abc,dc->abd", self.U[None] * D_int[:, None], self.U
+        # )
+        rotation_mat_int = jnp.eye(self.Dy) + jnp.einsum(
+            "a,abc->bc", D_int, jnp.einsum("ba,ca->abc", self.U, self.U)
+        )
+        Sigma_int = jnp.einsum(
+            "acb,abd->acd", jnp.einsum("abc,bd->acd", self.L, rotation_mat_int), self.L
+        )
+        Sigma_int = 0.5 * (Sigma_int + jnp.swapaxes(Sigma_int, -2, -1))
+        return Sigma_int
+
+    def get_expected_moments(
+        self, p_x: pdf.GaussianPDF
+    ) -> Tuple[Float[Array, "R Dy"], Float[Array, "1 Dy Dy"]]:
+        r"""Compute the expected mean and covariance
+
+        .. math::
+
+            \mu_y = \mathbb{E}[y] = M \mathbb{E}[x] + b
+
+        .. math::
+
+            \Sigma_y = \mathbb{E}[yy'] - \mu_y \mu_y^\top = \sigma_x^2 I + \sum_i U_i \mathbb{E}[D_i(x)] U_i^\top + \mathbb{E}[\mu(x)\mu(x)^\top] - \mu_y \mu_y^\top
+
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Returns the expected mean and covariance.
+        """
+        mu_y = self.get_conditional_mu(p_x.mu)[0]
+        Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
+            "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
+        )
+        Sigma_y = Eyy - mu_y[:, None] * mu_y[:, :, None]
+        Sigma_y = 0.5 * (Sigma_y + jnp.swapaxes(Sigma_y, axis1=-1, axis2=-2))
+        return mu_y, Sigma_y
+
+    def get_expected_cross_terms(self, p_x: pdf.GaussianPDF) -> Float[Array, "R Dx Dy"]:
+        r"""Compute :math:`\mathbb{E}[yx^\top] = \int\int yx^\top p(y|x)p(x) {\rm d}y{\rm d}x = \int (M x + b)x^\top p(x) {\rm d}x`.
+
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Cross expectations.
+        """
+        Eyx = p_x.integrate(
+            "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=None, b_vec=None
+        )
+        return Eyx
+
+    def affine_joint_transformation(
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
+        r"""Get an approximation of the joint density
+        
+        .. math::
+
+            p(x,y) ~= {\cal N}(\mu_{xy},\Sigma_{xy}),
+
+        The mean is given by
+        
+        .. math::
+
+            \mu_{xy} = (\mu_x, \mu_y)^\top
+
+        with :math:`\mu_y = \mathbb{E}[\mu_y(x)]`. The covariance is given by
+
+        .. math::
+        
+            \Sigma_{xy} = \begin{pmatrix}
+                            \Sigma_x & \mathbb{E}[xy^\top] - \mu_x\mu_y^\top \\
+                            \mathbb{E}[yx^\top] - \mu_y\mu_x^\top & \mathbb{E}[yy^\top] - \mu_y\mu_y^\top
+                        \end{pmatrix}.
+
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Joint distribution of :math:`p(x,y)`.
+        """
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
+        Eyx = self.get_expected_cross_terms(p_x)
+        mu_x = p_x.mu
+        cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
+        mu_xy = jnp.concatenate([mu_x, mu_y], axis=1)
+        Sigma_xy1 = jnp.concatenate(
+            [p_x.Sigma, jnp.swapaxes(cov_yx, axis1=1, axis2=2)], axis=2
+        )
+        Sigma_xy2 = jnp.concatenate([cov_yx, Sigma_y], axis=2)
+        Sigma_xy = jnp.concatenate([Sigma_xy1, Sigma_xy2], axis=1)
+        p_xy = pdf.GaussianPDF(Sigma=Sigma_xy, mu=mu_xy)
+        return p_xy
+
+    def affine_conditional_transformation(
+        self, p_x: pdf.GaussianPDF
+    ) -> conditional.ConditionalGaussianPDF:
+        r"""Get an approximation of the joint density via moment matching
+
+        .. math::
+
+            p(X|Y) \approx {\cal N}(\mu_{X|Y},\Sigma_{X|Y}).
+
+        Args:
+            p_x: Marginal Gaussian density over :math:`X`.
+
+        Returns:
+            Conditional density of :math:`p(X|Y)`.
+        """
+        mu_y, Sigma_y = self.get_expected_moments(p_x)
+        try:
+            Lambda_y = invert_matrix(Sigma_y)[0]
+        except FloatingPointError:
+            print(jnp.linalg.eigvals(Sigma_y))
+            self.get_expected_moments2(p_x)
+        Eyx = self.get_expected_cross_terms(p_x)
+        mu_x = p_x.mu
+        cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
+        M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
+        b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
+        Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
+        # Sigma_new = 0.5 * (Sigma_new + jnp.swapaxes(Sigma_new, -1, -2))
+        try:
+            cond_p_xy = conditional.ConditionalGaussianPDF(
+                M=M_new,
+                b=b_new,
+                Sigma=Sigma_new,
+            )
+        except FloatingPointError:
+            print(jnp.linalg.cholesky(Sigma_y[0]))
+            print(Sigma_new)
+            raise FloatingPointError(jnp.linalg.eigvals(Sigma_new))
         return cond_p_xy
 
     def affine_marginal_transformation(
@@ -1031,14 +1653,14 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
             The integral evaluated for of :math:`Y=y`.
         """
         vec = y - self.b
-        vec_projected = jnp.einsum("ab,cb->ca", self.Lambda[0], vec)
-        M_projected = jnp.einsum("ab,cbd->cad", self.Lambda[0], self.M)
+        vec_projected = jnp.einsum("ba,cb->ca", self.L_inv[0], vec)
+        M_projected = jnp.einsum("ba,cbd->cad", self.L_inv[0], self.M)
         E_epsilon2 = p_x.integrate(
             "(Ax+a)'(Bx+b)",
             A_mat=-M_projected,
             a_vec=vec_projected,
-            B_mat=-self.M,
-            b_vec=vec,
+            B_mat=-M_projected,
+            b_vec=vec_projected,
         )
         """
         W_i, u_i = self.W[0], self.U[:, 0]
@@ -1102,9 +1724,9 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         Eh2 = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=w_i, a_vec=b_i, B_mat=w_i, b_vec=b_i)
         f_omega_dagger = self.f(omega_dagger)
         g_omega_dagger = self.g(omega_dagger)
-        log_lb = jnp.where(
-            jnp.isclose(f_omega_dagger, 0), 0, jnp.log(1 + f_omega_dagger)
-        ) + 0.5 * g_omega_dagger * (Eh2 - omega_dagger**2)
+        log_lb = jnp.log(1 + f_omega_dagger) + 0.5 * g_omega_dagger * (
+            Eh2 - omega_dagger**2
+        )
         g_omega = self.g(omega_star)
         nu = -g_omega[:, None] * b_i * w_i
         nu_plus = w_i + nu
@@ -1131,26 +1753,26 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
 
         mat1 = -self.M[0]
         vec1 = y - self.b[0]
-        vec1_projected = jnp.einsum("ab,cb->ca", self.Lambda[0], vec1)
-        mat1_projected = jnp.einsum("ab,bc->ac", self.Lambda[0], mat1)
+        vec1_projected = jnp.einsum("ba,cb->ca", self.L_inv[0], vec1)
+        mat1_projected = jnp.einsum("ba,bc->ac", self.L_inv[0], mat1)
         G_plus = exp_phi_plus.integrate(
             "(Ax+a)(Bx+b)'",
-            A_mat=mat1,
-            a_vec=vec1,
+            A_mat=mat1_projected,
+            a_vec=vec1_projected,
             B_mat=mat1_projected,
             b_vec=vec1_projected,
         )
         G_minus = exp_phi_minus.integrate(
             "(Ax+a)(Bx+b)'",
-            A_mat=mat1,
-            a_vec=vec1,
+            A_mat=mat1_projected,
+            a_vec=vec1_projected,
             B_mat=mat1_projected,
             b_vec=vec1_projected,
         )
         G_one = phi_one.integrate(
             "(Ax+a)(Bx+b)'",
-            A_mat=mat1,
-            a_vec=vec1,
+            A_mat=mat1_projected,
+            a_vec=vec1_projected,
             B_mat=mat1_projected,
             b_vec=vec1_projected,
         )
@@ -1160,7 +1782,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         log_lb_sum = log_lb
         return uGu, log_lb_sum
 
-    def integrate_Sigma_stats(
+    def get_Sigma_stats(
         self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"], **kwargs
     ) -> Float[Array, "N"]:
         r"""Compute the expectation over the log conditional, but just over :math:`X`. I.e. it returns
@@ -1288,9 +1910,9 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         v = jnp.tile(w_i, (R, 1))
         b_i = W_i[:1]
         u_i = u_i[:].reshape((-1, 1))
-        u_i_projected = jnp.dot(self.Lambda[0], u_i)
-        uM = jnp.dot(u_i.T, -self.M[0])
-        uy_b = jnp.dot(u_i.T, (y - self.b[0]).T)
+        u_i_projected = jnp.dot(self.L_inv[0].T, u_i)
+        # uM = jnp.dot(u_i.T, -self.M[0])
+        # uy_b = jnp.dot(u_i.T, (y - self.b[0]).T)
         uM_projected = jnp.dot(u_i_projected.T, -self.M[0])
         uM_projected_norm = jnp.linalg.norm(uM_projected, axis=1)
         uM_projected /= uM_projected_norm
@@ -1334,8 +1956,8 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
                 "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
                 A_mat=uM_projected,
                 a_vec=uy_b_projected.T,
-                B_mat=uM,
-                b_vec=uy_b.T,
+                B_mat=uM_projected,
+                b_vec=uy_b_projected.T,
                 C_mat=w_i,
                 c_vec=b_i,
                 D_mat=w_i,
@@ -1345,8 +1967,8 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
                 "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
                 A_mat=uM_projected,
                 a_vec=uy_b_projected.T,
-                B_mat=uM,
-                b_vec=uy_b.T,
+                B_mat=uM_projected,
+                b_vec=uy_b_projected.T,
                 C_mat=w_i,
                 c_vec=b_i,
                 D_mat=w_i,
@@ -1356,8 +1978,8 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
                 "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)",
                 A_mat=uM_projected,
                 a_vec=uy_b_projected.T,
-                B_mat=uM,
-                b_vec=uy_b.T,
+                B_mat=uM_projected,
+                b_vec=uy_b_projected.T,
                 C_mat=w_i,
                 c_vec=b_i,
                 D_mat=w_i,
@@ -1369,22 +1991,22 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
                 "(Ax+a)'(Bx+b)",
                 A_mat=uM_projected,
                 a_vec=uy_b_projected.T,
-                B_mat=uM,
-                b_vec=uy_b.T,
+                B_mat=uM_projected,
+                b_vec=uy_b_projected.T,
             )
             quad_int_minus = exp_phi_minus.integrate(
                 "(Ax+a)'(Bx+b)",
                 A_mat=uM_projected,
                 a_vec=uy_b_projected.T,
-                B_mat=uM,
-                b_vec=uy_b.T,
+                B_mat=uM_projected,
+                b_vec=uy_b_projected.T,
             )
             quad_int_one = phi_one.integrate(
                 "(Ax+a)'(Bx+b)",
                 A_mat=uM_projected,
                 a_vec=uy_b_projected.T,
-                B_mat=uM,
-                b_vec=uy_b.T,
+                B_mat=uM_projected,
+                b_vec=uy_b_projected.T,
             )
             quad_int = quad_int_plus + quad_int_minus - quad_int_one
             # quad_int = jnp.clip(quad_int, a_min=1e-10)
@@ -1394,6 +2016,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
                 0,
                 jnp.sqrt(jnp.abs(quart_int)) / jnp.sqrt(jnp.abs(quad_int)),
             )
+            omega_star = jnp.sqrt(jnp.abs(quart_int)) / jnp.sqrt(jnp.abs(quad_int))
             omega_star = jnp.clip(omega_star, a_min=1e-6)
             num_iter = num_iter + 1
             return omega_star, omega_old, num_iter
@@ -1470,8 +2093,7 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
         Returns:
             Evaluated function.
         """
-        return jnp.where(jnp.isclose(omega, 0), 0, jnp.tanh(omega) / jnp.abs(omega))
-'''
+        return jnp.tanh(omega) / jnp.abs(omega)
 
 
 @dataclass(kw_only=True)
@@ -2130,8 +2752,6 @@ class HCCovGaussianConditional(conditional.ConditionalGaussianPDF):
 
 
 '''
-
-
 @dataclass(kw_only=True)
 class FullHCCovGaussianConditional(HCCovGaussianConditional):
     r"""A conditional Gaussian density, with a heteroscedastic cosh covariance (HCCov) function,
