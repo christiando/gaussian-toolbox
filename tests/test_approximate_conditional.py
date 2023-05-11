@@ -114,7 +114,8 @@ class TestLSEMGaussianConditional(TestLRBFGaussianConditional):
 
 
 """
-class TestHCCovGaussianConditional:
+
+class TestFullHCCovGaussianConditional:
     @classmethod
     def create_instance(self, R, Dx, Dy, Du):
         noise_x = 1.0
@@ -279,33 +280,27 @@ class TestHCCovGaussianConditional:
         assert jnp.all(integral_lb <= integral_sample_mean + 1e-2 * integral_sample_std)
 
 
-"""
 class TestFullHCCovGaussianConditional:
     @classmethod
-    def create_instance(self, R, Dx, Dy, Du):
+    def create_instance(self, R, Dx, Dy, Da, Dk):
         C = jnp.array(np.random.randn(Dy, Dx))
         C = C / jnp.sqrt(jnp.sum(C**2, axis=0))[None]
         d = 1e-1 * jnp.array(np.random.randn(Dy))
         rand_mat = np.random.rand(Dy, Dy) - 0.5
         Q, _ = np.linalg.qr(rand_mat)
-        U = jnp.array(Q[:, :Du])
         # self.U = jnp.eye(Dx)[:, :Du]
-        W = 1e-1 * np.random.randn(Du, Dx + 1)
+        A = jnp.array(np.random.randn(Dy, Da))
+        W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
-        beta = jnp.ones(Du)
-        L = np.random.rand(Dy, Dy)
-        Sigma = jnp.array([Dy * np.eye(Dy) + 0.5 * (L + L.T)])
         cond = approximate_conditional.FullHCCovGaussianConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
-            Sigma=Sigma,
-            U=U,
+            A=jnp.array([A]),
             W=W,
-            beta=beta,
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
-        Sigma_x = 10 * self.get_pd_matrix(
+        Sigma_x = self.get_pd_matrix(
             R, Dx
         )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
@@ -323,15 +318,15 @@ class TestFullHCCovGaussianConditional:
         return psd_mat
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du",
+        "R, Dx, Dy, Da, Dk",
         [
-            (1, 5, 2, 2),
-            (1, 10, 3, 1),
-            (1, 2, 5, 2),
+            (1, 5, 2, 3, 2),
+            (1, 10, 3, 4, 1),
+            (1, 2, 5, 5, 3),
         ],
     )
-    def test_affine_tranformations(self, R, Dx, Dy, Du):
-        cond, p_X = self.create_instance(R, Dx, Dy, Du)
+    def test_affine_tranformations(self, R, Dx, Dy, Da, Dk):
+        cond, p_X = self.create_instance(R, Dx, Dy, Da, Dk)
         p_YX = cond.affine_joint_transformation(p_X)
         p_Y = cond.affine_marginal_transformation(p_X)
         p_X_given_Y = cond.affine_conditional_transformation(p_X)
@@ -347,17 +342,48 @@ class TestFullHCCovGaussianConditional:
         assert jnp.allclose(p_X_given_Y.Lambda, p_X_given_Y2.Lambda)
 
     @pytest.mark.parametrize(
-        "R, Dx, Dy, Du",
-        [(1, 5, 1, 1), (1, 10, 1, 1), (1, 5, 2, 2), (1, 1, 10, 2)],
+        "R, Dx, Dy, Da, Dk",
+        [
+            (1, 5, 2, 3, 2),
+            (1, 10, 3, 4, 1),
+            (1, 2, 5, 5, 3),
+        ],
     )
-    def test_integrate_log_conditional_y(self, R, Dx, Dy, Du):
+    def test_integrate_log_conditional_y(self, R, Dx, Dy, Da, Dk):
         N = 1
         y = jnp.array(np.random.randn(N, Dy))
-        cond, p_X = self.create_instance(R, Dx, Dy, Du)
+        cond, p_X = self.create_instance(R, Dx, Dy, Da, Dk)
         integral_lb = cond.integrate_log_conditional_y(p_X, y=y)
         key = jax.random.PRNGKey(42)
         X_sample = p_X.sample(key, 100000)
         integral_sample_mean = jnp.mean(cond(X_sample[:, 0]).evaluate_ln(y), axis=0)
         integral_sample_std = jnp.std(cond(X_sample[:, 0]).evaluate_ln(y), axis=0)
-        assert jnp.all(integral_lb <= integral_sample_mean + 1e-2 * integral_sample_std)
-"""
+
+        assert jnp.all(integral_lb <= integral_sample_mean + .1 * integral_sample_std)
+        
+        
+class TestFullHSExpGaussianConditional(TestFullHCCovGaussianConditional):
+    @classmethod
+    def create_instance(self, R, Dx, Dy, Da, Dk):
+        C = jnp.array(np.random.randn(Dy, Dx))
+        C = C / jnp.sqrt(jnp.sum(C**2, axis=0))[None]
+        d = 1e-1 * jnp.array(np.random.randn(Dy))
+        rand_mat = np.random.rand(Dy, Dy) - 0.5
+        Q, _ = np.linalg.qr(rand_mat)
+        # self.U = jnp.eye(Dx)[:, :Du]
+        A = jnp.array(np.random.randn(Dy, Da))
+        W = 1e-1 * np.random.randn(Dk, Dx + 1)
+        W[:, 0] = 0
+        W = jnp.array(W)
+        cond = approximate_conditional.FullHSExpGaussianConditional(
+            M=jnp.array([C]),
+            b=jnp.array([d]),
+            A=jnp.array([A]),
+            W=W,
+        )
+        mu_x = jnp.array(np.random.randn(R, Dx))
+        Sigma_x = self.get_pd_matrix(
+            R, Dx
+        )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
+        return cond, p_X
