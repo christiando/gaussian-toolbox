@@ -280,7 +280,7 @@ class TestHCCovGaussianConditional:
         assert jnp.all(integral_lb <= integral_sample_mean + 1e-2 * integral_sample_std)
 
 
-class TestFullHCCovGaussianConditional:
+class TestHeteroscedasticExpConditional:
     @classmethod
     def create_instance(self, R, Dx, Dy, Da, Dk):
         C = jnp.array(np.random.randn(Dy, Dx))
@@ -293,7 +293,7 @@ class TestFullHCCovGaussianConditional:
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
-        cond = approximate_conditional.FullHCCovGaussianConditional(
+        cond = approximate_conditional.HeteroscedasticExpConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
             A=jnp.array([A]),
@@ -362,7 +362,7 @@ class TestFullHCCovGaussianConditional:
         assert jnp.all(integral_lb <= integral_sample_mean + .1 * integral_sample_std)
         
         
-class TestFullHSExpGaussianConditional(TestFullHCCovGaussianConditional):
+class TestHeteroscedasticCoshM1Conditional(TestHeteroscedasticExpConditional):
     @classmethod
     def create_instance(self, R, Dx, Dy, Da, Dk):
         C = jnp.array(np.random.randn(Dy, Dx))
@@ -375,7 +375,7 @@ class TestFullHSExpGaussianConditional(TestFullHCCovGaussianConditional):
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
-        cond = approximate_conditional.FullHSExpGaussianConditional(
+        cond = approximate_conditional.HeteroscedasticCoshM1Conditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
             A=jnp.array([A]),
