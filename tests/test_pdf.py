@@ -155,7 +155,30 @@ class TestGaussianPDF:
         d2 = self.create_instance(R, D)
 
         assert np.alltrue(d.kl_divergence(d2) >= 0)
-
+        
+    @pytest.mark.parametrize("R, D, Dsum", [(1, 5, 2), (1, 5, 1), (1, 3, 2), (1, 3, 5)])
+    def test_get_density_of_linear_sum(self, R, D, Dsum):
+        d = self.create_instance(R, D)
+        W = jnp.array(np.random.randn(R, Dsum, D))
+        b = jnp.array(np.random.randn(R, Dsum))
+        d_sum = d.get_density_of_linear_sum(W, b)
+        key = jax.random.PRNGKey(0)
+        subkey, key = jax.random.split(key)
+        d_sample = d.sample(subkey, num_samples=100000)[:,0]
+        W_d_sample  = jnp.einsum("abc,ac->ab", W, d_sample)
+        sum_sampled_mean = jnp.mean(W_d_sample + b, axis=0, keepdims=True)
+        var_sampled_mean = jnp.mean(jnp.einsum("ab,ac->abc", W_d_sample + b, W_d_sample + b), axis=0, keepdims=True)
+        var_sampled_mean -= jnp.einsum("ab,ac->abc", sum_sampled_mean, sum_sampled_mean)
+        assert jnp.allclose(d_sum.mu, sum_sampled_mean, rtol=1e-1, atol=1e-2)
+        assert jnp.allclose(d_sum.Sigma, var_sampled_mean, rtol=1e-1, atol=1e-2)
+        # When b is not sepcified
+        d_sum = d.get_density_of_linear_sum(W)
+        W_d_sample  = jnp.einsum("abc,ac->ab", W, d_sample)
+        sum_sampled_mean = jnp.mean(W_d_sample, axis=0, keepdims=True)
+        var_sampled_mean = jnp.mean(jnp.einsum("ab,ac->abc", W_d_sample, W_d_sample), axis=0, keepdims=True)
+        var_sampled_mean -= jnp.einsum("ab,ac->abc", sum_sampled_mean, sum_sampled_mean)
+        assert jnp.allclose(d_sum.mu, sum_sampled_mean, rtol=1e-1, atol=1e-2)
+        assert jnp.allclose(d_sum.Sigma, var_sampled_mean, rtol=1e-1, atol=1e-2)
 
 class TestGaussianDiagPDF(TestGaussianPDF):
     def setup_class(self):

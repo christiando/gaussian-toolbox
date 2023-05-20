@@ -213,6 +213,22 @@ class GaussianPDF(measure.GaussianMeasure):
         return conditional.ConditionalGaussianPDF(
             M=M_x, b=b_x, Sigma=Sigma_x, Lambda=Lambda_x, ln_det_Sigma=-ln_det_Lambda_x
         )
+        
+    def get_density_of_linear_sum(self, W: Float[Array, "R Dsum D"], b: Float[Array, "R Dsum"] = None) -> "GaussianPDF":
+        """Returns density of linear sum of Gaussians.
+
+        Args:
+            W: Weight matrix.
+            b: Bias vector.
+
+        Returns:
+            Gaussian density of linear sum.
+        """
+        Sigma_sum = jnp.einsum("abc,acd,aed->abe", W, self.Sigma, W)
+        mu_sum = jnp.einsum("abc,ac->ab", W, self.mu)
+        if b is not None:
+            mu_sum += b
+        return GaussianPDF(Sigma=Sigma_sum, mu=mu_sum)
 
     def to_dict(self) -> Dict:
         """Write Gaussian into dict.
@@ -227,6 +243,7 @@ class GaussianPDF(measure.GaussianMeasure):
             "ln_det_Sigma": self.ln_det_Sigma,
         }
         return density_dict
+
 
 
 @dataclass(kw_only=True)
