@@ -1,8 +1,10 @@
 from gaussian_toolbox import factor, measure
 import pytest
 from jax import numpy as jnp
+from jax import config
+config.update("jax_enable_x64", True)
 import numpy as np
-
+np.random.seed(0)
 
 class TestConjugateFactor:
     def setup_class(self):

@@ -18,6 +18,7 @@ import jax
 config.update("jax_enable_x64", True)
 import numpy as np
 from scipy import integrate as sc_integrate
+np.random.seed(0)
 
 
 class TestGaussianMeasure(TestConjugateFactor):
