@@ -5,6 +5,9 @@ from jax import numpy as jnp
 import numpy as np
 from scipy.stats import multivariate_normal
 import jax
+from jax import config
+config.update("jax_enable_x64", True)
+np.random.seed(0)
 
 
 class TestGaussianPDF:
