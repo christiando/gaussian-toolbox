@@ -22,8 +22,8 @@ class TruncatedGaussianMeasure:
         assert self.measure.D == 1, "TruncatedGaussianMeasure only supports 1D measures"
         self.density = self.measure.get_density()
         self.constant = self.measure.integrate()
-        self.alpha = (self.lower_limit - self.density.mu) / self.density.Sigma[..., 0]
-        self.beta = (self.upper_limit - self.density.mu) / self.density.Sigma[..., 0]
+        self.alpha = (self.lower_limit - self.density.mu) / jnp.sqrt(self.density.Sigma[..., 0])
+        self.beta = (self.upper_limit - self.density.mu) / jnp.sqrt(self.density.Sigma[..., 0])
         
     def _check_limits(self):
         if self.lower_limit is None and self.upper_limit is None:
@@ -73,7 +73,7 @@ class TruncatedGaussianMeasure:
         return {
             "1": self.integral,
             "x": self.integrate_x,
-            "x^2": self.integrate_x_pow_2,
+            "x**2": self.integrate_x_pow_2,
         }
         
     def _expectation_integral(self) -> Float[Array, "R"]:
@@ -83,23 +83,25 @@ class TruncatedGaussianMeasure:
         return self._expectation_integral() * self.constant
     
     def _expectation_x(self) -> Float[Array, "R 1"]:
-        Z = self._expectation_integral()
-        return self.density.mu + (norm.pdf(self.alpha) - norm.pdf(self.beta)) / Z * self.density.Sigma[..., 0]
+        Z = self._expectation_integral()[:,None]
+        return self.density.mu + (norm.pdf(self.alpha) - norm.pdf(self.beta)) / Z * jnp.sqrt(self.density.Sigma[..., 0])
         
     def integrate_x(self) -> Float[Array, "R 1"]:
-        return self._expectation_x() * self.constant
+        return self._expectation_x() * self.integral()[:,None]
     
-    def _expectation_x_pow_2(self) -> Float[Array, "R 1"]:
-        Z = self._expectation_integral()
-        mu = self._expectation_x()
-        sigma2 = self.density.Sigma[..., 0] * (1 - 
-                                              (self.beta * norm.pdf(self.beta) - self.alpha * norm.pdf(self.alpha)) / Z
+    def _get_variance(self) -> Float[Array, "R 1"]:
+        Z = self._expectation_integral()[:, None]
+        beta_pdf = jnp.where(jnp.isfinite(self.beta), self.beta * norm.pdf(self.beta), 0)
+        alpha_pdf = jnp.where(jnp.isfinite(self.alpha), self.alpha * norm.pdf(self.alpha), 0)
+        variance = self.density.Sigma[..., 0] * (1 - 
+                                              (beta_pdf - alpha_pdf) / Z
                                               - (norm.pdf(self.alpha) - norm.pdf(self.beta))**2 / Z**2)
-        expected_x_pow_2 = sigma2 + mu**2
-        return expected_x_pow_2
+        return variance
     
     def integrate_x_pow_2(self) -> Float[Array, "R 1"]:
-        return self._expectation_x_pow_2() * self.constant
+        variance = self._get_variance()
+        mu = self._expectation_x()
+        return (variance + mu ** 2) * self.integral()[:,None]
     
     def get_density(self) -> "TruncatedGaussianPDF":
         return TruncatedGaussianPDF(measure=self.density, lower_limit=self.lower_limit, upper_limit=self.upper_limit)
@@ -121,19 +123,17 @@ class TruncatedGaussianPDF(TruncatedGaussianMeasure):
         self.constant = 1. / self.constant
         
     def __call__(self, x: Float[Array, "N 1"], element_wise: bool = False) -> Union[Float[Array, "R N"], Float[Array, "R"]]:
-        return super(TruncatedGaussianPDF, self).__call__(x, element_wise=element_wise) * self.constant
+        if element_wise:
+            return super(TruncatedGaussianPDF, self).__call__(x, element_wise=element_wise) * self.constant
+        else:
+            return super(TruncatedGaussianPDF, self).__call__(x, element_wise=element_wise) * self.constant[:,None]
         
     def get_mean(self) -> Float[Array, "R 1"]:
         return self._expectation_x()
     
     def get_variance(self) -> Float[Array, "R 1"]:
-        return self._expectation_x_pow_2() - self.get_mean() ** 2
+        variance = self._get_variance()
+        return variance
     
     def get_std(self) -> Float[Array, "R 1"]:
         return jnp.sqrt(self.get_variance())
-    
-    
-        
-    
-    
-    
