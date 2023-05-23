@@ -224,6 +224,10 @@ class GaussianPDF(measure.GaussianMeasure):
         Returns:
             Gaussian density of linear sum.
         """
+        try:
+            assert W.shape[1] <= self.D
+        except AssertionError:
+            raise AssertionError(f"The number of sums must be <= {self.D}")
         Sigma_sum = jnp.einsum("abc,acd,aed->abe", W, self.Sigma, W)
         mu_sum = jnp.einsum("abc,ac->ab", W, self.mu)
         if b is not None:
