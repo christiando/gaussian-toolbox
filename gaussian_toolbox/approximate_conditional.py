@@ -14,6 +14,7 @@ from jax import scipy as jsc
 from dataclasses import field
 from jax import random, vmap
 from abc import abstractmethod
+from gaussian_toolbox.experimental import truncated_measure
 
 @dataclass(kw_only=True)
 class LConjugateFactorMGaussianConditional(conditional.ConditionalGaussianPDF):
@@ -1059,7 +1060,7 @@ class HeteroscedasticConditional(conditional.ConditionalGaussianPDF):
         lower_bound_log_det = self.ln_det_Sigma + jnp.sum(k_omega, axis=0)
         return lower_bound_log_det
     
-    def get_lb_quadratic_term(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"]):
+    def get_lb_quadratic_term(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"]) -> Float[Array, "N"]:
         projected_M = jnp.einsum('acb,acd->abd', self.Lambda, self.M)
         projected_yb = jnp.einsum('acb,ac->ab', self.Lambda, y - self.b)
         homoscedastic_term = p_x.integrate("(Ax+a)'(Bx+b)", A_mat=-projected_M, a_vec=projected_yb, B_mat=-self.M, b_vec=y - self.b)
@@ -1068,7 +1069,7 @@ class HeteroscedasticConditional(conditional.ConditionalGaussianPDF):
         return homoscedastic_term - get_lb_heteroscedastic_term
     
     def get_lb_heteroscedastic_term_i(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"], 
-                                      W_i: Float[Array, "Dx+1"], a_i: Float[Array, "Dy"]):
+                                      W_i: Float[Array, "Dx+1"], a_i: Float[Array, "Dy"]) -> Float[Array, "N"]:
         omega_star = lax.stop_gradient(self._get_omega_star(p_x=p_x, y=y, W_i=W_i, a_i=a_i))
         # Quadratic integral
         return self._lower_bound_integrals(p_x, y, W_i, a_i, omega_star)
@@ -1242,4 +1243,105 @@ class HeteroscedasticCoshM1Conditional(HeteroscedasticConditional):
             quartic_integral -= lb_px_measure.integrate("(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)", A_mat=w, a_vec=b, B_mat=w, b_vec=b, C_mat=-a_projected_M, c_vec=a_projected_yb, D_mat=-a_projected_M, d_vec=a_projected_yb)
             return quadratic_integral, quartic_integral
         else:
-            return quadratic_integral       
+            return quadratic_integral  
+        
+        
+@dataclass(kw_only=True)
+class HeteroscedasticHeavisideConditional(HeteroscedasticConditional):
+    M: Float[Array, "1 Dy Dx"]
+    b: Float[Array, "1 Dy"]
+    A: Float[Array, "1 Dy Da"]
+    W: Float[Array, "Dk Dx+1"]
+    Sigma: Float[Array, "1 Dy Dy"] = field(default=None)
+    Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
+    ln_det_Sigma: Float[Array, "1"] = field(init=False)
+    
+    def link_function(self, h: Float[Array, "..."]) -> Float[Array, "..."]:
+        """Link function for the heteroscedastic noise."""
+        return jnp.where(jnp.greater_equal(h, 0.), 1., 0.)
+    
+        
+    def _integrate_noise_diagonal(self, p_x: pdf.GaussianPDF) -> Float[Array, "N Dk"]:
+        r"""Integrate the noise diagonal with respect to :math:`p(X)`.
+
+        .. math::
+
+            \int D(x) p(x) {\rm d}x.
+
+        Args:
+            p_x: The density the noise diagonal is integrated with.
+
+        Returns:
+            Integrated noise diagonal.
+        """
+        # int f(h(z)) dphi(z)
+        w = self.W[:, 1:]
+        w0 = self.W[:, 0]
+        
+        def integrate_f_i(w_i, w0_i):
+            p_h = p_x.get_density_of_linear_sum(w_i[None, None], w0_i[None, None])
+            tp_h = truncated_measure.TruncatedGaussianMeasure(measure=p_h, lower_limit=0.)
+            D_i_int = tp_h.integral()[0]
+            return D_i_int
+        #D_int = []
+        #for i in range(self.Dk):
+        #    D_int.append(integrate_f_i(w[i], w0[i]))
+        #D_int = jnp.stack(D_int, axis=0)
+        D_int = vmap(integrate_f_i, in_axes=(0,0))(w, w0)
+        return D_int
+    
+    def get_lb_log_det(self, p_x: pdf.GaussianPDF) -> Float[Array, "N"]:
+        # int f(h(z)) dphi(z)
+        w = self.W[:, 1:]
+        w0 = self.W[:, 0]
+        
+        def integrate_f_i(w_i, w0_i):
+            p_h = p_x.get_density_of_linear_sum(w_i[None,None], w0_i[None, None])
+            tp_h = truncated_measure.TruncatedGaussianMeasure(measure=p_h, lower_limit=0.)
+            D_i_int = tp_h.integral()
+            return D_i_int
+
+        # int ln(1 + f(h)) dp(h)
+        int_ln1pf_h = jnp.log(2.) * vmap(integrate_f_i, out_axes=0)(w, w0)
+        log_det = self.ln_det_Sigma + jnp.sum(int_ln1pf_h, axis=0)
+        return log_det
+    
+    def get_lb_heteroscedastic_term_i(self, p_x: pdf.GaussianPDF, y: Float[Array, "N Dy"], 
+                                      W_i: Float[Array, "Dx+1"], a_i: Float[Array, "Dy"]):
+        w0 = W_i[None,0]
+        w = W_i[None,1:]
+        a_projected_M = jnp.einsum('ab,cad->cbd', a_i[:,None], self.M)
+        a_projected_yb = jnp.einsum('ab,ca->cb', a_i[:,None], y - self.b)
+        
+        if self.Dx == 1:
+            factor = a_projected_M[:,0,0] / w[:,0]
+            constant = - (a_projected_yb[:,0] +  factor * w0)
+            p_h = p_x.get_density_of_linear_sum(w[None], w0[None])
+            tp_h = truncated_measure.TruncatedGaussianMeasure(measure=p_h, lower_limit=0.)
+        else:
+            sum_weights = jnp.tile(jnp.concatenate([-a_projected_M[:,0], w])[None], (a_projected_yb.shape[0],1,1))
+            sum_bias = jnp.hstack([a_projected_yb, jnp.tile(w0[None], (a_projected_yb.shape[0],1))])
+            p_hg = p_x.get_density_of_linear_sum(sum_weights, sum_bias)
+            p_h = p_hg.get_marginal(jnp.array([1]))
+            tp_h = truncated_measure.TruncatedGaussianMeasure(measure=p_h, lower_limit=0.)
+            p_g_given_h = p_hg.condition_on(jnp.array([1]))
+            factor = p_g_given_h.M[:,0,0]
+            constant = p_g_given_h.b[:,0]
+            
+        Zh = tp_h.integrate()
+        Eh = tp_h.integrate("x")[:,0]
+        Eh2 = tp_h.integrate("x**2")[:,0]
+        heteroscedastic_term_i = Zh * constant**2 + Eh2 * factor**2 + 2 * Eh * factor * constant
+        if self.Dx > 1:
+            heteroscedastic_term_i += Zh * p_g_given_h.Sigma[:,0,0]                  
+        heteroscedastic_term_i *= 0.5
+        return heteroscedastic_term_i[None]
+
+    def k_func(self, p_x: pdf.GaussianPDF, W_i:Float[Array, "Dx+1"], omega_dagger: Float[Array, "R"]) -> Float[Array, "R"]:
+        pass
+
+    def _lower_bound_integrals(self, p_x: measure.GaussianMeasure, y: Float[Array, "N Dy"], 
+                            W_i: Float[Array, "Dx+1"], a_i: Float[Array, "Dy"], omega_star: Float[Array, "N"], compute_fourth_order: bool=False) -> Float[Array, "N"]:
+        pass      
+    
+     
