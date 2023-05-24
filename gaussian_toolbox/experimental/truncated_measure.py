@@ -11,6 +11,13 @@ from .misc import binom
 
 @dataclass(kw_only=True)
 class TruncatedGaussianMeasure:
+    """Truncated Gaussian measure.
+    
+    Args:
+        measure: Gaussian measure.
+        lower_limit: Lower limit of truncation.
+        upper_limit: Upper limit of truncation.
+    """
     measure: measure.GaussianMeasure
     lower_limit: Float[Array, "R 1"] = field(default=None)
     upper_limit: Float[Array, "R 1"] = field(default=None)
@@ -28,6 +35,8 @@ class TruncatedGaussianMeasure:
         self.beta = (self.upper_limit - self.density.mu) / jnp.sqrt(self.density.Sigma[..., 0])
         
     def _check_limits(self):
+        """Check that lower_limit and upper_limit are valid.
+        """
         if self.lower_limit is None and self.upper_limit is None:
             raise ValueError("At least one of lower_limit and upper_limit must be specified.")
         elif self.lower_limit is None:
@@ -50,6 +59,11 @@ class TruncatedGaussianMeasure:
         return self.measure.Lambda.shape[1]
         
     def __call__(self, x: Float[Array, "N 1"], element_wise: bool = False) -> Union[Float[Array, "R N"], Float[Array, "R"]]:
+        """Evaluate the measure at x.
+
+        :raises ValueError: If x has wrong shape.
+        :return: The measure evaluated at x.
+        """
         if element_wise:
             if self.R != x.shape[0]:
                 raise ValueError("Leading dimension of x must equal R.")
@@ -60,9 +74,9 @@ class TruncatedGaussianMeasure:
         return self.measure(x, element_wise=element_wise) * in_limits
     
     def integrate(self, expr: str = "1", **kwargs) -> Float[Array, "R ..."]:
-        r"""Integrate the indicated expression with respect to the Gaussian measure.
+        r"""Integrate the indicated expression with respect to the truncated Gaussian measure.
 
-        E.g. expr="(Ax+a)" means that :math:`\int (AX + a)u(X){\rm d}X` is computed, and :math:`A` and a can be provided.
+        E.g. expr="x**2" means that :math:`\int X^2 u(X){\rm d}X` is computed, and :math:`A` and a can be provided.
 
         :param expr: Indicates the expression that should be integrated. Check measure's integration dict.
         :return: The integral result.
@@ -79,19 +93,44 @@ class TruncatedGaussianMeasure:
         }
         
     def _expectation_integral(self) -> Float[Array, "R"]:
+        """Compute the normalizing constant of the integral of the truncated Gaussian measure.
+
+        Returns: 
+            The normalizing constant of the measure.
+        """
         return jnp.squeeze(norm.cdf(self.beta) - norm.cdf(self.alpha), axis=-1)
     
     def integral(self) -> Float[Array, "R"]:
+        """Compute the integral of the truncated Gaussian measure.
+        
+        Returns:
+            The integral of the measure.
+        """
         return self._expectation_integral() * self.constant
     
     def _expectation_x(self) -> Float[Array, "R 1"]:
+        """Compute the expectation of x under the truncated Gaussian density corresponding to the measure.
+        
+        Returns:
+            The expectation of x.
+        """
         Z = self._expectation_integral()[:,None]
         return self.density.mu + (norm.pdf(self.alpha) - norm.pdf(self.beta)) / Z * jnp.sqrt(self.density.Sigma[..., 0])
         
     def integrate_x(self) -> Float[Array, "R 1"]:
+        """Compute the integral of x under the truncated Gaussian measure.
+
+        Returns:
+            The integral of x.
+        """
         return self._expectation_x() * self.integral()[:,None]
     
     def _get_variance(self) -> Float[Array, "R 1"]:
+        """Compute the variance of x under the truncated Gaussian density corresponding to the measure.
+
+        Returns:
+            The variance of x.
+        """
         Z = self._expectation_integral()[:, None]
         beta_pdf = jnp.where(jnp.isfinite(self.beta), self.beta * norm.pdf(self.beta), 0)
         alpha_pdf = jnp.where(jnp.isfinite(self.alpha), self.alpha * norm.pdf(self.alpha), 0)
@@ -100,7 +139,22 @@ class TruncatedGaussianMeasure:
                                               - (norm.pdf(self.alpha) - norm.pdf(self.beta))**2 / Z**2)
         return variance
     
+    def integrate_x_pow_2(self) -> Float[Array, "R 1"]:
+        """Compute the integral of x^2 under the truncated Gaussian measure.
+
+        Returns:
+            The integral of x^2.
+        """
+        variance = self._get_variance()
+        mu = self._expectation_x()
+        return (variance + mu ** 2) * self.integral()[:,None]
+    
     def _get_moment(self, order: int, return_all: bool=False) -> Union[Float[Array, "R order+1"], Float[Array, "R order+1"]]:
+        """Compute the moment of order `order` under the truncated Gaussian density corresponding to the measure.
+
+        Returns:
+            The moment of `order`.
+        """
         denominator = norm.cdf(self.beta[:,0]) - norm.cdf(self.alpha[:,0])
         
         def scan_function(carry, k):
@@ -121,21 +175,35 @@ class TruncatedGaussianMeasure:
             moments = jnp.sum(binom(order, k_range) * jnp.sqrt(self.density.Sigma[:,:,0].T) ** k_range * self.density.mu.T ** (order - k_range) * Ls, axis=0)           
         return moments
     
-    def integrate_x_pow_2(self) -> Float[Array, "R 1"]:
-        variance = self._get_variance()
-        mu = self._expectation_x()
-        return (variance + mu ** 2) * self.integral()[:,None]
-    
     def integrate_x_pow_k(self, k: int) -> Float[Array, "R 1"]:
+        """Compute the integral of x^k under the truncated Gaussian measure.
+        
+        Args:
+            k: The order of the moment to compute.
+            
+        Returns:
+            The integral of x^k.
+        """
         print(self._get_moment(k).shape, self.integral().shape)
         return self._get_moment(k)[:,None] * self.integral()[:,None]
     
     def get_density(self) -> "TruncatedGaussianPDF":
+        """Return the truncated Gaussian density corresponding to the measure.
+
+        Returns:
+            The truncated Gaussian density corresponding to the measure.
+        """
         return TruncatedGaussianPDF(measure=self.density, lower_limit=self.lower_limit, upper_limit=self.upper_limit)
-    
     
 @dataclass(kw_only=True)
 class TruncatedGaussianPDF(TruncatedGaussianMeasure):
+    """Normalized Truncated Gaussian density.
+    
+    Args:
+        measure: Gaussian measure.
+        lower_limit: Lower limit of truncation.
+        upper_limit: Upper limit of truncation.
+    """
     measure: measure.GaussianMeasure
     lower_limit: Float[Array, "R 1"] = field(default=None)
     upper_limit: Float[Array, "R 1"] = field(default=None)
@@ -150,17 +218,41 @@ class TruncatedGaussianPDF(TruncatedGaussianMeasure):
         self.constant = 1. / self.constant
         
     def __call__(self, x: Float[Array, "N 1"], element_wise: bool = False) -> Union[Float[Array, "R N"], Float[Array, "R"]]:
+        """Compute the value of the density at x.
+        
+        Args:
+            x: The point at which to compute the density.
+            element_wise: Whether to return the density at each point of x or the density at x.
+
+        Returns:
+            The value of the density at x.
+        """
         if element_wise:
             return super(TruncatedGaussianPDF, self).__call__(x, element_wise=element_wise) * self.constant
         else:
             return super(TruncatedGaussianPDF, self).__call__(x, element_wise=element_wise) * self.constant[:,None]
         
     def get_mean(self) -> Float[Array, "R 1"]:
+        """Compute the mean of the density.
+
+        Returns:
+            The mean of the density.
+        """
         return self._expectation_x()
     
     def get_variance(self) -> Float[Array, "R 1"]:
+        """Compute the variance of the density.
+
+        Returns:
+            The variance of the density.
+        """
         variance = self._get_variance()
         return variance
     
     def get_std(self) -> Float[Array, "R 1"]:
+        """Compute the standard deviation of the density.
+
+        Returns:
+            The standard deviation of the density.
+        """
         return jnp.sqrt(self.get_variance())

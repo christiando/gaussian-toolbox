@@ -87,7 +87,7 @@ class TestTruncatedGaussianPDF(TestTruncatedGaussianMeasure):
         Lambda = jnp.array(np.random.rand(R, D, D) + 1e-3)
         nu = jnp.array(np.random.rand(R, D))
         m = measure.GaussianMeasure(Lambda=Lambda, nu=nu)
-        tm = truncated_measure.TruncatedGaussianMeasure(measure=m, lower_limit=lower, upper_limit=upper)
+        tm = truncated_measure.TruncatedGaussianPDF(measure=m, lower_limit=lower, upper_limit=upper)
         tp = tm.get_density()
         return tp, tp.density
     
