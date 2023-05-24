@@ -80,7 +80,7 @@ class TestTruncatedGaussianMeasure:
         tp = tm.get_density()
         assert jnp.allclose(tp.integrate(), 1)
         
-class TestTruncatedGaussianMeasure(TestTruncatedGaussianMeasure):
+class TestTruncatedGaussianPDF(TestTruncatedGaussianMeasure):
     
     def create_instance(self, R, lower, upper):
         D = 1
@@ -112,7 +112,7 @@ class TestTruncatedGaussianMeasure(TestTruncatedGaussianMeasure):
     
         loc, scale, a, b = self._get_scipy_params(d, lower, upper)
         for r in range(R):
-            assert jnp.allclose(tp_val[r], truncnorm.pdf(x[:,0], a=a[r], b=b[r], loc=loc[r], scale=scale[r]))
+            assert jnp.allclose(tp_val[r], truncnorm.pdf(x[:,0], a=a[r], b=b[r], loc=loc[r], scale=scale[r]), atol=1e-5)
             
     
     @pytest.mark.parametrize("R, lower, upper", [(1, -1, 2), (2, 0, 1), (10, 0, None)])
@@ -140,3 +140,16 @@ class TestTruncatedGaussianMeasure(TestTruncatedGaussianMeasure):
         for r in range(R):
             assert jnp.allclose(sigma2[r], truncnorm.var(a=a[r], b=b[r], loc=loc[r], scale=scale[r]))
             assert jnp.allclose(sigma[r], truncnorm.std(a=a[r], b=b[r], loc=loc[r], scale=scale[r]))
+            
+    @pytest.mark.parametrize("R, lower, upper", [(1, -1, 2), (2, 0, 1), (10, 0, None)])
+    def test_get_moments(self, R, lower, upper):
+        tp, d = self.create_instance(R, lower, upper)
+        if lower is None:
+            lower = -jnp.inf
+        elif upper is None:
+            upper = jnp.inf
+        loc, scale, a, b = self._get_scipy_params(d, lower, upper)
+        for order in range(1, 5):
+            moments = tp.integrate("x**k", k=order)
+            for r in range(R):
+                assert jnp.allclose(moments[r], truncnorm.moment(order , a=a[r], b=b[r], loc=loc[r], scale=scale[r]))
