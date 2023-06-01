@@ -4,6 +4,14 @@ gaussian\_toolbox.utils package
 Submodules
 ----------
 
+gaussian\_toolbox.utils.dataclass module
+----------------------------------------
+
+.. automodule:: gaussian_toolbox.utils.dataclass
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 gaussian\_toolbox.utils.jax\_minimize\_wrapper module
 -----------------------------------------------------
 
