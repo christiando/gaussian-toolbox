@@ -221,6 +221,33 @@ class TestHeteroscedasticCoshM1Conditional(TestHeteroscedasticExpConditional):
         )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
+    
+
+class TestHeteroscedasticReLUConditional(TestHeteroscedasticExpConditional):
+    @classmethod
+    def create_instance(self, R, Dx, Dy, Da, Dk):
+        C = jnp.array(np.random.randn(Dy, Dx))
+        C = C / jnp.sqrt(jnp.sum(C**2, axis=0))[None]
+        d = 1e-1 * jnp.array(np.random.randn(Dy))
+        rand_mat = np.random.rand(Dy, Dy) - 0.5
+        Q, _ = np.linalg.qr(rand_mat)
+        # self.U = jnp.eye(Dx)[:, :Du]
+        A = jnp.array(np.random.randn(Dy, Da))
+        W = 1e-1 * np.random.randn(Dk, Dx + 1)
+        W[:, 0] = 0
+        W = jnp.array(W)
+        cond = approximate_conditional.HeteroscedasticReLUConditional(
+            M=jnp.array([C]),
+            b=jnp.array([d]),
+            A=jnp.array([A]),
+            W=W,
+        )
+        mu_x = jnp.array(np.random.randn(R, Dx))
+        Sigma_x = self.get_pd_matrix(
+            R, Dx
+        )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
+        return cond, p_X
 
 
 class TestHeteroscedasticHeavisideConditional:

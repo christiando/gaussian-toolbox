@@ -1,12 +1,12 @@
 from jax import numpy as jnp
+from jax.experimental import checkify
 from jax.lax import scan
-from jax.scipy.stats import norm
 from ..utils.dataclass import dataclass
 from dataclasses import field
 from jaxtyping import Array, Float
 from typing import Any, Callable, Tuple, Union, Dict
 from gaussian_toolbox import pdf, measure
-from .misc import binom
+from .misc import binom, normal_pdf, normal_cdf
 
 
 @dataclass(kw_only=True)
@@ -26,14 +26,19 @@ class TruncatedGaussianMeasure:
     alpha: Float[Array, "R 1"] = field(init=False)
     beta: Float[Array, "R 1"] = field(init=False)
     
+    
     def __post_init__(self):
         self._check_limits()
         assert self.measure.D == 1, "TruncatedGaussianMeasure only supports 1D measures"
-        self.density = self.measure.get_density()
+        if not isinstance(self.measure, pdf.GaussianPDF):
+            self.density = self.measure.get_density()
+        else:
+            self.density = self.measure
         self.constant = self.measure.integrate()
-        self.alpha = (self.lower_limit - self.density.mu) / jnp.sqrt(self.density.Sigma[..., 0])
-        self.beta = (self.upper_limit - self.density.mu) / jnp.sqrt(self.density.Sigma[..., 0])
+        self.alpha = jnp.where(jnp.isfinite(self.lower_limit), (jnp.where(jnp.isfinite(self.lower_limit), self.lower_limit, 0) - self.density.mu) * jnp.sqrt(self.density.Lambda[:,:, 0]), self.lower_limit)
+        self.beta = jnp.where(jnp.isfinite(self.upper_limit), (jnp.where(jnp.isfinite(self.upper_limit), self.upper_limit, 0) - self.density.mu) * jnp.sqrt(self.density.Lambda[:,:, 0]), self.upper_limit)
         
+    
     def _check_limits(self):
         """Check that lower_limit and upper_limit are valid.
         """
@@ -43,10 +48,9 @@ class TruncatedGaussianMeasure:
             self.lower_limit = -jnp.inf * jnp.ones((self.R, self.D))
         elif self.upper_limit is None:
             self.upper_limit = jnp.inf * jnp.ones((self.R, self.D))
-            
+        # TODO: Find a way to check that lower_limit < upper_limit           
         self.lower_limit = self.lower_limit * jnp.ones((self.R, self.D))
         self.upper_limit = self.upper_limit * jnp.ones((self.R, self.D))
-        assert jnp.all(self.lower_limit < self.upper_limit), "lower_limit must be smaller than upper_limit"
         
     @property
     def R(self) -> int:
@@ -98,7 +102,7 @@ class TruncatedGaussianMeasure:
         Returns: 
             The normalizing constant of the measure.
         """
-        return jnp.squeeze(norm.cdf(self.beta) - norm.cdf(self.alpha), axis=-1)
+        return jnp.squeeze(normal_cdf(self.beta) - normal_cdf(self.alpha), axis=-1)
     
     def integral(self) -> Float[Array, "R"]:
         """Compute the integral of the truncated Gaussian measure.
@@ -115,7 +119,10 @@ class TruncatedGaussianMeasure:
             The expectation of x.
         """
         Z = self._expectation_integral()[:,None]
-        return self.density.mu + (norm.pdf(self.alpha) - norm.pdf(self.beta)) / Z * jnp.sqrt(self.density.Sigma[..., 0])
+        Z = jnp.where(Z!=0, Z, 1.)
+        mean = self.density.mu + (normal_pdf(self.alpha) - normal_pdf(self.beta)) / Z * jnp.sqrt(self.density.Sigma[..., 0])
+        mean = jnp.where(Z!=0, mean, 0.)
+        return mean
         
     def integrate_x(self) -> Float[Array, "R 1"]:
         """Compute the integral of x under the truncated Gaussian measure.
@@ -132,11 +139,13 @@ class TruncatedGaussianMeasure:
             The variance of x.
         """
         Z = self._expectation_integral()[:, None]
-        beta_pdf = jnp.where(jnp.isfinite(self.beta), self.beta * norm.pdf(self.beta), 0)
-        alpha_pdf = jnp.where(jnp.isfinite(self.alpha), self.alpha * norm.pdf(self.alpha), 0)
+        Z = jnp.where(Z!=0, Z, 1.)
+        beta_pdf = jnp.where(jnp.isfinite(self.upper_limit), self.beta, 0.) * normal_pdf(self.beta)
+        alpha_pdf = jnp.where(jnp.isfinite(self.lower_limit), self.alpha, 0.) * normal_pdf(self.alpha)
         variance = self.density.Sigma[..., 0] * (1 - 
                                               (beta_pdf - alpha_pdf) / Z
-                                              - (norm.pdf(self.alpha) - norm.pdf(self.beta))**2 / Z**2)
+                                              - (normal_pdf(self.alpha) - normal_pdf(self.beta))**2 / Z**2)
+        variance = jnp.where(Z!=0, variance, 0.)
         return variance
     
     def integrate_x_pow_2(self) -> Float[Array, "R 1"]:
@@ -155,24 +164,24 @@ class TruncatedGaussianMeasure:
         Returns:
             The moment of `order`.
         """
-        denominator = norm.cdf(self.beta[:,0]) - norm.cdf(self.alpha[:,0])
-        
+        denominator = normal_cdf(self.beta[:,0]) - normal_cdf(self.alpha[:,0])
+        denominator = jnp.where(denominator!=0, denominator, 1.)
         def scan_function(carry, k):
             L2, L1 = carry
-            beta_pdf = jnp.where(jnp.isfinite(self.beta[:,0]), self.beta[:,0] ** (k - 1) * norm.pdf(self.beta[:,0]), 0)
-            alpha_pdf = jnp.where(jnp.isfinite(self.alpha[:,0]), self.alpha[:,0]  ** (k - 1) * norm.pdf(self.alpha[:,0]), 0)
+            beta_pdf = jnp.where(jnp.isfinite(self.beta[:,0]), self.beta[:,0] ** (k - 1) * normal_pdf(self.beta[:,0]), 0)
+            alpha_pdf = jnp.where(jnp.isfinite(self.alpha[:,0]), self.alpha[:,0]  ** (k - 1) * normal_pdf(self.alpha[:,0]), 0)
             L_new = - (beta_pdf - alpha_pdf) / denominator + (k - 1) * L2
-            print(alpha_pdf.shape, beta_pdf.shape,L_new.shape, L2.shape, L1.shape)
             return (L1, L_new), L_new
         
-        L0, L1 = jnp.ones((self.R,)), - (norm.pdf(self.beta[:,0]) - norm.pdf(self.alpha[:,0])) / denominator
+        L0, L1 = jnp.ones((self.R,)), - (normal_pdf(self.beta[:,0]) - normal_pdf(self.alpha[:,0])) / denominator
         Ls = scan(scan_function, (L0, L1), jnp.arange(2, order + 1))[1]
         Ls = jnp.concatenate([L0[None], L1[None], Ls], axis=0)
         k_range = jnp.arange(0, order + 1)[:,None]
         if return_all:
             moments = jnp.cumsum(binom(order, k_range) * jnp.sqrt(self.density.Sigma[:,:,0].T) ** k_range * self.density.mu.T ** (order - k_range) * Ls, axis=0)
         else:
-            moments = jnp.sum(binom(order, k_range) * jnp.sqrt(self.density.Sigma[:,:,0].T) ** k_range * self.density.mu.T ** (order - k_range) * Ls, axis=0)           
+            moments = jnp.sum(binom(order, k_range) * jnp.sqrt(self.density.Sigma[:,:,0].T) ** k_range * self.density.mu.T ** (order - k_range) * Ls, axis=0)
+        moments = jnp.where(denominator!=0, moments, 0.)           
         return moments
     
     def integrate_x_pow_k(self, k: int) -> Float[Array, "R 1"]:
@@ -184,7 +193,6 @@ class TruncatedGaussianMeasure:
         Returns:
             The integral of x^k.
         """
-        print(self._get_moment(k).shape, self.integral().shape)
         return self._get_moment(k)[:,None] * self.integral()[:,None]
     
     def get_density(self) -> "TruncatedGaussianPDF":
