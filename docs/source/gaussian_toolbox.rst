@@ -5,12 +5,29 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 1
-   
+   :maxdepth: 4
+
+   gaussian_toolbox.experimental
    gaussian_toolbox.utils
 
 Submodules
 ----------
+
+gaussian\_toolbox.approximate\_conditional module
+-------------------------------------------------
+
+.. automodule:: gaussian_toolbox.approximate_conditional
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+gaussian\_toolbox.conditional module
+------------------------------------
+
+.. automodule:: gaussian_toolbox.conditional
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 gaussian\_toolbox.factor module
 -------------------------------
@@ -32,22 +49,6 @@ gaussian\_toolbox.pdf module
 ----------------------------
 
 .. automodule:: gaussian_toolbox.pdf
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-gaussian\_toolbox.conditional module
-------------------------------------
-
-.. automodule:: gaussian_toolbox.conditional
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-gaussian\_toolbox.approximate\_conditional module
--------------------------------------------------
-
-.. automodule:: gaussian_toolbox.approximate_conditional
    :members:
    :undoc-members:
    :show-inheritance:
