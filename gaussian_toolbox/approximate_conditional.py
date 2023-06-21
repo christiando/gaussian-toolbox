@@ -1,7 +1,7 @@
 __author__ = "Christian Donner"
 
 from jax import numpy as jnp
-from typing import Tuple, Union
+from typing import Any, Tuple, Union
 from . import pdf, factor, measure, conditional
 from .utils.linalg import invert_matrix
 
@@ -691,7 +691,7 @@ class LSEMGaussianConditional(LConjugateFactorMGaussianConditional):
 
 
 @dataclass(kw_only=True)
-class HeteroscedasticConditional(conditional.ConditionalGaussianPDF):
+class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
     r"""A conditional Gaussian density, with a heteroscedastic covariance,
 
     .. math::
@@ -722,42 +722,11 @@ class HeteroscedasticConditional(conditional.ConditionalGaussianPDF):
     """
     M: Float[Array, "1 Dy Dx"]
     b: Float[Array, "1 Dy"]
-    A_vec: Float[Array, "Dy*Da-Dy*(Dy-1)/2"]
+    A: Float[Array, "1 Dy Da"]
     W: Float[Array, "Dk Dx+1"]
-    Sigma: Float[Array, "1 Dy Dy"] = field(default=None)
-    Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
-    ln_det_Sigma: Float[Array, "1"] = field(init=False)
-
-    def __post_init__(
-        self,
-    ):
-        if self.R != 1:
-            raise NotImplementedError("So far only R=1 is supported.")
-        try:
-            assert self.Dy <= self.Da
-        except AssertionError:
-            raise NotImplementedError("A must have at least as many rows as columns.")
-        try:
-            assert self.Dk <= self.Da
-        except AssertionError:
-            raise NotImplementedError(
-                "Diagonal matrix can have at most as many entries as A has columns."
-            )
-
-        self.Sigma = jnp.einsum("abc,adc->abd", self.A, self.A)
-        self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
-
-    @property
-    def A(self) -> Float[Array, "1 Dy Da"]:
-        num_entries_triangular = self.Dy * (self.Dy + 1) // 2
-        indices = jnp.triu_indices(self.Dy)  # Generate upper triangular indices
-        A_tria = jnp.zeros((self.Dy, self.Dy))  # Create an initial matrix of zeros
-        A_tria = A_tria.at[indices].set(self.A_vec[:num_entries_triangular])
-        A_ntria = self.A_vec[num_entries_triangular:].reshape(
-            self.Dy, self.Da - self.Dy
-        )
-        A = jnp.array([jnp.concatenate([A_tria, A_ntria], axis=1)])
-        return A
+    Sigma: Float[Array, "1 Dy Dy"]
+    Lambda: Float[Array, "1 Dy Dy"]
+    ln_det_Sigma: Float[Array, "1"]
 
     @abstractmethod
     def link_function(self, h: Float[Array, "..."]) -> Float[Array, "..."]:
@@ -782,7 +751,7 @@ class HeteroscedasticConditional(conditional.ConditionalGaussianPDF):
     @property
     def Da(self) -> int:
         r"""Number of orthonormal low rank vectors :math:`U`."""
-        return (self.A_vec.shape[0] - self.Dy * (self.Dy + 1) // 2) // self.Dy + self.Dy
+        return self.A.shape[1]
 
     @property
     def Dk(self) -> int:
@@ -1196,14 +1165,14 @@ class HeteroscedasticConditional(conditional.ConditionalGaussianPDF):
 
 
 @dataclass(kw_only=True)
-class HeteroscedasticExpConditional(HeteroscedasticConditional):
+class HeteroscedasticExpConditional(HeteroscedasticBaseConditional):
     M: Float[Array, "1 Dy Dx"]
     b: Float[Array, "1 Dy"]
-    A_vec: Float[Array, "Dy*Da-Dy*(Dy-1)/2"]
+    A: Float[Array, "1 Dy Da"]
     W: Float[Array, "Dk Dx+1"]
-    Sigma: Float[Array, "1 Dy Dy"] = field(default=None)
-    Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
-    ln_det_Sigma: Float[Array, "1"] = field(init=False)
+    Sigma: Float[Array, "1 Dy Dy"]
+    Lambda: Float[Array, "1 Dy Dy"]
+    ln_det_Sigma: Float[Array, "1"]
 
     def link_function(self, h: Float[Array, "..."]) -> Float[Array, "..."]:
         """Link function for the heteroscedastic noise."""
@@ -1309,14 +1278,14 @@ class HeteroscedasticExpConditional(HeteroscedasticConditional):
 
 
 @dataclass(kw_only=True)
-class HeteroscedasticCoshM1Conditional(HeteroscedasticConditional):
+class HeteroscedasticCoshM1Conditional(HeteroscedasticBaseConditional):
     M: Float[Array, "1 Dy Dx"]
     b: Float[Array, "1 Dy"]
-    A_vec: Float[Array, "Dy*Da-Dy*(Dy-1)/2"]
+    A: Float[Array, "1 Dy Da"]
     W: Float[Array, "Dk Dx+1"]
-    Sigma: Float[Array, "1 Dy Dy"] = field(default=None)
-    Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
-    ln_det_Sigma: Float[Array, "1"] = field(init=False)
+    Sigma: Float[Array, "1 Dy Dy"]
+    Lambda: Float[Array, "1 Dy Dy"]
+    ln_det_Sigma: Float[Array, "1"]
 
     def link_function(self, h: Float[Array, "..."]) -> Float[Array, "..."]:
         """Link function for the heteroscedastic noise."""
@@ -1464,14 +1433,14 @@ class HeteroscedasticCoshM1Conditional(HeteroscedasticConditional):
 
 
 @dataclass(kw_only=True)
-class HeteroscedasticHeavisideConditional(HeteroscedasticConditional):
+class HeteroscedasticHeavisideConditional(HeteroscedasticBaseConditional):
     M: Float[Array, "1 Dy Dx"]
     b: Float[Array, "1 Dy"]
-    A_vec: Float[Array, "Dy*Da-Dy*(Dy-1)/2"]
+    A: Float[Array, "1 Dy Da"]
     W: Float[Array, "Dk Dx+1"]
-    Sigma: Float[Array, "1 Dy Dy"] = field(default=None)
-    Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
-    ln_det_Sigma: Float[Array, "1"] = field(init=False)
+    Sigma: Float[Array, "1 Dy Dy"]
+    Lambda: Float[Array, "1 Dy Dy"]
+    ln_det_Sigma: Float[Array, "1"]
 
     def link_function(self, h: Float[Array, "..."]) -> Float[Array, "..."]:
         """Link function for the heteroscedastic noise."""
@@ -1596,14 +1565,14 @@ class HeteroscedasticHeavisideConditional(HeteroscedasticConditional):
 
 
 @dataclass(kw_only=True)
-class HeteroscedasticReLUConditional(HeteroscedasticConditional):
+class HeteroscedasticReLUConditional(HeteroscedasticBaseConditional):
     M: Float[Array, "1 Dy Dx"]
     b: Float[Array, "1 Dy"]
-    A_vec: Float[Array, "Dy*Da-Dy*(Dy-1)/2"]
+    A: Float[Array, "1 Dy Da"]
     W: Float[Array, "Dk Dx+1"]
-    Sigma: Float[Array, "1 Dy Dy"] = field(default=None)
-    Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
-    ln_det_Sigma: Float[Array, "1"] = field(init=False)
+    Sigma: Float[Array, "1 Dy Dy"]
+    Lambda: Float[Array, "1 Dy Dy"]
+    ln_det_Sigma: Float[Array, "1"]
 
     def link_function(self, h: Float[Array, "..."]) -> Float[Array, "..."]:
         """Link function for the heteroscedastic noise."""
@@ -1747,3 +1716,94 @@ class HeteroscedasticReLUConditional(HeteroscedasticConditional):
             return cubic_integral[None], quartic_integral[None]
         else:
             return cubic_integral[None]
+        
+@dataclass(kw_only=True) 
+class HeteroscedasticConditional:
+    M: Float[Array, "1 Dy Dx"]
+    b: Float[Array, "1 Dy"]
+    A_vec: Float[Array, "Dy*Da-Dy*(Dy-1)/2"]
+    W: Float[Array, "Dk Dx+1"]
+    link_function: str = field(default="exp")
+    Sigma: Float[Array, "1 Dy Dy"] = field(init=False)
+    Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
+    ln_det_Sigma: Float[Array, "1"] = field(init=False)
+    conditional: HeteroscedasticBaseConditional = field(init=False)
+    
+    def __post_init__(
+        self,
+    ):
+        if self.R != 1:
+            raise NotImplementedError("So far only R=1 is supported.")
+        try:
+            assert self.Dy <= self.Da
+        except AssertionError:
+            raise NotImplementedError("A must have at least as many rows as columns.")
+        try:
+            assert self.Dk <= self.Da
+        except AssertionError:
+            raise NotImplementedError(
+                "Diagonal matrix can have at most as many entries as A has columns."
+            )
+
+        self.Sigma = jnp.einsum("abc,adc->abd", self.A, self.A)
+        self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
+        self.conditional = self.conditional_class_dict[self.link_function](
+            M=self.M, b=self.b, A=self.A, W=self.W, Sigma=self.Sigma, 
+            Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
+        
+    @property
+    def R(self) -> int:
+        """Number of conditionals (leading dimension)."""
+        return self.M.shape[0]
+
+    @property
+    def Dy(self) -> int:
+        r"""Dimensionality of :math:`Y`."""
+        return self.M.shape[1]
+
+    @property
+    def Dx(self) -> int:
+        r"""Dimensionality of :math:`X`."""
+        return self.M.shape[2]
+
+    @property
+    def Da(self) -> int:
+        r"""Number of orthonormal low rank vectors :math:`U`."""
+        return (self.A_vec.shape[0] - self.Dy * (self.Dy + 1) // 2) // self.Dy + self.Dy
+
+    @property
+    def Dk(self) -> int:
+        r"""Number of orthonormal low rank vectors :math:`U`."""
+        return self.W.shape[0]
+    
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        return self.conditional(*args, **kwds)
+        
+    @property
+    def A(self) -> Float[Array, "1 Dy Da"]:
+        num_entries_triangular = self.Dy * (self.Dy + 1) // 2
+        indices = jnp.triu_indices(self.Dy)  # Generate upper triangular indices
+        A_tria = jnp.zeros((self.Dy, self.Dy))  # Create an initial matrix of zeros
+        A_tria = A_tria.at[indices].set(self.A_vec[:num_entries_triangular])
+        A_ntria = self.A_vec[num_entries_triangular:].reshape(
+            self.Dy, self.Da - self.Dy
+        )
+        A = jnp.array([jnp.concatenate([A_tria, A_ntria], axis=1)])
+        return A
+    
+    # called when an attribute is not found:
+    # source: https://stackoverflow.com/questions/65754399/conditional-inheritance-based-on-arguments-in-python
+    def __getattr__(self, name):
+        # assume it is implemented by self.instance
+        return self.conditional.__getattribute__(name)
+    
+    @property
+    def conditional_class_dict(self) -> dict:
+        return {
+            "exp": HeteroscedasticExpConditional,
+            "coshm1": HeteroscedasticCoshM1Conditional,
+            "heaviside": HeteroscedasticHeavisideConditional,
+            "ReLU": HeteroscedasticReLUConditional,
+        }
+        
+    

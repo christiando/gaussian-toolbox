@@ -125,11 +125,12 @@ class TestHeteroscedasticExpConditional:
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
-        cond = approximate_conditional.HeteroscedasticExpConditional(
+        cond = approximate_conditional.HeteroscedasticConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
             A_vec=A_vec,
             W=W,
+            link_function="exp",
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
         Sigma_x = self.get_pd_matrix(R, Dx)  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
@@ -202,11 +203,12 @@ class TestHeteroscedasticCoshM1Conditional(TestHeteroscedasticExpConditional):
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
-        cond = approximate_conditional.HeteroscedasticCoshM1Conditional(
+        cond = approximate_conditional.HeteroscedasticConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
             A_vec=A_vec,
             W=W,
+            link_function="coshm1",
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
         Sigma_x = self.get_pd_matrix(R, Dx)  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
@@ -224,11 +226,12 @@ class TestHeteroscedasticReLUConditional(TestHeteroscedasticExpConditional):
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
-        cond = approximate_conditional.HeteroscedasticReLUConditional(
+        cond = approximate_conditional.HeteroscedasticConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
             A_vec=A_vec,
             W=W,
+            link_function="ReLU",
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
         Sigma_x = self.get_pd_matrix(R, Dx)  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
@@ -246,11 +249,12 @@ class TestHeteroscedasticHeavisideConditional:
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
-        cond = approximate_conditional.HeteroscedasticHeavisideConditional(
+        cond = approximate_conditional.HeteroscedasticConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
             A_vec=A_vec,
             W=W,
+            link_function="heaviside",
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
         Sigma_x = self.get_pd_matrix(R, Dx)  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
