@@ -9,6 +9,7 @@ import jax
 
 config.update("jax_enable_x64", True)
 import numpy as np
+
 np.random.seed(0)
 
 
@@ -120,23 +121,18 @@ class TestHeteroscedasticExpConditional:
         C = jnp.array(np.random.randn(Dy, Dx))
         C = C / jnp.sqrt(jnp.sum(C**2, axis=0))[None]
         d = 1e-1 * jnp.array(np.random.randn(Dy))
-        rand_mat = np.random.rand(Dy, Dy) - 0.5
-        Q, _ = np.linalg.qr(rand_mat)
-        # self.U = jnp.eye(Dx)[:, :Du]
-        A = jnp.array(np.random.randn(Dy, Da))
+        A_vec = jnp.array(np.random.randn(Dy * Da - Dy * (Dy - 1) // 2))
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
         cond = approximate_conditional.HeteroscedasticExpConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
-            A=jnp.array([A]),
+            A_vec=A_vec,
             W=W,
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
-        Sigma_x = self.get_pd_matrix(
-            R, Dx
-        )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        Sigma_x = self.get_pd_matrix(R, Dx)  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
 
@@ -193,35 +189,30 @@ class TestHeteroscedasticExpConditional:
         integral_sample_mean = jnp.mean(cond(X_sample[:, 0]).evaluate_ln(y), axis=0)
         integral_sample_std = jnp.std(cond(X_sample[:, 0]).evaluate_ln(y), axis=0)
 
-        assert jnp.all(integral_lb <= integral_sample_mean + .1 * integral_sample_std)
-        
-        
+        assert jnp.all(integral_lb <= integral_sample_mean + 0.1 * integral_sample_std)
+
+
 class TestHeteroscedasticCoshM1Conditional(TestHeteroscedasticExpConditional):
     @classmethod
     def create_instance(self, R, Dx, Dy, Da, Dk):
         C = jnp.array(np.random.randn(Dy, Dx))
         C = C / jnp.sqrt(jnp.sum(C**2, axis=0))[None]
         d = 1e-1 * jnp.array(np.random.randn(Dy))
-        rand_mat = np.random.rand(Dy, Dy) - 0.5
-        Q, _ = np.linalg.qr(rand_mat)
-        # self.U = jnp.eye(Dx)[:, :Du]
-        A = jnp.array(np.random.randn(Dy, Da))
+        A_vec = jnp.array(np.random.randn(Dy * Da - Dy * (Dy - 1) // 2))
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
         cond = approximate_conditional.HeteroscedasticCoshM1Conditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
-            A=jnp.array([A]),
+            A_vec=A_vec,
             W=W,
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
-        Sigma_x = self.get_pd_matrix(
-            R, Dx
-        )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        Sigma_x = self.get_pd_matrix(R, Dx)  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
-    
+
 
 class TestHeteroscedasticReLUConditional(TestHeteroscedasticExpConditional):
     @classmethod
@@ -229,23 +220,18 @@ class TestHeteroscedasticReLUConditional(TestHeteroscedasticExpConditional):
         C = jnp.array(np.random.randn(Dy, Dx))
         C = C / jnp.sqrt(jnp.sum(C**2, axis=0))[None]
         d = 1e-1 * jnp.array(np.random.randn(Dy))
-        rand_mat = np.random.rand(Dy, Dy) - 0.5
-        Q, _ = np.linalg.qr(rand_mat)
-        # self.U = jnp.eye(Dx)[:, :Du]
-        A = jnp.array(np.random.randn(Dy, Da))
+        A_vec = jnp.array(np.random.randn(Dy * Da - Dy * (Dy - 1) // 2))
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
         cond = approximate_conditional.HeteroscedasticReLUConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
-            A=jnp.array([A]),
+            A_vec=A_vec,
             W=W,
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
-        Sigma_x = self.get_pd_matrix(
-            R, Dx
-        )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        Sigma_x = self.get_pd_matrix(R, Dx)  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
 
@@ -256,23 +242,18 @@ class TestHeteroscedasticHeavisideConditional:
         C = jnp.array(np.random.randn(Dy, Dx))
         C = C / jnp.sqrt(jnp.sum(C**2, axis=0))[None]
         d = 1e-1 * jnp.array(np.random.randn(Dy))
-        rand_mat = np.random.rand(Dy, Dy) - 0.5
-        Q, _ = np.linalg.qr(rand_mat)
-        # self.U = jnp.eye(Dx)[:, :Du]
-        A = jnp.array(np.random.randn(Dy, Da))
+        A_vec = jnp.array(np.random.randn(Dy * Da - Dy * (Dy - 1) // 2))
         W = 1e-1 * np.random.randn(Dk, Dx + 1)
         W[:, 0] = 0
         W = jnp.array(W)
         cond = approximate_conditional.HeteroscedasticHeavisideConditional(
             M=jnp.array([C]),
             b=jnp.array([d]),
-            A=jnp.array([A]),
+            A_vec=A_vec,
             W=W,
         )
         mu_x = jnp.array(np.random.randn(R, Dx))
-        Sigma_x = self.get_pd_matrix(
-            R, Dx
-        )  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
+        Sigma_x = self.get_pd_matrix(R, Dx)  # jnp.tile(jnp.eye(Dx)[None], (R, 1, 1))#
         p_X = pdf.GaussianPDF(Sigma=Sigma_x, mu=mu_x)
         return cond, p_X
 
@@ -325,9 +306,11 @@ class TestHeteroscedasticHeavisideConditional:
         key, subkey = jax.random.split(key)
         N = 10
         cond, p_X = self.create_instance(R, Dx, Dy, Da, Dk)
-        p_X_tiled = pdf.GaussianPDF(Sigma=jnp.tile(p_X.Sigma, (N,1,1)), mu=jnp.tile(p_X.mu, (N,1)))
+        p_X_tiled = pdf.GaussianPDF(
+            Sigma=jnp.tile(p_X.Sigma, (N, 1, 1)), mu=jnp.tile(p_X.mu, (N, 1))
+        )
         p_Y = cond.affine_marginal_transformation(p_X)
-        y = p_Y.sample(subkey, N)[:,0]
+        y = p_Y.sample(subkey, N)[:, 0]
         print(y.shape, p_X_tiled.R)
         integral_lb = cond.integrate_log_conditional_y(p_X_tiled, y=y)
         key, subkey = jax.random.split(key)
@@ -335,4 +318,6 @@ class TestHeteroscedasticHeavisideConditional:
         integral_sample_mean = jnp.mean(cond(X_sample[:, 0]).evaluate_ln(y), axis=0)
         integral_sample_std = jnp.std(cond(X_sample[:, 0]).evaluate_ln(y), axis=0)
         print(integral_lb, integral_sample_mean, integral_sample_std)
-        assert jnp.allclose(integral_lb, integral_sample_mean, atol=1e-1 * integral_sample_std)
+        assert jnp.allclose(
+            integral_lb, integral_sample_mean, atol=1e-1 * integral_sample_std
+        )
