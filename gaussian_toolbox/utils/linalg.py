@@ -68,20 +68,29 @@ def invert_block_matrix(
     B: Float[Array, "R L L"],
     C: Float[Array, "R D L"],
     ln_det_A: Float[Array, "R"],
+    A_is_up: bool = True,
 ) -> Tuple[Float[Array, "R D+L D+L"], Float[Array, "R"]]:
     """
     Invert a block matrix of the form
 
     [[A  C]              [[P  S],
      [C' B]], given by    [S' Q]].
+
+    If A_is_up is False, then the matrix is given by
+
+    [[B C']
+     [C  A]].
     """
-    assert A_inv.shape[0] == B.shape[0] == C.shape[0]
-    assert B.shape[-1] == C.shape[-1]
+    if not A_is_up:
+        C = C.transpose((0, 2, 1))
     AC = jnp.einsum("abc, abd -> acd", A_inv, C)
     D_CAC = B - jnp.einsum("abc, abd -> acd", AC, C)
     Q, ln_det_D_CAC = invert_matrix(D_CAC)
     S = -jnp.einsum("abc, acd -> abd", AC, Q)
     P = A_inv + jnp.einsum("abc, adc -> abd", -S, AC)
-    mat_inv = jnp.block([[P, S], [S.transpose((0, 2, 1)), Q]])
+    if A_is_up:
+        mat_inv = jnp.block([[P, S], [S.transpose((0, 2, 1)), Q]])
+    else:
+        mat_inv = jnp.block([[Q, S.transpose((0, 2, 1))], [S, P]])
     ln_det_mat = ln_det_A + ln_det_D_CAC
     return mat_inv, ln_det_mat

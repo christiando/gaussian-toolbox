@@ -64,10 +64,14 @@ def test_block_matrix_inversions(R, D, L):
     M = random.uniform(subkey, (R, D, L))
     B = random.uniform(subkey, (R, L, L))
     B = L * jnp.eye(L)[None] + jnp.einsum("abc,abd->acd", B, B)
+    B_inv, ln_det_B = invert_matrix(B)
     mat = jnp.block([[A, M], [M.transpose((0,2,1)), B]])
     mat_inv, ln_det_mat = invert_matrix(mat)
     mat_inv2, ln_det_mat2 = invert_block_matrix(A_inv, B, M, ln_det_A)
     assert jnp.allclose(mat_inv, mat_inv2)
     assert jnp.allclose(ln_det_mat, ln_det_mat2)
+    mat_inv3, ln_det_mat3 = invert_block_matrix(B_inv, A, M, ln_det_B, False)
+    assert jnp.allclose(mat_inv, mat_inv3)
+    assert jnp.allclose(ln_det_mat, ln_det_mat3)
     
     
