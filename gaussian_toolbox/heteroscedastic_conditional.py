@@ -3,7 +3,7 @@ __author__ = "Christian Donner"
 from jax import numpy as jnp
 from typing import Any, Tuple, Union
 from . import pdf, factor, measure, conditional
-from .utils.linalg import invert_matrix, invert_woodbury_diag
+from .utils import linalg
 
 from .utils.dataclass import dataclass
 from jaxtyping import Array, Float
@@ -13,6 +13,7 @@ from dataclasses import field
 from jax import vmap
 from abc import abstractmethod
 from gaussian_toolbox.experimental import truncated_measure
+
 
 @dataclass(kw_only=True)
 class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
@@ -113,13 +114,13 @@ class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
         D_x = self.link_function(h)
         Sigma = self.Sigma + jnp.einsum(
             "abc,dc->abd",
-            jnp.einsum("ab,cb->cab", self.A[0, :, : self.Dk], D_x),
-            self.A[0, :, : self.Dk],
+            jnp.einsum("ab,cb->cab", self.A[0, :, -self.Dk :], D_x),
+            self.A[0, :, -self.Dk :],
         )
         if invert:
             G_x = D_x / (1 + D_x)  # [N x Dk]
             A_inv = jnp.einsum(
-                "ab,bc->ac", self.Lambda[0], self.A[0, :, : self.Dk]
+                "ab,bc->ac", self.Lambda[0], self.A[0, :, -self.Dk :]
             )  # [Dy x Dk] # [N x Dy x Dk]
             Lambda = self.Lambda - jnp.einsum(
                 "abc,dc->abd", jnp.einsum("ab,cb->cab", A_inv, G_x), A_inv
@@ -181,13 +182,19 @@ class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
         # rotation_mat_int = jnp.eye(self.Dy)[None] + jnp.einsum(
         #    "abc,dc->abd", self.U[None] * D_int[:, None], self.U
         # )
-        Sigma_int = (
-            self.Sigma
-            + jnp.einsum(
-                "ab,cb->ac",
-                jnp.einsum("ab,b->ab", self.A[0, :, : self.Dk], D_int),
-                self.A[0, :, : self.Dk],
-            )[None]
+        # Sigma_int = (
+        #     self.Sigma
+        #     + jnp.einsum(
+        #         "ab,cb->ac",
+        #         jnp.einsum("ab,b->ab", self.A[0, :, : self.Dk], D_int),
+        #         self.A[0, :, : self.Dk],
+        #     )[None]
+        # )
+        Sigma_int = self.Sigma + jnp.einsum(
+            "b, adb, aeb -> ade",
+            D_int,
+            self.A[:, :, -self.Dk :],
+            self.A[:, :, -self.Dk :],
         )
         Sigma_int = 0.5 * (Sigma_int + jnp.swapaxes(Sigma_int, -2, -1))
         return Sigma_int
@@ -228,11 +235,13 @@ class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
             Returns the expected mean and covariance.
         """
         mu_y = self.get_conditional_mu(p_x.mu)[0]
-        #Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
+        # Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
         #    "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
-        #)
-        #Sigma_y = Eyy - mu_y[:, None] * mu_y[:, :, None]
-        Sigma_y = self.integrate_Sigma_x(p_x) + jnp.einsum('abc, adb, aec -> ade', p_x.Sigma, self.M, self.M)
+        # )
+        # Sigma_y = Eyy - mu_y[:, None] * mu_y[:, :, None]
+        Sigma_y = self.integrate_Sigma_x(p_x) + jnp.einsum(
+            "abc, adb, aec -> ade", p_x.Sigma, self.M, self.M
+        )
         Sigma_y = 0.5 * (Sigma_y + jnp.swapaxes(Sigma_y, axis1=-1, axis2=-2))
         return mu_y, Sigma_y
 
@@ -245,10 +254,12 @@ class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
         Returns:
             Cross expectations.
         """
-        Eyx = p_x.integrate(
-            "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=None, b_vec=None
-        )
-        return Eyx
+        cross_cov = jnp.einsum("abc, adb -> adc", p_x.Sigma, self.M)
+        # Eyx = p_x.integrate(
+        #    "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=None, b_vec=None
+        # )
+        # return Eyx
+        return cross_cov
 
     def affine_joint_transformation(
         self, p_x: pdf.GaussianPDF, **kwargs
@@ -281,15 +292,21 @@ class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
             Joint distribution of :math:`p(x,y)`.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        Eyx = self.get_expected_cross_terms(p_x)
-        mu_x = p_x.mu
-        cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
-        mu_xy = jnp.concatenate([mu_x, mu_y], axis=1)
-        Sigma_xy1 = jnp.concatenate(
-            [p_x.Sigma, jnp.swapaxes(cov_yx, axis1=1, axis2=2)], axis=2
+        cov_yx = self.get_expected_cross_terms(p_x)
+        # Eyx = self.get_expected_cross_terms(p_x)
+        # mu_x = p_x.mu
+        # cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
+        mu_xy = jnp.concatenate([p_x.mu, mu_y], axis=1)
+        # Sigma_xy1 = jnp.concatenate(
+        #    [p_x.Sigma, jnp.swapaxes(cov_yx, axis1=1, axis2=2)], axis=2
+        # )
+        # Sigma_xy2 = jnp.concatenate([cov_yx, Sigma_y], axis=2)
+        # Sigma_xy = jnp.concatenate([Sigma_xy1, Sigma_xy2], axis=1)
+        print(p_x.Sigma.shape, cov_yx.shape, Sigma_y.shape)
+        Sigma_xy = jnp.block(
+            [[p_x.Sigma, cov_yx.transpose((0, 2, 1))], [cov_yx, Sigma_y]]
         )
-        Sigma_xy2 = jnp.concatenate([cov_yx, Sigma_y], axis=2)
-        Sigma_xy = jnp.concatenate([Sigma_xy1, Sigma_xy2], axis=1)
+        print(Sigma_xy.shape, mu_xy.shape)
         p_xy = pdf.GaussianPDF(Sigma=Sigma_xy, mu=mu_xy)
         return p_xy
 
@@ -309,12 +326,13 @@ class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
             Conditional density of :math:`p(X|Y)`.
         """
         mu_y, Sigma_y = self.get_expected_moments(p_x)
-        Lambda_y = invert_matrix(Sigma_y)[0]
-        Eyx = self.get_expected_cross_terms(p_x)
-        mu_x = p_x.mu
-        cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
+        Lambda_y = linalg.invert_matrix(Sigma_y)[0]
+        cov_yx = self.get_expected_cross_terms(p_x)
+        # Eyx = self.get_expected_cross_terms(p_x)
+        # mu_x = p_x.mu
+        # cov_yx = Eyx - mu_y[:, :, None] * mu_x[:, None]
         M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
-        b_new = mu_x - jnp.einsum("abc,ac->ab", M_new, mu_y)
+        b_new = p_x.mu - jnp.einsum("abc,ac->ab", M_new, mu_y)
         Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
         # Sigma_new = 0.5 * (Sigma_new + jnp.swapaxes(Sigma_new, -1, -2))
         cond_p_xy = conditional.ConditionalGaussianPDF(
@@ -407,7 +425,7 @@ class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
             B_mat=-self.M,
             b_vec=y - self.b,
         )
-        A_inv = jnp.einsum("abc,acd->abd", self.Lambda, self.A[:, :, : self.Dk])[0]
+        A_inv = jnp.einsum("abc,acd->abd", self.Lambda, self.A[:, :, -self.Dk :])[0]
         get_lb_heteroscedastic_term = jnp.sum(
             vmap(lambda W, A_inv: self.get_lb_heteroscedastic_term_i(p_x, y, W, A_inv))(
                 self.W, A_inv.T
@@ -1041,8 +1059,9 @@ class HeteroscedasticReLUConditional(HeteroscedasticBaseConditional):
             return cubic_integral[None], quartic_integral[None]
         else:
             return cubic_integral[None]
-        
-@dataclass(kw_only=True) 
+
+
+@dataclass(kw_only=True)
 class HeteroscedasticConditional:
     M: Float[Array, "1 Dy Dx"]
     b: Float[Array, "1 Dy"]
@@ -1052,8 +1071,8 @@ class HeteroscedasticConditional:
     Sigma: Float[Array, "1 Dy Dy"] = field(init=False)
     Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
     ln_det_Sigma: Float[Array, "1"] = field(init=False)
-    conditional: HeteroscedasticBaseConditional = field(init=False)
-    
+    conditional_instance: HeteroscedasticBaseConditional = field(init=False)
+
     def __post_init__(
         self,
     ):
@@ -1071,11 +1090,17 @@ class HeteroscedasticConditional:
             )
 
         self.Sigma = jnp.einsum("abc,adc->abd", self.A, self.A)
-        self.Lambda, self.ln_det_Sigma = invert_matrix(self.Sigma)
-        self.conditional = self.conditional_class_dict[self.link_function](
-            M=self.M, b=self.b, A=self.A, W=self.W, Sigma=self.Sigma, 
-            Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
-        
+        self.Lambda, self.ln_det_Sigma = linalg.invert_matrix(self.Sigma)
+        self.conditional_instance = self.conditional_class_dict[self.link_function](
+            M=self.M,
+            b=self.b,
+            A=self.A,
+            W=self.W,
+            Sigma=self.Sigma,
+            Lambda=self.Lambda,
+            ln_det_Sigma=self.ln_det_Sigma,
+        )
+
     @property
     def R(self) -> int:
         """Number of conditionals (leading dimension)."""
@@ -1100,10 +1125,10 @@ class HeteroscedasticConditional:
     def Dk(self) -> int:
         r"""Number of orthonormal low rank vectors :math:`U`."""
         return self.W.shape[0]
-    
+
     def __call__(self, *args: Any, **kwds: Any) -> Any:
-        return self.conditional(*args, **kwds)
-        
+        return self.conditional_instance(*args, **kwds)
+
     @property
     def A(self) -> Float[Array, "1 Dy Da"]:
         num_entries_triangular = self.Dy * (self.Dy + 1) // 2
@@ -1115,13 +1140,13 @@ class HeteroscedasticConditional:
         )
         A = jnp.array([jnp.concatenate([A_tria, A_ntria], axis=1)])
         return A
-    
+
     # called when an attribute is not found:
     # source: https://stackoverflow.com/questions/65754399/conditional-inheritance-based-on-arguments-in-python
     def __getattr__(self, name):
         # assume it is implemented by self.instance
-        return self.conditional.__getattribute__(name)
-    
+        return self.conditional_instance.__getattribute__(name)
+
     @property
     def conditional_class_dict(self) -> dict:
         return {
@@ -1130,9 +1155,9 @@ class HeteroscedasticConditional:
             "heaviside": HeteroscedasticHeavisideConditional,
             "ReLU": HeteroscedasticReLUConditional,
         }
-        
-        
-@dataclass(kw_only=True) 
+
+
+@dataclass(kw_only=True)
 class ScalableHeteroscedasticConditional(HeteroscedasticConditional):
     M: Float[Array, "1 Dy Dx"]
     b: Float[Array, "1 Dy"]
@@ -1142,8 +1167,8 @@ class ScalableHeteroscedasticConditional(HeteroscedasticConditional):
     Sigma: Float[Array, "1 Dy Dy"] = field(init=False)
     Lambda: Float[Array, "1 Dy Dy"] = field(init=False)
     ln_det_Sigma: Float[Array, "1"] = field(init=False)
-    conditional: HeteroscedasticBaseConditional = field(init=False)
-    
+    conditional_instance: HeteroscedasticBaseConditional = field(init=False)
+
     def __post_init__(
         self,
     ):
@@ -1161,16 +1186,26 @@ class ScalableHeteroscedasticConditional(HeteroscedasticConditional):
             )
 
         i, j = jnp.diag_indices(self.Dy)
-        Sigma = jnp.einsum("abc,adc->abd", self.A[:,:,self.Dy:], self.A[:,:,self.Dy:])
-        self.Sigma = Sigma.at[...,i,j].add(self.A[...,i,j]**2)
-        self.Lambda, self.ln_det_Sigma = invert_woodbury_diag(A_diagonal=self.A[...,i,j]**2,
-                                                             B_inv=jnp.eye(self.Da-self.Dy)[None],
-                                                             M=self.A[:,:,self.Dy:],
-                                                             ln_det_B=jnp.zeros(self.R))
-        self.conditional = self.conditional_class_dict[self.link_function](
-            M=self.M, b=self.b, A=self.A, W=self.W, Sigma=self.Sigma, 
-            Lambda=self.Lambda, ln_det_Sigma=self.ln_det_Sigma)
-    
+        Sigma = jnp.einsum(
+            "abc,adc->abd", self.A[:, :, self.Dy :], self.A[:, :, self.Dy :]
+        )
+        self.Sigma = Sigma.at[..., i, j].add(self.A[..., i, j] ** 2)
+        self.Lambda, self.ln_det_Sigma = linalg.invert_woodbury_diag(
+            A_diagonal=self.A[..., i, j] ** 2,
+            B_inv=jnp.eye(self.Da - self.Dy)[None],
+            M=self.A[:, :, self.Dy :],
+            ln_det_B=jnp.zeros(self.R),
+        )
+        self.conditional_instance = self.conditional_class_dict[self.link_function](
+            M=self.M,
+            b=self.b,
+            A=self.A,
+            W=self.W,
+            Sigma=self.Sigma,
+            Lambda=self.Lambda,
+            ln_det_Sigma=self.ln_det_Sigma,
+        )
+
     @property
     def Da(self) -> int:
         r"""Number of orthonormal low rank vectors :math:`U`."""
@@ -1182,13 +1217,205 @@ class ScalableHeteroscedasticConditional(HeteroscedasticConditional):
         indices = jnp.diag_indices(self.Dy)  # Generate upper triangular indices
         A_tria = jnp.zeros((self.Dy, self.Dy))  # Create an initial matrix of zeros
         A_tria = A_tria.at[indices].set(self.A_vec[:num_entries_diag])
-        A_ntria = self.A_vec[num_entries_diag:].reshape(
-            self.Dy, self.Da - self.Dy
-        )
+        A_ntria = self.A_vec[num_entries_diag:].reshape(self.Dy, self.Da - self.Dy)
         A = jnp.array([jnp.concatenate([A_tria, A_ntria], axis=1)])
         return A
-    
 
-    
+    def integrate_Sigma_x(
+        self, p_x: pdf.GaussianPDF, invert: bool = False
+    ) -> Float[Array, "Dy Dy"]:
+        r"""Integrate covariance with respect to :math:`p(X)`.
+
+        .. math::
+
+            \int \Sigma_Y(X)p(X) {\rm d}X.
+
+        Args:
+            p_x: The density the covatiance is integrated with.
+
+        Returns:
+            Integrated covariance matrix.
+        """
+        # int f(h(z)) dphi(z)
+        D_int = self._integrate_noise_diagonal(p_x)
+        # rotation_mat_int = jnp.eye(self.Dy)[None] + jnp.einsum(
+        #    "abc,dc->abd", self.U[None] * D_int[:, None], self.U
+        # )
+        Sigma_int = self.Sigma + jnp.einsum(
+            "b, adb, aeb -> ade",
+            D_int,
+            self.A[:, :, -self.Dk :],
+            self.A[:, :, -self.Dk :],
+        )
+        if invert:
+            D = jnp.array([jnp.diag(D_int)])
+            D_inv, ln_det_D = linalg.invert_diagonal(D)
+            Lambda_int, ln_det_Sigma_int = linalg.invert_woodbury(
+                self.Lambda,
+                D_inv,
+                self.A[:, :, -self.Dk :],
+                self.ln_det_Sigma,
+                ln_det_D,
+            )
+            return Sigma_int, Lambda_int, ln_det_Sigma_int
+        else:
+            return Sigma_int
+
+    def get_expected_moments(
+        self, p_x: pdf.GaussianPDF, invert: bool = False
+    ) -> Tuple[Float[Array, "R Dy"], Float[Array, "1 Dy Dy"]]:
+        r"""Compute the expected mean and covariance
+
+        .. math::
+
+            \mu_y = \mathbb{E}[y] = M \mathbb{E}[x] + b
+
+        .. math::
+
+            \Sigma_y = \mathbb{E}[yy'] - \mu_y \mu_y^\top = \sigma_x^2 I + \sum_i U_i \mathbb{E}[D_i(x)] U_i^\top + \mathbb{E}[\mu(x)\mu(x)^\top] - \mu_y \mu_y^\top
+
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Returns the expected mean and covariance.
+        """
+        mu_y = self.get_conditional_mu(p_x.mu)[0]
+        # Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
+        #    "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
+        # )
+        # Sigma_y = Eyy - mu_y[:, None] * mu_y[:, :, None]
+
+        if invert:
+            Sigma_int, Lambda_int, ln_det_Sigma_int = self.integrate_Sigma_x(
+                p_x, invert=True
+            )
+            Sigma_y = Sigma_int + jnp.einsum(
+                "abc, adb, aec -> ade", p_x.Sigma, self.M, self.M
+            )
+            Lambda_y, ln_det_Sigma_y = linalg.invert_woodbury(
+                Lambda_int, p_x.Lambda, self.M, ln_det_Sigma_int, p_x.ln_det_Sigma
+            )
+            return mu_y, Sigma_y, Lambda_y, ln_det_Sigma_y
+        else:
+            Sigma_y = self.integrate_Sigma_x(p_x) + jnp.einsum(
+                "abc, adb, aec -> ade", p_x.Sigma, self.M, self.M
+            )
+            return mu_y, Sigma_y
+
+    def affine_joint_transformation(
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
+        r"""Get an approximation of the joint density
         
-    
+        .. math::
+
+            p(x,y) ~= {\cal N}(\mu_{xy},\Sigma_{xy}),
+
+        The mean is given by
+        
+        .. math::
+
+            \mu_{xy} = (\mu_x, \mu_y)^\top
+
+        with :math:`\mu_y = \mathbb{E}[\mu_y(x)]`. The covariance is given by
+
+        .. math::
+        
+            \Sigma_{xy} = \begin{pmatrix}
+                            \Sigma_x & \mathbb{E}[xy^\top] - \mu_x\mu_y^\top \\
+                            \mathbb{E}[yx^\top] - \mu_y\mu_x^\top & \mathbb{E}[yy^\top] - \mu_y\mu_y^\top
+                        \end{pmatrix}.
+
+        Args:
+            p_x: The density which we average over.
+
+        Returns:
+            Joint distribution of :math:`p(x,y)`.
+        """
+        mu_y, Sigma_y, Lambda_y, ln_det_Sigma_y = self.get_expected_moments(
+            p_x, invert=True
+        )
+        cov_yx = self.get_expected_cross_terms(p_x)
+        mu_xy = jnp.concatenate([p_x.mu, mu_y], axis=1)
+        print(p_x.Sigma.shape, cov_yx.shape, Sigma_y.shape)
+        Sigma_xy = jnp.block(
+            [[p_x.Sigma, cov_yx.transpose((0, 2, 1))], [cov_yx, Sigma_y]]
+        )
+        Lambda_xy, ln_det_Sigma_xy = linalg.invert_block_matrix(
+            Lambda_y,
+            p_x.Sigma,
+            cov_yx.transpose((0, 2, 1)),
+            ln_det_Sigma_y,
+            A_is_up=False,
+        )
+        print(Sigma_xy.shape, mu_xy.shape)
+        p_xy = pdf.GaussianPDF(
+            Sigma=Sigma_xy, mu=mu_xy, Lambda=Lambda_xy, ln_det_Sigma=ln_det_Sigma_xy
+        )
+        return p_xy
+
+    def affine_conditional_transformation(
+        self, p_x: pdf.GaussianPDF
+    ) -> conditional.ConditionalGaussianPDF:
+        r"""Get an approximation of the joint density via moment matching
+
+        .. math::
+
+            p(X|Y) \approx {\cal N}(\mu_{X|Y},\Sigma_{X|Y}).
+
+        Args:
+            p_x: Marginal Gaussian density over :math:`X`.
+
+        Returns:
+            Conditional density of :math:`p(X|Y)`.
+        """
+        mu_y, Sigma_y, Lambda_y, ln_det_Sigma_y = self.get_expected_moments(
+            p_x, invert=True
+        )
+        cov_yx = self.get_expected_cross_terms(p_x)
+        M_new = jnp.einsum("abc,abd->acd", cov_yx, Lambda_y)
+        b_new = p_x.mu - jnp.einsum("abc,ac->ab", M_new, mu_y)
+        Sigma_new = p_x.Sigma - jnp.einsum("abc,acd->abd", M_new, cov_yx)
+
+        cond_p_xy = conditional.ConditionalGaussianPDF(
+            M=M_new,
+            b=b_new,
+            Sigma=Sigma_new,
+        )
+        return cond_p_xy
+
+    def affine_marginal_transformation(
+        self, p_x: pdf.GaussianPDF, **kwargs
+    ) -> pdf.GaussianPDF:
+        r"""Get an approximation of the marginal density
+
+        .. math
+
+            p(Y) \approx N(\mu_Y,\Sigma_Y),
+
+        The mean is given by
+
+        .. math::
+
+            \mu_Y = \mathbb{E}[\mu_Y(X)].
+
+        The covariance is given by
+
+        .. math::
+
+            \Sigma_y = \mathbb{E}[YY^\top] - \mu_Y\mu_Y^\top.
+
+        Args:
+            p_x: Marginal Gaussian density over :math`X`.
+
+        Returns:
+            The marginal density :math:`p(Y)`.
+        """
+        mu_y, Sigma_y, Lambda_y, ln_det_Sigma_y = self.get_expected_moments(
+            p_x, invert=True
+        )
+        p_y = pdf.GaussianPDF(
+            Sigma=Sigma_y, mu=mu_y, Lambda=Lambda_y, ln_det_Sigma=ln_det_Sigma_y
+        )
+        return p_y
