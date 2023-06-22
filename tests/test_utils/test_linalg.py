@@ -7,6 +7,7 @@ from gaussian_toolbox.utils.linalg import (
     invert_matrix,
     invert_woodbury_diag,
     invert_woodbury,
+    invert_block_matrix
 )
 import pytest
 
@@ -19,7 +20,7 @@ def test_matrix_inversions(R, D, L):
     key = random.PRNGKey(0)
     key, subkey = random.split(key)
     A = random.uniform(subkey, (R, D, D))
-    A = jnp.eye(D)[None] + jnp.einsum("abc,abd->acd", A, A)
+    A = D * jnp.eye(D)[None] + jnp.einsum("abc,abd->acd", A, A)
     A_inv, ln_det_A = invert_matrix(A)
 
     M = random.uniform(subkey, (R, D, L))
@@ -40,7 +41,7 @@ def test_matrix_inversions(R, D, L):
 
     M = random.uniform(subkey, (R, D, L))
     B = random.uniform(subkey, (R, L, L))
-    B = jnp.eye(L)[None] + jnp.einsum("abc,abd->acd", B, B)
+    B = L * jnp.eye(L)[None] + jnp.einsum("abc,abd->acd", B, B)
     B_inv, ln_det_B = invert_matrix(B)
     mat = A + jnp.einsum("abc, adb, aec->ade", B, M, M)
     mat_inv, ln_det_mat = invert_matrix(mat)
@@ -48,3 +49,25 @@ def test_matrix_inversions(R, D, L):
     mat_inv2, ln_det_mat2 = invert_woodbury_diag(A_diag, B_inv, M, ln_det_B)
     assert jnp.allclose(mat_inv, mat_inv2)
     assert jnp.allclose(ln_det_mat, ln_det_mat2)
+    
+    
+@pytest.mark.parametrize(
+    "R, D, L, ",
+    [(1, 5, 2), (10, 10, 3), (100, 2, 5), (100, 1, 1), (10, 1, 5), (2, 5, 1)],
+)
+def test_block_matrix_inversions(R, D, L):
+    key = random.PRNGKey(0)
+    key, subkey = random.split(key)
+    A = random.uniform(subkey, (R, D, D))
+    A = D * jnp.eye(D)[None] + jnp.einsum("abc,abd->acd", A, A)
+    A_inv, ln_det_A = invert_matrix(A)
+    M = random.uniform(subkey, (R, D, L))
+    B = random.uniform(subkey, (R, L, L))
+    B = L * jnp.eye(L)[None] + jnp.einsum("abc,abd->acd", B, B)
+    mat = jnp.block([[A, M], [M.transpose((0,2,1)), B]])
+    mat_inv, ln_det_mat = invert_matrix(mat)
+    mat_inv2, ln_det_mat2 = invert_block_matrix(A_inv, B, M, ln_det_A)
+    assert jnp.allclose(mat_inv, mat_inv2)
+    assert jnp.allclose(ln_det_mat, ln_det_mat2)
+    
+    
