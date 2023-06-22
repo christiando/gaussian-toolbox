@@ -228,10 +228,11 @@ class HeteroscedasticBaseConditional(conditional.ConditionalGaussianPDF):
             Returns the expected mean and covariance.
         """
         mu_y = self.get_conditional_mu(p_x.mu)[0]
-        Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
-            "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
-        )
-        Sigma_y = Eyy - mu_y[:, None] * mu_y[:, :, None]
+        #Eyy = self.integrate_Sigma_x(p_x) + p_x.integrate(
+        #    "(Ax+a)(Bx+b)'", A_mat=self.M, a_vec=self.b, B_mat=self.M, b_vec=self.b
+        #)
+        #Sigma_y = Eyy - mu_y[:, None] * mu_y[:, :, None]
+        Sigma_y = self.integrate_Sigma_x(p_x) + jnp.einsum('abc, adb, aec -> ade', p_x.Sigma, self.M, self.M)
         Sigma_y = 0.5 * (Sigma_y + jnp.swapaxes(Sigma_y, axis1=-1, axis2=-2))
         return mu_y, Sigma_y
 
