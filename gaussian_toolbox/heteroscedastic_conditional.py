@@ -1338,7 +1338,6 @@ class ScalableHeteroscedasticConditional(HeteroscedasticConditional):
         )
         cov_yx = self.get_expected_cross_terms(p_x)
         mu_xy = jnp.concatenate([p_x.mu, mu_y], axis=1)
-        print(p_x.Sigma.shape, cov_yx.shape, Sigma_y.shape)
         Sigma_xy = jnp.block(
             [[p_x.Sigma, cov_yx.transpose((0, 2, 1))], [cov_yx, Sigma_y]]
         )
@@ -1349,7 +1348,6 @@ class ScalableHeteroscedasticConditional(HeteroscedasticConditional):
             ln_det_Sigma_y,
             A_is_up=False,
         )
-        print(Sigma_xy.shape, mu_xy.shape)
         p_xy = pdf.GaussianPDF(
             Sigma=Sigma_xy, mu=mu_xy, Lambda=Lambda_xy, ln_det_Sigma=ln_det_Sigma_xy
         )
