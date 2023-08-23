@@ -213,8 +213,10 @@ class GaussianPDF(measure.GaussianMeasure):
         return conditional.ConditionalGaussianPDF(
             M=M_x, b=b_x, Sigma=Sigma_x, Lambda=Lambda_x, ln_det_Sigma=-ln_det_Lambda_x
         )
-        
-    def get_density_of_linear_sum(self, W: Float[Array, "R Dsum D"], b: Float[Array, "R Dsum"] = None) -> "GaussianPDF":
+
+    def get_density_of_linear_sum(
+        self, W: Float[Array, "R Dsum D"], b: Float[Array, "R Dsum"] = None
+    ) -> "GaussianPDF":
         """Returns density of linear sum of Gaussians.
 
         Args:
@@ -248,6 +250,13 @@ class GaussianPDF(measure.GaussianMeasure):
         }
         return density_dict
 
+    def tile(self, R_tile: int) -> "GaussianPDF":
+        return GaussianPDF(
+            Sigma=jnp.tile(self.Sigma, (R_tile, 1, 1)),
+            mu=jnp.tile(self.mu, (R_tile, 1)),
+            Lambda=jnp.tile(self.Lambda, (R_tile, 1, 1)),
+            ln_det_Sigma=jnp.tile(self.ln_det_Sigma, (R_tile)),
+        )
 
 
 @dataclass(kw_only=True)

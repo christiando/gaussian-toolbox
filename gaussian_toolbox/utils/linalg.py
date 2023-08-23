@@ -37,11 +37,38 @@ def invert_woodbury_diag(
     A_inv_diagonal = 1.0 / A_diagonal
     U = A_inv_diagonal[:, :, None] * M
     C = B_inv + jnp.einsum("abc,abd->acd", U, M)
+    C = 0.5 * (C + C.transpose((0, 2, 1)))
     C_inv, C_ln_det = invert_matrix(C)
     Lambda = -jnp.einsum("abc, adb, aec -> ade", C_inv, U, U)
     i, j = jnp.diag_indices(min(Lambda.shape[-2:]))
     Lambda = Lambda.at[..., i, j].add(A_inv_diagonal)
     ln_det_Sigma = jnp.sum(jnp.log(A_diagonal), axis=-1) + C_ln_det + ln_det_B
+    return Lambda, ln_det_Sigma
+
+
+def invert_woodbury_diag_diag(
+    A_diagonal: Float[Array, "R D"],
+    B_diagonal: Float[Array, "R L"],
+    M: Float[Array, "R D L"],
+) -> Tuple[Float[Array, "R D D"], Float[Array, "R"]]:
+    """
+    Invert a matrix of the form A + M B_inv M^T$ where A is diagonal.
+    """
+    R, D, L = M.shape
+    A_inv_diagonal = 1.0 / A_diagonal
+    B_inv_diagonal = 1.0 / B_diagonal
+    U = A_inv_diagonal[:, :, None] * M
+    diag1, diag2 = jnp.diag_indices(L)
+    C = jnp.einsum("abc,abd->acd", U, M)
+    C = C.at[..., diag1, diag2].add(B_inv_diagonal)
+    C = 0.5 * (C + C.transpose((0, 2, 1)))
+    C_inv, C_ln_det = invert_matrix(C)
+    Lambda = -jnp.einsum("abc, adb, aec -> ade", C_inv, U, U)
+    i, j = jnp.diag_indices(min(Lambda.shape[-2:]))
+    Lambda = Lambda.at[..., i, j].add(A_inv_diagonal)
+    ln_det_A = jnp.sum(jnp.log(A_diagonal), axis=-1)
+    ln_det_B = jnp.sum(jnp.log(B_diagonal), axis=-1)
+    ln_det_Sigma = ln_det_A + C_ln_det + ln_det_B
     return Lambda, ln_det_Sigma
 
 

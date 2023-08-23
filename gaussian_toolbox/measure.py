@@ -15,6 +15,7 @@ from jaxtyping import Array, Float, Int, Bool
 from .utils.linalg import invert_matrix, invert_diagonal
 
 from .utils.dataclass import dataclass
+from jax.scipy.special import erf
 
 
 @dataclass(kw_only=True)
@@ -73,6 +74,7 @@ class GaussianMeasure(factor.ConjugateFactor):
             "(Ax+a)'(Bx+b)(Cx+c)'(Dx+d)": self.integrate_general_quartic_inner,
             "(Ax+a)(Bx+b)'(Cx+c)(Dx+d)'": self.integrate_general_quartic_outer,
             "log u(x)": self.integrate_log_factor,
+            "sigmoid(Ax+a)": self.integrate_sigmoid,
         }
 
     def __str__(self) -> str:
@@ -1034,6 +1036,41 @@ class GaussianMeasure(factor.ConjugateFactor):
             The integral
         """
         return factor._integrate_log_factor(self)
+
+    def integrate_sigmoid(
+        self, A_mat: Float[Array, "*R D"], a_vec: Float[Array, "*R"]
+    ) -> Float[Array, "R"]:
+        r"""Integrates the a sigmoid function taking a linear projection as argument, i.e.
+
+        .. math::
+
+                \int 1/(1+exp(-Ax + a)) {\rm d}u(x)
+
+        Returns:
+            The integrated value
+        """
+        constant = self.integral()
+        density = self.get_density()
+        p_h = density.get_density_of_linear_sum(A_mat[:, None], a_vec[:, None])
+        mu_h, var_h = p_h.mu, jnp.diagonal(p_h.Sigma, axis1=1, axis2=2)
+        LAMBDAS = jnp.array([0.41, 0.4, 0.37, 0.44, 0.39])[jnp.newaxis]
+        x = jnp.array([0, 0.6, 2, 3.5, 4.5, jnp.inf])[:, jnp.newaxis]
+        b = jnp.exp(-jnp.log1p(jnp.exp(-x)))
+        A = (erf(jnp.dot(x, LAMBDAS)) + 1) / 2
+
+        # %%
+        alpha = 1 / (2 * var_h)
+        gamma = LAMBDAS * mu_h
+        integrals = (
+            jnp.sqrt(jnp.pi / alpha)
+            * erf(gamma * jnp.sqrt(alpha / (alpha + LAMBDAS**2)))
+            / (2 * jnp.sqrt(var_h * 2 * jnp.pi))
+        )
+
+        # pi_star
+        coefs = jnp.linalg.lstsq(A, b, rcond=None)[0]
+        sigmoid_int = jnp.dot(integrals, coefs)[:, 0] + 0.5 * coefs.sum()
+        return constant * sigmoid_int
 
 
 @dataclass(kw_only=True)
