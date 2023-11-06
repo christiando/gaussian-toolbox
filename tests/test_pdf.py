@@ -32,7 +32,7 @@ class TestGaussianPDF:
         assert d.Sigma.shape == (d.R, d.D, d.D)
         assert d.nu.shape == (d.R, d.D)
         assert d.ln_beta.shape == (d.R,)
-        assert jnp.alltrue(d.is_normalized())
+        assert jnp.all(d.is_normalized())
         assert jnp.allclose(d.integrate(), 1)
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
@@ -99,8 +99,8 @@ class TestGaussianPDF:
         assert jnp.allclose(md.mu, d.mu[:, dim_x])
         idx = jnp.ix_(jnp.arange(R), dim_x, dim_x)
         assert jnp.allclose(md.Sigma, d.Sigma[idx])
-        assert jnp.alltrue(md.is_normalized())
-        assert jnp.alltrue(md.integrate() == 1)
+        assert jnp.all(md.is_normalized())
+        assert jnp.all(md.integrate() == 1)
 
     @pytest.mark.parametrize(
         "R, D, dim_y",
@@ -157,7 +157,7 @@ class TestGaussianPDF:
         assert np.allclose(d.kl_divergence(d), 0, atol=1e-6)
         d2 = self.create_instance(R, D)
 
-        assert np.alltrue(d.kl_divergence(d2) >= 0)
+        assert np.all(d.kl_divergence(d2) >= 0)
         
     @pytest.mark.parametrize("R, D, Dsum", [(1, 5, 2), (1, 5, 1), (1, 3, 2), (1, 3, 5)])
     def test_get_density_of_linear_sum(self, R, D, Dsum):

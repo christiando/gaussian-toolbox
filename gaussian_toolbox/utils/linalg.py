@@ -13,8 +13,6 @@ def invert_matrix(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
 
 def invert_diagonal(A: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    A_inv = jnp.concatenate(
-        [jnp.diag(mat)[None] for mat in 1.0 / A.diagonal(axis1=1, axis2=2)], axis=0
-    )
+    A_inv = 1.0 / A.diagonal(axis1=1, axis2=2)[:,:,None] * jnp.eye(A.shape[1])
     ln_det_A = jnp.sum(jnp.log(A.diagonal(axis1=1, axis2=2)), axis=1)
     return A_inv, ln_det_A

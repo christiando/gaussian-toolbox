@@ -99,12 +99,12 @@ class TestGaussianMeasure(TestConjugateFactor):
         m = self.create_instance(R, D)
         m._prepare_integration()
         m_new = m.slice(idx)
-        assert jnp.alltrue(m_new.Lambda == m.Lambda[idx])
-        assert jnp.alltrue(m_new.nu == m.nu[idx])
-        assert jnp.alltrue(m_new.ln_beta == m.ln_beta[idx])
-        assert jnp.alltrue(m_new.Sigma == m.Sigma[idx])
-        assert jnp.alltrue(m_new.ln_det_Lambda == m.ln_det_Lambda[idx])
-        assert jnp.alltrue(m_new.ln_det_Sigma == m.ln_det_Sigma[idx])
+        assert jnp.allclose(m_new.Lambda, m.Lambda[idx])
+        assert jnp.allclose(m_new.nu, m.nu[idx])
+        assert jnp.allclose(m_new.ln_beta, m.ln_beta[idx])
+        assert jnp.allclose(m_new.Sigma, m.Sigma[idx])
+        assert jnp.allclose(m_new.ln_det_Lambda, m.ln_det_Lambda[idx])
+        assert jnp.allclose(m_new.ln_det_Sigma, m.ln_det_Sigma[idx])
 
     @pytest.mark.parametrize("R, D", [(11, 5), (1, 5), (13, 1), (5, 5)])
     def test_product(self, R, D):

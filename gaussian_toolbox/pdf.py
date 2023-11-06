@@ -273,14 +273,11 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     lnZ: Float[Array, "R"] = field(default=None, init=False)
 
     def __post_init__(self):
-        self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
-        if self.nu is None:
-            self.nu = jnp.zeros((self.R, self.D))
-        if self.ln_beta is None:
-            self.ln_beta = jnp.zeros((self.R))
-        self.Sigma = self.Sigma
-        self.ln_det_Lambda = self.ln_det_Lambda
-        self.ln_det_Sigma = self.ln_det_Sigma
+        if self.Lambda is None:
+            self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
+        elif self.ln_det_Sigma is None:
+            self.ln_det_Sigma = jnp.linalg.slogdet(self.Sigma)[1]
+        self.nu = jnp.einsum("abc,ab->ac", self.Lambda, self.mu)
         self._prepare_integration()
         self.normalize()
 

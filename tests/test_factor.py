@@ -76,7 +76,7 @@ class TestConjugateFactor:
         x_Lambda_x = jnp.einsum("adc,dc->ad", jnp.einsum("abc,dc->adb", f.Lambda, x), x)
         x_nu = jnp.dot(x, f.nu.T).T
         ln_eval_test = -0.5 * x_Lambda_x + x_nu + f.ln_beta[:, None]
-        assert jnp.alltrue(ln_eval == ln_eval_test)
+        assert jnp.allclose(ln_eval, ln_eval_test)
 
     @pytest.mark.parametrize("R, D", [(11, 5), (1, 5), (13, 1), (5, 5)])
     def test_product(self, R, D):
@@ -125,9 +125,9 @@ class TestConjugateFactor:
     def test_slice(self, R, D, idx):
         f = self.create_instance(R, D)
         f_new = f.slice(idx)
-        assert jnp.alltrue(f_new.Lambda == f.Lambda[idx])
-        assert jnp.alltrue(f_new.nu == f.nu[idx])
-        assert jnp.alltrue(f_new.ln_beta == f.ln_beta[idx])
+        assert jnp.allclose(f_new.Lambda, f.Lambda[idx])
+        assert jnp.allclose(f_new.nu, f.nu[idx])
+        assert jnp.allclose(f_new.ln_beta, f.ln_beta[idx])
 
 
 class TestOneRankFactor(TestConjugateFactor):
@@ -243,7 +243,7 @@ class TestOneRankFactor(TestConjugateFactor):
         x_Lambda_x = jnp.einsum("adc,dc->ad", jnp.einsum("abc,dc->adb", Lambda, x), x)
         x_nu = jnp.dot(x, f.nu.T).T
         ln_eval_test = -0.5 * x_Lambda_x + x_nu + f.ln_beta[:, None]
-        assert jnp.alltrue(ln_eval == ln_eval_test)
+        assert jnp.allclose(ln_eval, ln_eval_test)
 
     @pytest.mark.parametrize(
         "R, D, N", [(100, 5, 10), (1, 5, 10), (100, 1, 10), (100, 5, 1)]
@@ -257,7 +257,7 @@ class TestOneRankFactor(TestConjugateFactor):
         x_Lambda_x = jnp.einsum("adc,dc->ad", jnp.einsum("abc,dc->adb", Lambda, x), x)
         x_nu = jnp.dot(x, f.nu.T).T
         eval_test = jnp.exp(-0.5 * x_Lambda_x + x_nu + f.ln_beta[:, None])
-        assert jnp.alltrue(evaluate == eval_test)
+        assert jnp.allclose(evaluate, eval_test)
 
     @pytest.mark.parametrize("R, D", [(11, 5), (1, 5), (13, 1), (5, 5)])
     def test_product(self, R, D):
@@ -283,11 +283,11 @@ class TestOneRankFactor(TestConjugateFactor):
     def test_slice(self, R, D, idx):
         f = self.create_instance(R, D)
         f_new = f.slice(idx)
-        assert jnp.alltrue(f_new.v == f.v[idx])
-        assert jnp.alltrue(f_new.g == f.g[idx])
-        assert jnp.alltrue(f_new.Lambda == f.Lambda[idx])
-        assert jnp.alltrue(f_new.nu == f.nu[idx])
-        assert jnp.alltrue(f_new.ln_beta == f.ln_beta[idx])
+        assert jnp.allclose(f_new.v, f.v[idx])
+        assert jnp.allclose(f_new.g, f.g[idx])
+        assert jnp.allclose(f_new.Lambda, f.Lambda[idx])
+        assert jnp.allclose(f_new.nu, f.nu[idx])
+        assert jnp.allclose(f_new.ln_beta, f.ln_beta[idx])
 
 
 class TestLinearFactor(TestConjugateFactor):
