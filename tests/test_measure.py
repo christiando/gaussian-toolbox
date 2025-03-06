@@ -18,6 +18,7 @@ import jax
 config.update("jax_enable_x64", True)
 import numpy as np
 from scipy import integrate as sc_integrate
+np.random.seed(0)
 
 
 class TestGaussianMeasure(TestConjugateFactor):
@@ -98,12 +99,12 @@ class TestGaussianMeasure(TestConjugateFactor):
         m = self.create_instance(R, D)
         m._prepare_integration()
         m_new = m.slice(idx)
-        assert jnp.alltrue(m_new.Lambda == m.Lambda[idx])
-        assert jnp.alltrue(m_new.nu == m.nu[idx])
-        assert jnp.alltrue(m_new.ln_beta == m.ln_beta[idx])
-        assert jnp.alltrue(m_new.Sigma == m.Sigma[idx])
-        assert jnp.alltrue(m_new.ln_det_Lambda == m.ln_det_Lambda[idx])
-        assert jnp.alltrue(m_new.ln_det_Sigma == m.ln_det_Sigma[idx])
+        assert jnp.allclose(m_new.Lambda, m.Lambda[idx])
+        assert jnp.allclose(m_new.nu, m.nu[idx])
+        assert jnp.allclose(m_new.ln_beta, m.ln_beta[idx])
+        assert jnp.allclose(m_new.Sigma, m.Sigma[idx])
+        assert jnp.allclose(m_new.ln_det_Lambda, m.ln_det_Lambda[idx])
+        assert jnp.allclose(m_new.ln_det_Sigma, m.ln_det_Sigma[idx])
 
     @pytest.mark.parametrize("R, D", [(11, 5), (1, 5), (13, 1), (5, 5)])
     def test_product(self, R, D):
@@ -522,19 +523,19 @@ class TestGaussianMeasure(TestConjugateFactor):
             @jit
             def func(x):
                 x_vec = jnp.array(
-                    [
+                    [[
                         x,
-                    ]
+                    ]]
                 ).T
                 Ax_a = A_mat * x_vec + a_vec
                 Bx_b = B_mat * x_vec + b_vec
                 Cx_c = C_mat * x_vec + c_vec
                 integral = Ax_a * Bx_b * Cx_c * m(x_vec).T
-                return integral[:, r]
+                return integral[0, r]
 
             d = m.get_density()
             mu, var = d.mu, d.Sigma
-            integral_num = sc_integrate.quadrature(
+            integral_num = sc_integrate.quad(
                 func,
                 mu[r, 0] - 10 * jnp.sqrt(var[r, 0, 0]),
                 mu[r, 0] + 10 * jnp.sqrt(var[r, 0, 0]),
@@ -595,20 +596,20 @@ class TestGaussianMeasure(TestConjugateFactor):
             @jit
             def func(x):
                 x_vec = jnp.array(
-                    [
+                    [[
                         x,
-                    ]
+                    ]]
                 ).T
                 Ax_a = A_mat * x_vec + a_vec
                 Bx_b = B_mat * x_vec + b_vec
                 Cx_c = C_mat * x_vec + c_vec
                 Dx_d = D_mat * x_vec + d_vec
                 integral = Ax_a * Bx_b * Cx_c * Dx_d * m(x_vec).T
-                return integral[:, r]
+                return integral[0, r]
 
             d = m.get_density()
             mu, var = d.mu, d.Sigma
-            integral_num = sc_integrate.quadrature(
+            integral_num = sc_integrate.quad(
                 func,
                 mu[r, 0] - 10 * jnp.sqrt(var[r, 0, 0]),
                 mu[r, 0] + 10 * jnp.sqrt(var[r, 0, 0]),
@@ -702,16 +703,16 @@ class TestGaussianMeasure(TestConjugateFactor):
 
                 def func(x):
                     x_vec = jnp.array(
-                        [
+                        [[
                             x,
-                        ]
+                        ]]
                     ).T
                     integral = u.evaluate_ln(x_vec).T * m(x_vec).T
-                    return integral[:, r]
+                    return integral[0, r]
 
                 d = m.get_density()
                 mu, var = d.mu, d.Sigma
-                r_num = sc_integrate.quadrature(
+                r_num = sc_integrate.quad(
                     func,
                     mu[r, 0] - 10 * jnp.sqrt(var[r, 0, 0]),
                     mu[r, 0] + 10 * jnp.sqrt(var[r, 0, 0]),

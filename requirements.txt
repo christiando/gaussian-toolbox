@@ -4,3 +4,5 @@ pytest-cov
 scikit-learn
 tqdm
 git+https://github.com/deepmind/dm-haiku
+ipykernel
+pre-commit

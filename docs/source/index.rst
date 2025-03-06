@@ -24,7 +24,7 @@ Welcome to Gaussian Toolbox's documentation!
    notebooks/approximate_conditionals
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: API
 
    gaussian_toolbox

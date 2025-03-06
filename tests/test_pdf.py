@@ -5,6 +5,9 @@ from jax import numpy as jnp
 import numpy as np
 from scipy.stats import multivariate_normal
 import jax
+from jax import config
+config.update("jax_enable_x64", True)
+np.random.seed(0)
 
 
 class TestGaussianPDF:
@@ -29,7 +32,7 @@ class TestGaussianPDF:
         assert d.Sigma.shape == (d.R, d.D, d.D)
         assert d.nu.shape == (d.R, d.D)
         assert d.ln_beta.shape == (d.R,)
-        assert jnp.alltrue(d.is_normalized())
+        assert jnp.all(d.is_normalized())
         assert jnp.allclose(d.integrate(), 1)
 
     @pytest.mark.parametrize("R, D", [(2, 5), (1, 5), (2, 1)])
@@ -96,8 +99,8 @@ class TestGaussianPDF:
         assert jnp.allclose(md.mu, d.mu[:, dim_x])
         idx = jnp.ix_(jnp.arange(R), dim_x, dim_x)
         assert jnp.allclose(md.Sigma, d.Sigma[idx])
-        assert jnp.alltrue(md.is_normalized())
-        assert jnp.alltrue(md.integrate() == 1)
+        assert jnp.all(md.is_normalized())
+        assert jnp.all(md.integrate() == 1)
 
     @pytest.mark.parametrize(
         "R, D, dim_y",
@@ -154,8 +157,35 @@ class TestGaussianPDF:
         assert np.allclose(d.kl_divergence(d), 0, atol=1e-6)
         d2 = self.create_instance(R, D)
 
-        assert np.alltrue(d.kl_divergence(d2) >= 0)
-
+        assert np.all(d.kl_divergence(d2) >= 0)
+        
+    @pytest.mark.parametrize("R, D, Dsum", [(1, 5, 2), (1, 5, 1), (1, 3, 2), (1, 3, 5)])
+    def test_get_density_of_linear_sum(self, R, D, Dsum):
+        d = self.create_instance(R, D)
+        W = jnp.array(np.random.randn(R, Dsum, D))
+        b = jnp.array(np.random.randn(R, Dsum))
+        if Dsum <= D:
+            d_sum = d.get_density_of_linear_sum(W, b)
+            key = jax.random.PRNGKey(0)
+            subkey, key = jax.random.split(key)
+            d_sample = d.sample(subkey, num_samples=1000000)[:,0]
+            W_d_sample  = jnp.einsum("abc,ac->ab", W, d_sample)
+            sum_sampled_mean = jnp.mean(W_d_sample + b, axis=0, keepdims=True)
+            var_sampled_mean = jnp.mean(jnp.einsum("ab,ac->abc", W_d_sample + b, W_d_sample + b), axis=0, keepdims=True)
+            var_sampled_mean -= jnp.einsum("ab,ac->abc", sum_sampled_mean, sum_sampled_mean)
+            assert jnp.allclose(d_sum.mu, sum_sampled_mean, rtol=1e-1, atol=1e-2)
+            assert jnp.allclose(d_sum.Sigma, var_sampled_mean, rtol=1e-1, atol=1e-2)
+            # When b is not sepcified
+            d_sum = d.get_density_of_linear_sum(W)
+            W_d_sample  = jnp.einsum("abc,ac->ab", W, d_sample)
+            sum_sampled_mean = jnp.mean(W_d_sample, axis=0, keepdims=True)
+            var_sampled_mean = jnp.mean(jnp.einsum("ab,ac->abc", W_d_sample, W_d_sample), axis=0, keepdims=True)
+            var_sampled_mean -= jnp.einsum("ab,ac->abc", sum_sampled_mean, sum_sampled_mean)
+            assert jnp.allclose(d_sum.mu, sum_sampled_mean, rtol=1e-1, atol=1e-2)
+            assert jnp.allclose(d_sum.Sigma, var_sampled_mean, rtol=1e-1, atol=1e-2)
+        else:
+            with pytest.raises(AssertionError):
+                d_sum = d.get_density_of_linear_sum(W, b)
 
 class TestGaussianDiagPDF(TestGaussianPDF):
     def setup_class(self):

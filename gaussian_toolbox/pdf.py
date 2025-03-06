@@ -213,6 +213,26 @@ class GaussianPDF(measure.GaussianMeasure):
         return conditional.ConditionalGaussianPDF(
             M=M_x, b=b_x, Sigma=Sigma_x, Lambda=Lambda_x, ln_det_Sigma=-ln_det_Lambda_x
         )
+        
+    def get_density_of_linear_sum(self, W: Float[Array, "R Dsum D"], b: Float[Array, "R Dsum"] = None) -> "GaussianPDF":
+        """Returns density of linear sum of Gaussians.
+
+        Args:
+            W: Weight matrix.
+            b: Bias vector.
+
+        Returns:
+            Gaussian density of linear sum.
+        """
+        try:
+            assert W.shape[1] <= self.D
+        except AssertionError:
+            raise AssertionError(f"The number of sums must be <= {self.D}")
+        Sigma_sum = jnp.einsum("abc,acd,aed->abe", W, self.Sigma, W)
+        mu_sum = jnp.einsum("abc,ac->ab", W, self.mu)
+        if b is not None:
+            mu_sum += b
+        return GaussianPDF(Sigma=Sigma_sum, mu=mu_sum)
 
     def to_dict(self) -> Dict:
         """Write Gaussian into dict.
@@ -227,6 +247,7 @@ class GaussianPDF(measure.GaussianMeasure):
             "ln_det_Sigma": self.ln_det_Sigma,
         }
         return density_dict
+
 
 
 @dataclass(kw_only=True)
@@ -252,14 +273,11 @@ class GaussianDiagPDF(GaussianPDF, measure.GaussianDiagMeasure):
     lnZ: Float[Array, "R"] = field(default=None, init=False)
 
     def __post_init__(self):
-        self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
-        if self.nu is None:
-            self.nu = jnp.zeros((self.R, self.D))
-        if self.ln_beta is None:
-            self.ln_beta = jnp.zeros((self.R))
-        self.Sigma = self.Sigma
-        self.ln_det_Lambda = self.ln_det_Lambda
-        self.ln_det_Sigma = self.ln_det_Sigma
+        if self.Lambda is None:
+            self.Lambda, self.ln_det_Sigma = invert_diagonal(self.Sigma)
+        elif self.ln_det_Sigma is None:
+            self.ln_det_Sigma = jnp.linalg.slogdet(self.Sigma)[1]
+        self.nu = jnp.einsum("abc,ab->ac", self.Lambda, self.mu)
         self._prepare_integration()
         self.normalize()
 
