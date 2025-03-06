@@ -168,7 +168,7 @@ class TestGaussianPDF:
             d_sum = d.get_density_of_linear_sum(W, b)
             key = jax.random.PRNGKey(0)
             subkey, key = jax.random.split(key)
-            d_sample = d.sample(subkey, num_samples=100000)[:,0]
+            d_sample = d.sample(subkey, num_samples=1000000)[:,0]
             W_d_sample  = jnp.einsum("abc,ac->ab", W, d_sample)
             sum_sampled_mean = jnp.mean(W_d_sample + b, axis=0, keepdims=True)
             var_sampled_mean = jnp.mean(jnp.einsum("ab,ac->abc", W_d_sample + b, W_d_sample + b), axis=0, keepdims=True)

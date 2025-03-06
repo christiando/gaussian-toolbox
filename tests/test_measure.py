@@ -523,19 +523,19 @@ class TestGaussianMeasure(TestConjugateFactor):
             @jit
             def func(x):
                 x_vec = jnp.array(
-                    [
+                    [[
                         x,
-                    ]
+                    ]]
                 ).T
                 Ax_a = A_mat * x_vec + a_vec
                 Bx_b = B_mat * x_vec + b_vec
                 Cx_c = C_mat * x_vec + c_vec
                 integral = Ax_a * Bx_b * Cx_c * m(x_vec).T
-                return integral[:, r]
+                return integral[0, r]
 
             d = m.get_density()
             mu, var = d.mu, d.Sigma
-            integral_num = sc_integrate.quadrature(
+            integral_num = sc_integrate.quad(
                 func,
                 mu[r, 0] - 10 * jnp.sqrt(var[r, 0, 0]),
                 mu[r, 0] + 10 * jnp.sqrt(var[r, 0, 0]),
@@ -596,20 +596,20 @@ class TestGaussianMeasure(TestConjugateFactor):
             @jit
             def func(x):
                 x_vec = jnp.array(
-                    [
+                    [[
                         x,
-                    ]
+                    ]]
                 ).T
                 Ax_a = A_mat * x_vec + a_vec
                 Bx_b = B_mat * x_vec + b_vec
                 Cx_c = C_mat * x_vec + c_vec
                 Dx_d = D_mat * x_vec + d_vec
                 integral = Ax_a * Bx_b * Cx_c * Dx_d * m(x_vec).T
-                return integral[:, r]
+                return integral[0, r]
 
             d = m.get_density()
             mu, var = d.mu, d.Sigma
-            integral_num = sc_integrate.quadrature(
+            integral_num = sc_integrate.quad(
                 func,
                 mu[r, 0] - 10 * jnp.sqrt(var[r, 0, 0]),
                 mu[r, 0] + 10 * jnp.sqrt(var[r, 0, 0]),
@@ -703,16 +703,16 @@ class TestGaussianMeasure(TestConjugateFactor):
 
                 def func(x):
                     x_vec = jnp.array(
-                        [
+                        [[
                             x,
-                        ]
+                        ]]
                     ).T
                     integral = u.evaluate_ln(x_vec).T * m(x_vec).T
-                    return integral[:, r]
+                    return integral[0, r]
 
                 d = m.get_density()
                 mu, var = d.mu, d.Sigma
-                r_num = sc_integrate.quadrature(
+                r_num = sc_integrate.quad(
                     func,
                     mu[r, 0] - 10 * jnp.sqrt(var[r, 0, 0]),
                     mu[r, 0] + 10 * jnp.sqrt(var[r, 0, 0]),
