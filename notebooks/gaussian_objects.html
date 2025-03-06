@@ -1,0 +1,901 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Simple Gaussian objects &#8212; Gaussian Toolbox 0.0.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../_static/documentation_options.js?v=e645c8fa"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/gaussian_objects';</script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Conditional densities and affine transformations" href="affine_transforms.html" />
+    <link rel="prev" title="Welcome to Gaussian Toolbox’s documentation!" href="../index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/gt_logo.png" class="logo__image only-light" alt="Gaussian Toolbox 0.0.1 documentation - Home"/>
+    <script>document.write(`<img src="../_static/gt_logo.png" class="logo__image only-dark" alt="Gaussian Toolbox 0.0.1 documentation - Home"/>`);</script>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Introduction:</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Simple Gaussian objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="affine_transforms.html">Conditional densities and affine transformations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="linear_regression.html">Example: Bayesian linear regression</a></li>
+<li class="toctree-l1"><a class="reference internal" href="timeseries.html">Kalman Filter</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approximate_conditionals.html">Approximate conditionals</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../gaussian_toolbox.html">gaussian_toolbox package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../gaussian_toolbox.utils.html">gaussian_toolbox.utils package</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<a href="https://github.com/christiando/gaussian-toolbox" target="_blank"
+   class="btn btn-sm btn-source-repository-button"
+   title="Source repository"
+   data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+
+</a>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/notebooks/gaussian_objects.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Simple Gaussian objects</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#GaussianPDF-\subset-GaussianMeasure-\subset-ConjugateFactor"><code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code> <span class="math notranslate nohighlight">\(\subset\)</span> <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code> <span class="math notranslate nohighlight">\(\subset\)</span> <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#1.-ConjugateFactor:">1. <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code>:</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#2.-GaussianMeasure">2. <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#Leveraging-conjugacy">Leveraging conjugacy</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#Integration-made-easy">Integration made easy</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#3.-GaussianPDF">3. <code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code></a></li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Simple-Gaussian-objects">
+<h1>Simple Gaussian objects<a class="headerlink" href="#Simple-Gaussian-objects" title="Link to this heading">#</a></h1>
+<p>The main purpose of this library is to make Gaussian manipulations easy. For this we make use of a <em>certain hierarchy of function classes</em>.</p>
+<section id="GaussianPDF-\subset-GaussianMeasure-\subset-ConjugateFactor">
+<h2><code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code> <span class="math notranslate nohighlight">\(\subset\)</span> <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code> <span class="math notranslate nohighlight">\(\subset\)</span> <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code><a class="headerlink" href="#GaussianPDF-\subset-GaussianMeasure-\subset-ConjugateFactor" title="Link to this heading">#</a></h2>
+<p>This three function classes are explained in the following:</p>
+<p><span class="math notranslate nohighlight">\(\newcommand{\bx}{\mathbf{x}}\)</span> <span class="math notranslate nohighlight">\(\newcommand{\bX}{\mathbf{X}}\)</span> <span class="math notranslate nohighlight">\(\newcommand{\bmu}{\boldsymbol{\mu}}\)</span> <span class="math notranslate nohighlight">\(\newcommand{\bnu}{\boldsymbol{\nu}}\)</span> <span class="math notranslate nohighlight">\(\newcommand{\by}{\mathbf{y}}\)</span> <span class="math notranslate nohighlight">\(\newcommand{\bY}{\mathbf{Y}}\)</span> <span class="math notranslate nohighlight">\(\newcommand{\RR}{\mathbb{R}}\)</span> <span class="math notranslate nohighlight">\(\newcommand{\EE}{\mathbb{E}}\)</span> <span class="math notranslate nohighlight">\(\newcommand{\diff}{\mathrm{d}}\)</span></p>
+<section id="1.-ConjugateFactor:">
+<h3>1. <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code>:<a class="headerlink" href="#1.-ConjugateFactor:" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code> is the most general form of functions of the considered hierarchy. It has the following functional form:</p>
+<div class="math notranslate nohighlight">
+\[u(X) = \exp\left(-\frac{1}{2}X^\top\Lambda X + X^\top\bnu + \ln \beta\right)\]</div>
+<p>The parameters are as follows:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\Lambda\in \RR^{d\times d}\)</span> is a positive semidefinite matrix.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\bnu\in \RR^d\)</span> is a vector.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\ln\beta\in \RR\)</span> is a constant.</p></li>
+</ul>
+<p>Let’s create such an examplary object with the Gaussian toolbox in two dimensions and visualize it.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Imports</span>
+<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="kn">from</span> <span class="nn">jax</span> <span class="kn">import</span> <span class="n">numpy</span> <span class="k">as</span> <span class="n">jnp</span>
+<span class="kn">import</span> <span class="nn">jax</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">gaussian_toolbox</span> <span class="kn">import</span> <span class="n">factor</span>
+
+<span class="c1"># Create plot grid</span>
+<span class="n">reso</span> <span class="o">=</span> <span class="mi">70</span>
+<span class="n">xrange</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="n">reso</span><span class="p">)</span>
+<span class="n">xmesh</span><span class="p">,</span> <span class="n">ymesh</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">xrange</span><span class="p">,</span> <span class="n">xrange</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">xmesh</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">ymesh</span><span class="o">.</span><span class="n">flatten</span><span class="p">()])</span><span class="o">.</span><span class="n">T</span>
+
+<span class="c1"># Define terms for factor</span>
+<span class="n">Lambda_u</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[[</span><span class="mi">5</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span>
+                       <span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]]])</span>
+<span class="n">nu_u</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]])</span>
+<span class="n">ln_beta_u</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,])</span>
+
+<span class="c1"># Create factor u(x)</span>
+<span class="n">u_X</span> <span class="o">=</span> <span class="n">factor</span><span class="o">.</span><span class="n">ConjugateFactor</span><span class="p">(</span><span class="n">Lambda</span><span class="o">=</span><span class="n">Lambda_u</span><span class="p">,</span> <span class="n">nu</span><span class="o">=</span><span class="n">nu_u</span><span class="p">,</span> <span class="n">ln_beta</span><span class="o">=</span><span class="n">ln_beta_u</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">u_X</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Conjugate factor u(x)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">u_x</span> <span class="o">=</span> <span class="n">u_X</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="c1"># Plotting</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">5</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">pcolor</span><span class="p">(</span><span class="n">xrange</span><span class="p">,</span> <span class="n">xrange</span><span class="p">,</span> <span class="n">u_x</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">reso</span><span class="p">,</span><span class="n">reso</span><span class="p">)),</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;$x_2$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s1">&#39;$u(\mathbf</span><span class="si">{x}</span><span class="s1">)$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+&lt;&gt;:8: SyntaxWarning: invalid escape sequence &#39;\m&#39;
+&lt;&gt;:8: SyntaxWarning: invalid escape sequence &#39;\m&#39;
+/tmp/ipykernel_3033/3252420650.py:8: SyntaxWarning: invalid escape sequence &#39;\m&#39;
+  plt.colorbar(label=&#39;$u(\mathbf{x})$&#39;)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../../../../_build/.doctrees/nbsphinx/notebooks_gaussian_objects_5_1.png" src="../../../../_build/.doctrees/nbsphinx/notebooks_gaussian_objects_5_1.png" />
+</div>
+</div>
+<p><strong>Remark</strong>: It is possible to summarize more than one Factor in an object. The number of factor is equal to the leading dimensions of <code class="docutils literal notranslate"><span class="pre">Lambda</span></code>, <code class="docutils literal notranslate"><span class="pre">nu</span></code> and <code class="docutils literal notranslate"><span class="pre">ln_beta</span></code> that is denoted by <code class="docutils literal notranslate"><span class="pre">R</span></code>. This leading dimension is consistent for all objects in <code class="docutils literal notranslate"><span class="pre">GT</span></code>.</p>
+<p>Furthermore, <code class="docutils literal notranslate"><span class="pre">GT</span></code> enforces initialization. Hence</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">u_X</span> <span class="o">=</span> <span class="n">factor</span><span class="o">.</span><span class="n">ConjugateFactor</span><span class="p">(</span><span class="n">Lambda_u</span><span class="p">,</span> <span class="n">nu_u</span><span class="p">,</span> <span class="n">ln_beta_u</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>will not work.</p>
+<p>With a <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code> on its own we can not do very much, but we will see how it can unfold its power in combination with a <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code>.</p>
+</section>
+<section id="2.-GaussianMeasure">
+<h3>2. <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code><a class="headerlink" href="#2.-GaussianMeasure" title="Link to this heading">#</a></h3>
+<p>A <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code> inherits from <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code>, i.e. it is a subclass of what we saw previously. It has the functional form</p>
+<div class="math notranslate nohighlight">
+\[\phi(X) = \exp\left(-\frac{1}{2}X^\top\Lambda \bX + X^\top\bnu + \ln \beta\right)\]</div>
+<p>All is defined as before, except that <span class="math notranslate nohighlight">\(\Lambda\)</span> is now required to be positive definite, such that</p>
+<div class="math notranslate nohighlight">
+\[0 \leq \int \phi(X)\diff X &lt; \infty.\]</div>
+<p>Again let’s create such an object with the Gaussian toolbox.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">gaussian_toolbox</span> <span class="kn">import</span> <span class="n">measure</span>
+
+<span class="c1"># Defines terms for measure</span>
+<span class="n">Lambda_phi</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[[</span><span class="mf">1.</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.</span><span class="p">],</span>
+                         <span class="p">[</span><span class="o">-</span><span class="mf">2.</span><span class="p">,</span> <span class="mf">10.</span><span class="p">]]])</span>
+<span class="n">nu_phi</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
+<span class="n">ln_beta_phi</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,])</span>
+
+<span class="c1"># Creates measure</span>
+<span class="n">phi_X</span> <span class="o">=</span> <span class="n">measure</span><span class="o">.</span><span class="n">GaussianMeasure</span><span class="p">(</span><span class="n">Lambda</span><span class="o">=</span><span class="n">Lambda_phi</span><span class="p">,</span> <span class="n">nu</span><span class="o">=</span><span class="n">nu_phi</span><span class="p">,</span> <span class="n">ln_beta</span><span class="o">=</span><span class="n">ln_beta_phi</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">phi_X</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Gaussian measure phi(x)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">phi_x</span> <span class="o">=</span> <span class="n">phi_X</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">5</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">pcolor</span><span class="p">(</span><span class="n">xrange</span><span class="p">,</span> <span class="n">xrange</span><span class="p">,</span> <span class="n">phi_x</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">reso</span><span class="p">,</span><span class="n">reso</span><span class="p">)),</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;$x_2$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s1">&#39;$\phi(\mathbf</span><span class="si">{x}</span><span class="s1">)$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+&lt;&gt;:7: SyntaxWarning: invalid escape sequence &#39;\p&#39;
+&lt;&gt;:7: SyntaxWarning: invalid escape sequence &#39;\p&#39;
+/tmp/ipykernel_3033/3554713109.py:7: SyntaxWarning: invalid escape sequence &#39;\p&#39;
+  plt.colorbar(label=&#39;$\phi(\mathbf{x})$&#39;)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../../../../_build/.doctrees/nbsphinx/notebooks_gaussian_objects_8_1.png" src="../../../../_build/.doctrees/nbsphinx/notebooks_gaussian_objects_8_1.png" />
+</div>
+</div>
+<section id="Leveraging-conjugacy">
+<h4>Leveraging conjugacy<a class="headerlink" href="#Leveraging-conjugacy" title="Link to this heading">#</a></h4>
+<p>Now the interesting observation is that the <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code> multiplied with a <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code> is again a <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code>, i.e. the first is <em>conjugate</em> to the latter. The Gaussian toolbox allows for straightforward updates.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">u_phi_X</span> <span class="o">=</span> <span class="n">phi_X</span> <span class="o">*</span> <span class="n">u_X</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">u_phi_X</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Gaussian measure phi(x)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">u_phi_x</span> <span class="o">=</span> <span class="n">u_phi_X</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">5</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">pcolor</span><span class="p">(</span><span class="n">xrange</span><span class="p">,</span> <span class="n">xrange</span><span class="p">,</span> <span class="n">u_phi_x</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">reso</span><span class="p">,</span><span class="n">reso</span><span class="p">)),</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;$x_2$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s1">&#39;$u(\mathbf</span><span class="si">{x}</span><span class="s1">)\phi(\mathbf</span><span class="si">{x}</span><span class="s1">)$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+&lt;&gt;:7: SyntaxWarning: invalid escape sequence &#39;\m&#39;
+&lt;&gt;:7: SyntaxWarning: invalid escape sequence &#39;\m&#39;
+/tmp/ipykernel_3033/2466814992.py:7: SyntaxWarning: invalid escape sequence &#39;\m&#39;
+  plt.colorbar(label=&#39;$u(\mathbf{x})\phi(\mathbf{x})$&#39;)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../../../../_build/.doctrees/nbsphinx/notebooks_gaussian_objects_11_1.png" src="../../../../_build/.doctrees/nbsphinx/notebooks_gaussian_objects_11_1.png" />
+</div>
+</div>
+</section>
+<section id="Integration-made-easy">
+<h4>Integration made easy<a class="headerlink" href="#Integration-made-easy" title="Link to this heading">#</a></h4>
+<p>The Gaussian toolbox implements many different integrals that are evaluated with respect to a <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code> <span class="math notranslate nohighlight">\(\phi(X)\)</span>. The integrals have the form</p>
+<div class="math notranslate nohighlight">
+\[\int f(X)\diff\phi(X)\]</div>
+<p>For example <span class="math notranslate nohighlight">\(\int XX^\top\diff\phi(X)\)</span> is evaluated as</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">phi_X</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span><span class="s2">&quot;xx&#39;&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[[[4.2751656  0.8550331 ]
+  [0.8550331  0.42751655]]]
+</pre></div></div>
+</div>
+<p>Another example would be <span class="math notranslate nohighlight">\(\int (AX+a)\diff\phi(X)\)</span>, where <span class="math notranslate nohighlight">\(A\in\RR^{m\times d}\)</span> and <span class="math notranslate nohighlight">\(a\in\RR^{m}\)</span>.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">m</span> <span class="o">=</span> <span class="mi">5</span>
+
+<span class="n">key</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">key</span><span class="p">,</span> <span class="n">subkey</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+<span class="n">A_mat</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkey</span><span class="p">,</span> <span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">phi_X</span><span class="o">.</span><span class="n">D</span><span class="p">))</span>
+<span class="n">key</span><span class="p">,</span> <span class="n">subkey</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+<span class="n">a_vec</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkey</span><span class="p">,</span> <span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">phi_X</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span><span class="s2">&quot;(Ax+a)&quot;</span><span class="p">,</span> <span class="n">A_mat</span><span class="o">=</span><span class="n">A_mat</span><span class="p">,</span> <span class="n">a_vec</span><span class="o">=</span><span class="n">a_vec</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[[-3.2255552 -1.0301553 -2.8764002  2.2531264 -2.2104871]]
+</pre></div></div>
+</div>
+<p>Following integrals are implemented:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s1">&#39;f(X) = &#39;</span> <span class="o">+</span> <span class="n">integral</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">integral</span> <span class="ow">in</span> <span class="n">phi_X</span><span class="o">.</span><span class="n">integration_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()]))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+f(X) = 1
+f(X) = x
+f(X) = (Ax+a)
+f(X) = xx&#39;
+f(X) = (Ax+a)&#39;(Bx+b)
+f(X) = (Ax+a)(Bx+b)&#39;
+f(X) = (Ax+a)(Bx+b)&#39;(Cx+c)
+f(X) = (Ax+a)&#39;(Bx+b)(Cx+c)&#39;
+f(X) = x(A&#39;x + a)x&#39;
+f(X) = xb&#39;xx&#39;
+f(X) = (Ax+a)&#39;(Bx+b)(Cx+c)&#39;(Dx+d)
+f(X) = (Ax+a)(Bx+b)&#39;(Cx+c)(Dx+d)&#39;
+f(X) = log u(x)
+
+</pre></div></div>
+</div>
+<p>The last case is the integral of the logarithm of a <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code></p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">phi_X</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span><span class="s2">&quot;log u(x)&quot;</span><span class="p">,</span> <span class="n">factor</span><span class="o">=</span><span class="n">u_X</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[-10.687914]
+</pre></div></div>
+</div>
+<p>It is time to turn to the last functional class, the <code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code>.</p>
+</section>
+</section>
+<section id="3.-GaussianPDF">
+<h3>3. <code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code><a class="headerlink" href="#3.-GaussianPDF" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code> is a the object representing a Gaussian probability density function (PDF), and it is defined by</p>
+<div class="math notranslate nohighlight">
+\[p(\bx) = \exp\left(-\frac{1}{2}X^\top\Lambda X + X^\top\bnu + \ln \beta\right) = \frac{1}{Z}\exp\left(-\frac{1}{2}(X-\bmu)^\top\Sigma^{-1} (X-\bmu)\right) \text{ s.t. } \int\diff p(X) \stackrel{!}{=} 1.\]</div>
+<p>The parameters are defined as</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\Sigma=\Lambda^{-1}\)</span> is the covariance matrix</p></li>
+<li><p><span class="math notranslate nohighlight">\(\bmu=\Lambda^{-1}\bnu\)</span> is the mean.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\ln\beta= -\frac{1}{2}\ln |2\pi\Lambda^{-1}| -\frac{1}{2}\bnu^\top\Lambda^{-1}\bnu\Leftrightarrow \ln Z = \frac{1}{2}\ln |2\pi\Sigma|\)</span> is the normalizing constant.</p></li>
+</ul>
+<p>Any Gaussian measure can be transformed into a PDF just by normalization. With the Gaussian toolbox this is straightforward:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">gaussian_toolbox</span> <span class="kn">import</span> <span class="n">pdf</span>
+
+<span class="c1"># p_X = pdf.GaussianPDF(Sigma=..., mu=...)</span>
+<span class="n">p_X</span> <span class="o">=</span> <span class="n">phi_X</span><span class="o">.</span><span class="n">get_density</span><span class="p">()</span>
+<span class="n">integal_p</span> <span class="o">=</span> <span class="n">p_X</span><span class="o">.</span><span class="n">integrate</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Integrating over density = </span><span class="si">{</span><span class="n">integal_p</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s1">. (Hurray!!!)&#39;</span> <span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Integrating over density = 1.0. (Hurray!!!)
+</pre></div></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code> inherits all properties from <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code>. but since it is a PDF, we can perform additional actions, such as sampling or marginalization.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># SAMPLING</span>
+<span class="n">key</span><span class="p">,</span> <span class="n">subkey</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+<span class="n">p_x_samples</span> <span class="o">=</span> <span class="n">p_X</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">subkey</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+
+<span class="c1"># MARGINALIZATION</span>
+<span class="n">p_X1</span> <span class="o">=</span> <span class="n">p_X</span><span class="o">.</span><span class="n">get_marginal</span><span class="p">(</span><span class="n">dim_x</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">]))</span>
+<span class="n">p_X2</span> <span class="o">=</span> <span class="n">p_X</span><span class="o">.</span><span class="n">get_marginal</span><span class="p">(</span><span class="n">dim_x</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">]))</span>
+
+<span class="n">xrange</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="n">reso</span><span class="p">)</span>
+<span class="n">xrange</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">xrange</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+
+<span class="c1"># Plotting</span>
+<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">gridspec</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">6</span><span class="p">))</span>
+<span class="n">grid</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="n">fig</span><span class="p">)</span>
+<span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">grid</span><span class="p">[</span><span class="mi">1</span><span class="p">:,:</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">p_X2</span><span class="p">(</span><span class="n">xrange</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">xrange</span><span class="p">)</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">xrange</span><span class="p">[</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span> <span class="mi">0</span><span class="p">])</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;$x_2$&#39;</span><span class="p">)</span>
+<span class="n">ax2</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">grid</span><span class="p">[:</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">:])</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xrange</span><span class="p">,</span><span class="n">p_X1</span><span class="p">(</span><span class="n">xrange</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+<span class="n">ax2</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span><span class="mi">5</span><span class="p">])</span>
+<span class="n">ax1</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">xrange</span><span class="p">[</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span> <span class="mi">0</span><span class="p">])</span>
+<span class="n">ax3</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">grid</span><span class="p">[</span><span class="mi">1</span><span class="p">:,</span><span class="mi">1</span><span class="p">:])</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">pcolor</span><span class="p">(</span><span class="n">xrange</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">xrange</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">p_X</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">reso</span><span class="p">,</span><span class="n">reso</span><span class="p">)),</span> <span class="n">shading</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">p_x_samples</span><span class="p">[:,:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">p_x_samples</span><span class="p">[:,:,</span><span class="mi">1</span><span class="p">],</span> <span class="s1">&#39;C3.&#39;</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$x_1$&#39;</span><span class="p">)</span>
+<span class="n">ax3</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span><span class="mi">5</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../../../../_build/.doctrees/nbsphinx/notebooks_gaussian_objects_23_0.png" src="../../../../_build/.doctrees/nbsphinx/notebooks_gaussian_objects_23_0.png" />
+</div>
+</div>
+<p>Let’s summarize the Gaussian hierarchy</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code> <span class="math notranslate nohighlight">\(u\)</span></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code> <span class="math notranslate nohighlight">\(\phi\)</span></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code> <span class="math notranslate nohighlight">\(p\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Conjugacy</strong></p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Integrable</strong></p></td>
+<td><p>✗</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Normalized</strong></p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✓</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>In the following, we will see how the true power of the toolbox can be unleashed by introducing <code class="docutils literal notranslate"><span class="pre">conditional</span></code></p>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Welcome to Gaussian Toolbox’s documentation!</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="affine_transforms.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Conditional densities and affine transformations</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#GaussianPDF-\subset-GaussianMeasure-\subset-ConjugateFactor"><code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code> <span class="math notranslate nohighlight">\(\subset\)</span> <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code> <span class="math notranslate nohighlight">\(\subset\)</span> <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#1.-ConjugateFactor:">1. <code class="docutils literal notranslate"><span class="pre">ConjugateFactor</span></code>:</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#2.-GaussianMeasure">2. <code class="docutils literal notranslate"><span class="pre">GaussianMeasure</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#Leveraging-conjugacy">Leveraging conjugacy</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#Integration-made-easy">Integration made easy</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#3.-GaussianPDF">3. <code class="docutils literal notranslate"><span class="pre">GaussianPDF</span></code></a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Christian Donner
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2022, Christian Donner.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>
